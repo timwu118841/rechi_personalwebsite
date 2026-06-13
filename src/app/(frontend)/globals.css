@@ -400,6 +400,21 @@ a {
   line-height: 1.95;
 }
 
+.article-cover {
+  margin: -12px 0 44px;
+}
+
+.article-cover picture {
+  display: block;
+}
+
+.article-cover-image {
+  height: auto;
+  max-height: 560px;
+  object-fit: cover;
+  width: 100%;
+}
+
 .article-body h2,
 .article-body h3 {
   color: var(--ink);

@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import RichText from '@/components/RichText'
+import { Media } from '@/components/Media'
 import { PostCard } from '@/components/blog/PostCard'
 import { getPostBySlug, getPosts, getSiteSettings } from '@/lib/content'
 import { calculateReadingMinutes } from '@/lib/reading-time'
@@ -82,6 +83,16 @@ export default async function PostPage({ params }: Props) {
           </span>
         </div>
       </header>
+
+      {post.heroImage && typeof post.heroImage === 'object' && (
+        <Media
+          className="article-cover"
+          imgClassName="article-cover-image"
+          priority
+          resource={post.heroImage}
+          size="(max-width: 824px) 100vw, 760px"
+        />
+      )}
 
       <RichText className="article-body" data={post.content} enableGutter={false} />
 
