@@ -1326,6 +1326,7 @@ export interface SiteSetting {
   id: number;
   siteName: string;
   tagline: string;
+  homepageHeroTitle?: string | null;
   authorName: string;
   authorBio: string;
   authorExpertise?: string | null;
@@ -1388,6 +1389,7 @@ export interface FooterSelect<T extends boolean = true> {
 export interface SiteSettingsSelect<T extends boolean = true> {
   siteName?: T;
   tagline?: T;
+  homepageHeroTitle?: T;
   authorName?: T;
   authorBio?: T;
   authorExpertise?: T;

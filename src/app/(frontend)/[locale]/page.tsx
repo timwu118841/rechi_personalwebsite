@@ -43,7 +43,7 @@ export default async function LocaleHome({ params }: Props) {
     <>
       <section className="hero">
         <p>{settings?.tagline || t.heroEyebrow}</p>
-        <h1>{t.heroTitle}</h1>
+        <h1>{settings?.homepageHeroTitle || t.heroTitle}</h1>
       </section>
 
       {featured && (

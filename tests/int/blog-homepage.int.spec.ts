@@ -45,4 +45,25 @@ describe('localized homepage', () => {
     expect(html).not.toContain('精選文章')
     expect(html).toContain('一般文章')
   })
+
+  it('uses the localized homepage hero title from site settings', async () => {
+    getSiteSettings.mockResolvedValue({
+      homepageHeroTitle: '後台設定的首頁標題',
+    })
+
+    const page = await LocaleHome({ params: Promise.resolve({ locale: 'zh-Hant' }) })
+    const html = renderToStaticMarkup(page)
+
+    expect(html).toContain('後台設定的首頁標題')
+    expect(html).not.toContain('把複雜的法律，寫成值得閱讀的經驗。')
+  })
+
+  it('falls back to the existing localized title when the setting is empty', async () => {
+    getSiteSettings.mockResolvedValue({ homepageHeroTitle: '' })
+
+    const page = await LocaleHome({ params: Promise.resolve({ locale: 'zh-Hant' }) })
+    const html = renderToStaticMarkup(page)
+
+    expect(html).toContain('把複雜的法律，寫成值得閱讀的經驗。')
+  })
 })

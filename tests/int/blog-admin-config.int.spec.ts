@@ -4,6 +4,7 @@ import configPromise from '@/payload.config'
 import { Pages } from '@/collections/Pages'
 import { Posts } from '@/collections/Posts'
 import { Users } from '@/collections/Users'
+import { SiteSettings } from '@/globals/SiteSettings'
 import {
   postEditorFeatures,
   postFontSizeStyles,
@@ -64,6 +65,20 @@ describe('blog-focused administration', () => {
     const serializedFields = JSON.stringify(Pages.fields)
 
     expect(serializedFields).not.toContain('"slug":"formBlock"')
+  })
+})
+
+describe('homepage settings', () => {
+  it('offers a localized homepage hero title field', () => {
+    const field = SiteSettings.fields.find(
+      (candidate) => 'name' in candidate && candidate.name === 'homepageHeroTitle',
+    )
+
+    expect(field).toMatchObject({
+      label: { 'zh-TW': '首頁主標題', en: 'Homepage hero title' },
+      localized: true,
+      type: 'text',
+    })
   })
 })
 

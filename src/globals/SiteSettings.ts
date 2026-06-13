@@ -28,6 +28,12 @@ export const SiteSettings: GlobalConfig = {
       defaultValue: '律師的實務筆記與法律觀察',
     },
     {
+      name: 'homepageHeroTitle',
+      label: { 'zh-TW': '首頁主標題', en: 'Homepage hero title' },
+      type: 'text',
+      localized: true,
+    },
+    {
       name: 'authorName',
       label: { 'zh-TW': '預設作者姓名', en: 'Default author name' },
       type: 'text',
