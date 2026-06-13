@@ -4,13 +4,13 @@ import deepMerge from '@/utilities/deepMerge'
 
 export type LinkAppearances = 'default' | 'outline'
 
-export const appearanceOptions: Record<LinkAppearances, { label: string; value: string }> = {
+export const appearanceOptions: Record<LinkAppearances, { label: { 'zh-TW': string; en: string }; value: string }> = {
   default: {
-    label: 'Default',
+    label: { 'zh-TW': '預設', en: 'Default' },
     value: 'default',
   },
   outline: {
-    label: 'Outline',
+    label: { 'zh-TW': '外框', en: 'Outline' },
     value: 'outline',
   },
 }
@@ -42,11 +42,11 @@ export const link: LinkType = ({ appearances, disableLabel = false, overrides = 
             defaultValue: 'reference',
             options: [
               {
-                label: 'Internal link',
+                label: { 'zh-TW': '站內連結', en: 'Internal link' },
                 value: 'reference',
               },
               {
-                label: 'Custom URL',
+                label: { 'zh-TW': '自訂網址', en: 'Custom URL' },
                 value: 'custom',
               },
             ],
@@ -60,7 +60,7 @@ export const link: LinkType = ({ appearances, disableLabel = false, overrides = 
               },
               width: '50%',
             },
-            label: 'Open in new tab',
+            label: { 'zh-TW': '在新分頁開啟', en: 'Open in new tab' },
           },
         ],
       },
@@ -74,7 +74,7 @@ export const link: LinkType = ({ appearances, disableLabel = false, overrides = 
       admin: {
         condition: (_, siblingData) => siblingData?.type === 'reference',
       },
-      label: 'Document to link to',
+      label: { 'zh-TW': '連結至頁面或文章', en: 'Document to link to' },
       relationTo: ['pages', 'posts'],
       required: true,
     },
@@ -84,7 +84,7 @@ export const link: LinkType = ({ appearances, disableLabel = false, overrides = 
       admin: {
         condition: (_, siblingData) => siblingData?.type === 'custom',
       },
-      label: 'Custom URL',
+      label: { 'zh-TW': '自訂網址', en: 'Custom URL' },
       required: true,
     },
   ]
@@ -108,7 +108,7 @@ export const link: LinkType = ({ appearances, disableLabel = false, overrides = 
           admin: {
             width: '50%',
           },
-          label: 'Label',
+          label: { 'zh-TW': '連結文字', en: 'Label' },
           required: true,
         },
       ],
@@ -128,7 +128,10 @@ export const link: LinkType = ({ appearances, disableLabel = false, overrides = 
       name: 'appearance',
       type: 'select',
       admin: {
-        description: 'Choose how the link should be rendered.',
+        description: {
+          'zh-TW': '選擇連結按鈕的顯示方式。',
+          en: 'Choose how the link should be rendered.',
+        },
       },
       defaultValue: 'default',
       options: appearanceOptionsToUse,

@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next'
 
-import { getPosts } from '@/lib/content'
+import { getPages, getPosts } from '@/lib/content'
 import { locales } from '@/lib/i18n'
 import { siteURL } from '@/lib/seo'
 
@@ -24,5 +24,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }),
   )
 
-  return [...staticPages, ...postGroups.flat()]
+  const pageGroups = await Promise.all(
+    locales.map(async (locale) => {
+      const pages = await getPages(locale)
+      return pages
+        .filter((page) => page.slug !== 'home')
+        .map((page) => ({
+          url: `${siteURL}/${locale}/${page.slug}`,
+          lastModified: new Date(page.updatedAt),
+          changeFrequency: 'monthly' as const,
+          priority: 0.6,
+        }))
+    }),
+  )
+
+  return [...staticPages, ...postGroups.flat(), ...pageGroups.flat()]
 }

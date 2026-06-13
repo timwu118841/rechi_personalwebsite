@@ -36,7 +36,7 @@ export const CallToAction: Block = {
     }),
   ],
   labels: {
-    plural: 'Calls to Action',
-    singular: 'Call to Action',
+    plural: { 'zh-TW': '行動呼籲區塊', en: 'Calls to Action' },
+    singular: { 'zh-TW': '行動呼籲', en: 'Call to Action' },
   },
 }

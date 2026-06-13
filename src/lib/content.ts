@@ -1,7 +1,7 @@
 import configPromise from '@payload-config'
 import { getPayload, type Where } from 'payload'
 
-import type { Category, Post, SiteSetting } from '@/payload-types'
+import type { Category, Footer, Header, Page, Post, SiteSetting } from '@/payload-types'
 import type { Locale } from './i18n'
 
 const published: Where = {
@@ -10,20 +10,27 @@ const published: Where = {
   },
 }
 
+const localizedPublicContent: Where[] = [
+  published,
+  {
+    title: {
+      exists: true,
+    },
+  },
+  {
+    slug: {
+      exists: true,
+    },
+  },
+]
+
 export async function getPosts(
   locale: Locale,
   options: { category?: string; featured?: boolean; limit?: number; query?: string } = {},
 ): Promise<Post[]> {
   try {
     const payload = await getPayload({ config: configPromise })
-    const conditions: Where[] = [
-      published,
-      {
-        translationReady: {
-          equals: true,
-        },
-      },
-    ]
+    const conditions: Where[] = [...localizedPublicContent]
 
     if (options.category) {
       conditions.push({
@@ -82,12 +89,56 @@ export async function getPostBySlug(locale: Locale, slug: string): Promise<Post 
       depth: 2,
       limit: 1,
       where: {
-        and: [published, { slug: { equals: slug } }],
+        and: [...localizedPublicContent, { slug: { equals: slug } }],
       },
     })
     return result.docs[0] ?? null
   } catch {
     return null
+  }
+}
+
+export async function getPageBySlug(locale: Locale, slug: string): Promise<Page | null> {
+  try {
+    const payload = await getPayload({ config: configPromise })
+    const result = await payload.find({
+      collection: 'pages',
+      locale,
+      fallbackLocale: false,
+      depth: 2,
+      limit: 1,
+      where: {
+        and: [
+          published,
+          { title: { exists: true } },
+          { slug: { equals: slug } },
+        ],
+      },
+    })
+
+    return result.docs[0] ?? null
+  } catch {
+    return null
+  }
+}
+
+export async function getPages(locale: Locale): Promise<Page[]> {
+  try {
+    const payload = await getPayload({ config: configPromise })
+    const result = await payload.find({
+      collection: 'pages',
+      locale,
+      fallbackLocale: false,
+      depth: 0,
+      limit: 100,
+      where: {
+        and: [published, { title: { exists: true } }, { slug: { exists: true } }],
+      },
+    })
+
+    return result.docs
+  } catch {
+    return []
   }
 }
 
@@ -118,5 +169,32 @@ export async function getSiteSettings(locale: Locale): Promise<SiteSetting | nul
     })
   } catch {
     return null
+  }
+}
+
+export async function getNavigation(locale: Locale): Promise<{
+  footer: Footer | null
+  header: Header | null
+}> {
+  try {
+    const payload = await getPayload({ config: configPromise })
+    const [header, footer] = await Promise.all([
+      payload.findGlobal({
+        slug: 'header',
+        locale,
+        fallbackLocale: false,
+        depth: 2,
+      }),
+      payload.findGlobal({
+        slug: 'footer',
+        locale,
+        fallbackLocale: false,
+        depth: 2,
+      }),
+    ])
+
+    return { header, footer }
+  } catch {
+    return { header: null, footer: null }
   }
 }

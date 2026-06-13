@@ -17,22 +17,22 @@ export const hero: Field = {
       name: 'type',
       type: 'select',
       defaultValue: 'lowImpact',
-      label: 'Type',
+      label: { 'zh-TW': '頁首樣式', en: 'Type' },
       options: [
         {
-          label: 'None',
+          label: { 'zh-TW': '不顯示', en: 'None' },
           value: 'none',
         },
         {
-          label: 'High Impact',
+          label: { 'zh-TW': '大型頁首', en: 'High impact' },
           value: 'highImpact',
         },
         {
-          label: 'Medium Impact',
+          label: { 'zh-TW': '中型頁首', en: 'Medium impact' },
           value: 'mediumImpact',
         },
         {
-          label: 'Low Impact',
+          label: { 'zh-TW': '簡潔頁首', en: 'Low impact' },
           value: 'lowImpact',
         },
       ],
@@ -60,6 +60,7 @@ export const hero: Field = {
     }),
     {
       name: 'media',
+      label: { 'zh-TW': '頁首圖片', en: 'Media' },
       type: 'upload',
       admin: {
         condition: (_, { type } = {}) => ['highImpact', 'mediumImpact'].includes(type),

@@ -12,23 +12,24 @@ import { link } from '@/fields/link'
 const columnFields: Field[] = [
   {
     name: 'size',
+    label: { 'zh-TW': '欄寬', en: 'Column width' },
     type: 'select',
     defaultValue: 'oneThird',
     options: [
       {
-        label: 'One Third',
+        label: { 'zh-TW': '三分之一', en: 'One third' },
         value: 'oneThird',
       },
       {
-        label: 'Half',
+        label: { 'zh-TW': '二分之一', en: 'Half' },
         value: 'half',
       },
       {
-        label: 'Two Thirds',
+        label: { 'zh-TW': '三分之二', en: 'Two thirds' },
         value: 'twoThirds',
       },
       {
-        label: 'Full',
+        label: { 'zh-TW': '滿版', en: 'Full' },
         value: 'full',
       },
     ],
@@ -50,6 +51,7 @@ const columnFields: Field[] = [
   },
   {
     name: 'enableLink',
+    label: { 'zh-TW': '加入連結', en: 'Enable link' },
     type: 'checkbox',
   },
   link({
@@ -69,6 +71,7 @@ export const Content: Block = {
   fields: [
     {
       name: 'columns',
+      label: { 'zh-TW': '內容欄位', en: 'Columns' },
       type: 'array',
       admin: {
         initCollapsed: true,
@@ -76,4 +79,8 @@ export const Content: Block = {
       fields: columnFields,
     },
   ],
+  labels: {
+    singular: { 'zh-TW': '文字內容', en: 'Content' },
+    plural: { 'zh-TW': '文字內容', en: 'Content blocks' },
+  },
 }

@@ -2,6 +2,8 @@ import { postgresAdapter } from '@payloadcms/db-postgres'
 import sharp from 'sharp'
 import path from 'path'
 import { buildConfig, PayloadRequest } from 'payload'
+import { en } from 'payload/i18n/en'
+import { zhTw } from 'payload/i18n/zhTw'
 import { fileURLToPath } from 'url'
 
 import { Categories } from './collections/Categories'
@@ -63,6 +65,25 @@ export default buildConfig({
       connectionString: process.env.DATABASE_URL || '',
     },
   }),
+  i18n: {
+    fallbackLanguage: 'zh-TW',
+    supportedLanguages: {
+      'zh-TW': zhTw,
+      en,
+    },
+    translations: {
+      'zh-TW': {
+        'plugin-redirects': {
+          customUrl: '自訂網址',
+          documentToRedirect: '重新導向至',
+          fromUrl: '來源網址',
+          internalLink: '站內連結',
+          redirectType: '重新導向類型',
+          toUrlType: '目標網址類型',
+        },
+      },
+    },
+  },
   collections: [Pages, Posts, Media, Categories, Users],
   cors: [getServerSideURL()].filter(Boolean),
   globals: [Header, Footer, SiteSettings],

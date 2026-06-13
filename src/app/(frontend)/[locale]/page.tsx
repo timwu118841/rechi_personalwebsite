@@ -35,7 +35,7 @@ export default async function LocaleHome({ params }: Props) {
     getCategories(locale),
     getSiteSettings(locale),
   ])
-  const featured = featuredPosts[0] || posts[0]
+  const featured = featuredPosts[0]
   const latest = featured ? posts.filter((post) => post.id !== featured.id) : posts
   const t = copy[locale]
 

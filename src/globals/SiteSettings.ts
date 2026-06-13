@@ -5,6 +5,7 @@ import { authenticated } from '@/access/authenticated'
 
 export const SiteSettings: GlobalConfig = {
   slug: 'site-settings',
+  label: { 'zh-TW': '網站設定', en: 'Site settings' },
   access: {
     read: anyone,
     update: authenticated,
@@ -12,6 +13,7 @@ export const SiteSettings: GlobalConfig = {
   fields: [
     {
       name: 'siteName',
+      label: { 'zh-TW': '網站名稱', en: 'Site name' },
       type: 'text',
       localized: true,
       required: true,
@@ -19,6 +21,7 @@ export const SiteSettings: GlobalConfig = {
     },
     {
       name: 'tagline',
+      label: { 'zh-TW': '網站標語', en: 'Tagline' },
       type: 'text',
       localized: true,
       required: true,
@@ -26,12 +29,14 @@ export const SiteSettings: GlobalConfig = {
     },
     {
       name: 'authorName',
+      label: { 'zh-TW': '預設作者姓名', en: 'Default author name' },
       type: 'text',
       required: true,
       defaultValue: '作者姓名',
     },
     {
       name: 'authorBio',
+      label: { 'zh-TW': '預設作者簡介', en: 'Default author biography' },
       type: 'textarea',
       localized: true,
       required: true,
@@ -39,17 +44,20 @@ export const SiteSettings: GlobalConfig = {
     },
     {
       name: 'authorExpertise',
+      label: { 'zh-TW': '預設專業領域', en: 'Default expertise' },
       type: 'text',
       localized: true,
       defaultValue: '家事民事、公司商務',
     },
     {
       name: 'authorPhoto',
+      label: { 'zh-TW': '作者照片', en: 'Author photo' },
       type: 'upload',
       relationTo: 'media',
     },
     {
       name: 'defaultDescription',
+      label: { 'zh-TW': '預設 SEO 描述', en: 'Default SEO description' },
       type: 'textarea',
       localized: true,
       required: true,
@@ -57,6 +65,7 @@ export const SiteSettings: GlobalConfig = {
     },
     {
       name: 'disclaimer',
+      label: { 'zh-TW': '法律免責聲明', en: 'Legal disclaimer' },
       type: 'textarea',
       localized: true,
       required: true,

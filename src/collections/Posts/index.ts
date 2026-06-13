@@ -1,19 +1,8 @@
 import type { CollectionConfig } from 'payload'
 
-import {
-  BlocksFeature,
-  FixedToolbarFeature,
-  HeadingFeature,
-  HorizontalRuleFeature,
-  InlineToolbarFeature,
-  lexicalEditor,
-} from '@payloadcms/richtext-lexical'
-
 import { authenticated } from '../../access/authenticated'
 import { authenticatedOrPublished } from '../../access/authenticatedOrPublished'
-import { Banner } from '../../blocks/Banner/config'
-import { Code } from '../../blocks/Code/config'
-import { MediaBlock } from '../../blocks/MediaBlock/config'
+import { postEditor } from '../../fields/postEditor'
 import { generatePreviewPath } from '../../utilities/generatePreviewPath'
 import { populateAuthors } from './hooks/populateAuthors'
 import { revalidateDelete, revalidatePost } from './hooks/revalidatePost'
@@ -28,6 +17,11 @@ import {
 
 export const Posts: CollectionConfig<'posts'> = {
   slug: 'posts',
+  disableBulkEdit: true,
+  labels: {
+    singular: { 'zh-TW': '文章', en: 'Post' },
+    plural: { 'zh-TW': '文章', en: 'Posts' },
+  },
   access: {
     create: authenticated,
     delete: authenticated,
@@ -67,12 +61,14 @@ export const Posts: CollectionConfig<'posts'> = {
   fields: [
     {
       name: 'title',
+      label: { 'zh-TW': '標題', en: 'Title' },
       type: 'text',
       localized: true,
       required: true,
     },
     {
       name: 'excerpt',
+      label: { 'zh-TW': '文章摘要', en: 'Excerpt' },
       type: 'textarea',
       localized: true,
       required: true,
@@ -85,35 +81,26 @@ export const Posts: CollectionConfig<'posts'> = {
           fields: [
             {
               name: 'heroImage',
+              label: { 'zh-TW': '封面圖片', en: 'Hero image' },
               type: 'upload',
               relationTo: 'media',
             },
             {
               name: 'content',
+              label: { 'zh-TW': '文章內容', en: 'Content' },
               type: 'richText',
               localized: true,
-              editor: lexicalEditor({
-                features: ({ rootFeatures }) => {
-                  return [
-                    ...rootFeatures,
-                    HeadingFeature({ enabledHeadingSizes: ['h1', 'h2', 'h3', 'h4'] }),
-                    BlocksFeature({ blocks: [Banner, Code, MediaBlock] }),
-                    FixedToolbarFeature(),
-                    InlineToolbarFeature(),
-                    HorizontalRuleFeature(),
-                  ]
-                },
-              }),
-              label: false,
+              editor: postEditor,
               required: true,
             },
           ],
-          label: 'Content',
+          label: { 'zh-TW': '文章內容', en: 'Content' },
         },
         {
           fields: [
             {
               name: 'relatedPosts',
+              label: { 'zh-TW': '相關文章', en: 'Related posts' },
               type: 'relationship',
               admin: {
                 position: 'sidebar',
@@ -130,6 +117,7 @@ export const Posts: CollectionConfig<'posts'> = {
             },
             {
               name: 'categories',
+              label: { 'zh-TW': '分類', en: 'Categories' },
               type: 'relationship',
               admin: {
                 position: 'sidebar',
@@ -139,6 +127,7 @@ export const Posts: CollectionConfig<'posts'> = {
             },
             {
               name: 'tags',
+              label: { 'zh-TW': '標籤', en: 'Tags' },
               type: 'array',
               localized: true,
               admin: {
@@ -147,6 +136,7 @@ export const Posts: CollectionConfig<'posts'> = {
               fields: [
                 {
                   name: 'label',
+                  label: { 'zh-TW': '標籤名稱', en: 'Label' },
                   type: 'text',
                   required: true,
                 },
@@ -154,24 +144,16 @@ export const Posts: CollectionConfig<'posts'> = {
             },
             {
               name: 'featured',
+              label: { 'zh-TW': '設為精選文章', en: 'Featured post' },
               type: 'checkbox',
               admin: {
                 position: 'sidebar',
               },
               defaultValue: false,
-            },
-            {
-              name: 'translationReady',
-              type: 'checkbox',
-              localized: true,
-              defaultValue: false,
-              admin: {
-                description: '目前語言內容完成後勾選；未勾選的語言不會出現在公開網站。',
-                position: 'sidebar',
-              },
             },
             {
               name: 'anonymizationConfirmed',
+              label: { 'zh-TW': '已確認內容匿名化', en: 'Anonymization confirmed' },
               type: 'checkbox',
               required: true,
               validate: (value) => value === true || '儲存文章前必須確認內容已匿名化。',
@@ -181,11 +163,11 @@ export const Posts: CollectionConfig<'posts'> = {
               },
             },
           ],
-          label: 'Meta',
+          label: { 'zh-TW': '文章設定', en: 'Post settings' },
         },
         {
           name: 'meta',
-          label: 'SEO',
+          label: { 'zh-TW': '搜尋引擎最佳化（SEO）', en: 'SEO' },
           localized: true,
           fields: [
             OverviewField({
@@ -221,6 +203,7 @@ export const Posts: CollectionConfig<'posts'> = {
     },
     {
       name: 'publishedAt',
+      label: { 'zh-TW': '發布時間', en: 'Published at' },
       type: 'date',
       admin: {
         date: {
@@ -241,6 +224,7 @@ export const Posts: CollectionConfig<'posts'> = {
     },
     {
       name: 'slug',
+      label: { 'zh-TW': '網址代稱（Slug）', en: 'URL slug' },
       type: 'text',
       localized: true,
       required: true,
@@ -252,6 +236,7 @@ export const Posts: CollectionConfig<'posts'> = {
     },
     {
       name: 'authors',
+      label: { 'zh-TW': '作者', en: 'Authors' },
       type: 'relationship',
       admin: {
         position: 'sidebar',
@@ -264,6 +249,7 @@ export const Posts: CollectionConfig<'posts'> = {
     // GraphQL will also not return mutated user data that differs from the underlying schema
     {
       name: 'populatedAuthors',
+      label: { 'zh-TW': '公開作者資料', en: 'Public author data' },
       type: 'array',
       access: {
         update: () => false,

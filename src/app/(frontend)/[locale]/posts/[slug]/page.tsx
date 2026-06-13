@@ -6,6 +6,7 @@ import RichText from '@/components/RichText'
 import { PostCard } from '@/components/blog/PostCard'
 import { getPostBySlug, getPosts, getSiteSettings } from '@/lib/content'
 import { calculateReadingMinutes } from '@/lib/reading-time'
+import { resolvePostAuthorName } from '@/lib/post-author'
 import { articleJsonLd, postMetadata } from '@/lib/seo'
 import { copy, isLocale } from '@/lib/i18n'
 import type { Category } from '@/payload-types'
@@ -39,6 +40,7 @@ export default async function PostPage({ params }: Props) {
     (category): category is Category => typeof category === 'object' && category !== null,
   )
   const t = copy[locale]
+  const authorName = resolvePostAuthorName(post, settings?.authorName || '作者姓名', locale)
   const jsonLd = articleJsonLd(post, locale, settings)
   const related = categories[0]?.slug
     ? (await getPosts(locale, { category: categories[0].slug, limit: 4 }))
@@ -66,7 +68,7 @@ export default async function PostPage({ params }: Props) {
         <h1>{post.title}</h1>
         <p className="article-excerpt">{post.excerpt}</p>
         <div className="byline">
-          <span>{settings?.authorName || '作者姓名'}</span>
+          <span>{authorName}</span>
           <time dateTime={post.publishedAt || post.createdAt}>
             {new Intl.DateTimeFormat(locale, { dateStyle: 'long' }).format(
               new Date(post.publishedAt || post.createdAt),

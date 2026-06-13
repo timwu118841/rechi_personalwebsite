@@ -5,7 +5,6 @@ import { authenticatedOrPublished } from '../../access/authenticatedOrPublished'
 import { Archive } from '../../blocks/ArchiveBlock/config'
 import { CallToAction } from '../../blocks/CallToAction/config'
 import { Content } from '../../blocks/Content/config'
-import { FormBlock } from '../../blocks/Form/config'
 import { MediaBlock } from '../../blocks/MediaBlock/config'
 import { hero } from '@/heros/config'
 import { slugField } from 'payload'
@@ -23,6 +22,11 @@ import {
 
 export const Pages: CollectionConfig<'pages'> = {
   slug: 'pages',
+  disableBulkEdit: true,
+  labels: {
+    singular: { 'zh-TW': '固定頁面', en: 'Page' },
+    plural: { 'zh-TW': '固定頁面', en: 'Pages' },
+  },
   access: {
     create: authenticated,
     delete: authenticated,
@@ -57,6 +61,7 @@ export const Pages: CollectionConfig<'pages'> = {
   fields: [
     {
       name: 'title',
+      label: { 'zh-TW': '頁面標題', en: 'Title' },
       type: 'text',
       required: true,
     },
@@ -65,25 +70,25 @@ export const Pages: CollectionConfig<'pages'> = {
       tabs: [
         {
           fields: [hero],
-          label: 'Hero',
+          label: { 'zh-TW': '頁首區塊', en: 'Hero' },
         },
         {
           fields: [
             {
               name: 'layout',
               type: 'blocks',
-              blocks: [CallToAction, Content, MediaBlock, Archive, FormBlock],
+              blocks: [CallToAction, Content, MediaBlock, Archive],
               required: true,
               admin: {
                 initCollapsed: true,
               },
             },
           ],
-          label: 'Content',
+          label: { 'zh-TW': '頁面內容', en: 'Content' },
         },
         {
           name: 'meta',
-          label: 'SEO',
+          label: { 'zh-TW': '搜尋引擎最佳化（SEO）', en: 'SEO' },
           fields: [
             OverviewField({
               titlePath: 'meta.title',
@@ -112,6 +117,7 @@ export const Pages: CollectionConfig<'pages'> = {
     },
     {
       name: 'publishedAt',
+      label: { 'zh-TW': '發布時間', en: 'Published at' },
       type: 'date',
       admin: {
         position: 'sidebar',

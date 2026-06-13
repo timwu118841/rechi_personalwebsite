@@ -16,6 +16,10 @@ const dirname = path.dirname(filename)
 
 export const Media: CollectionConfig = {
   slug: 'media',
+  labels: {
+    singular: { 'zh-TW': '媒體', en: 'Media' },
+    plural: { 'zh-TW': '媒體庫', en: 'Media' },
+  },
   folders: true,
   access: {
     create: authenticated,
@@ -26,12 +30,14 @@ export const Media: CollectionConfig = {
   fields: [
     {
       name: 'alt',
+      label: { 'zh-TW': '圖片替代文字', en: 'Alternative text' },
       type: 'text',
       localized: true,
       required: true,
     },
     {
       name: 'caption',
+      label: { 'zh-TW': '圖片說明', en: 'Caption' },
       type: 'richText',
       editor: lexicalEditor({
         features: ({ rootFeatures }) => {

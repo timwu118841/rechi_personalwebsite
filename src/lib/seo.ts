@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 
 import type { Media, Post, SiteSetting } from '@/payload-types'
 import type { Locale } from './i18n'
+import { resolvePostAuthorName } from './post-author'
 
 export const siteURL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'
 
@@ -51,6 +52,7 @@ export function postMetadata(
 
 export function articleJsonLd(post: Post, locale: Locale, settings: SiteSetting | null) {
   const image = mediaURL(post.meta?.image || post.heroImage)
+  const authorName = resolvePostAuthorName(post, settings?.authorName || '作者姓名', locale)
   return {
     '@context': 'https://schema.org',
     '@type': 'Article',
@@ -62,7 +64,7 @@ export function articleJsonLd(post: Post, locale: Locale, settings: SiteSetting 
     mainEntityOfPage: `${siteURL}/${locale}/posts/${post.slug}`,
     author: {
       '@type': 'Person',
-      name: settings?.authorName || '作者姓名',
+      name: authorName,
     },
     image: image ? [image] : undefined,
   }
