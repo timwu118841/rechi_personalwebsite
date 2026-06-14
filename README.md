@@ -80,9 +80,40 @@ openspec validate build-legal-knowledge-blog --strict
    - `PREVIEW_SECRET`
    - `CRON_SECRET`
    - `NEXT_PUBLIC_SERVER_URL`：正式完整網址，不含尾斜線
-4. 依下方說明設定 Cloudflare R2。
-5. 執行第一次部署，再開啟 `/admin` 建立管理員。
-6. 在可信任環境連到正式資料庫執行 `npm run seed`。
+4. 專案的 `vercel.json` 已將 Vercel **Build Command** 設為：
+
+   ```bash
+   npm run ci
+   ```
+
+   不需要再於 Vercel Dashboard 手動覆寫 Build Command。此指令會先執行尚未套用的 Payload migration，再執行 Next.js production build。若 migration 失敗，部署會停止，不會發布不相容的版本。
+5. 依下方說明設定 Cloudflare R2。
+6. 執行第一次部署，再開啟 `/admin` 建立管理員。
+7. 在可信任環境連到正式資料庫執行 `npm run seed`。
+
+### Neon 資料庫 migration
+
+資料表由 `src/migrations` 中的 Payload migration 建立，不要在 Neon SQL Editor 手動建立 table。
+
+確認 migration 狀態：
+
+```bash
+npm run payload migrate:status
+```
+
+手動將尚未套用的 migration 執行到目前 `DATABASE_URL`：
+
+```bash
+npm run payload migrate
+```
+
+未來修改 Payload collection、global 或欄位後，先在新的功能分支執行：
+
+```bash
+npm run payload migrate:create migration-name
+```
+
+檢查產生的 `src/migrations` 檔案並隨程式碼一起提交。正式環境不應執行 `migrate:fresh`、`migrate:reset` 或手動修改 Payload 管理的資料表。
 
 Vercel Hobby 官方定位為個人、非商業用途。若網站日後加入業務招攬、預約或其他商業功能，應重新確認並升級合適方案。
 
