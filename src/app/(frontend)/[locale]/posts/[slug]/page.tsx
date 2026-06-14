@@ -94,7 +94,7 @@ export default async function PostPage({ params }: Props) {
         />
       )}
 
-      <RichText className="article-body" data={post.content} enableGutter={false} />
+      <RichText className="article-body" data={post.content} enableGutter={false} locale={locale} />
 
       <aside className="disclaimer">
         <strong>{t.disclaimerTitle}</strong>

@@ -21,24 +21,41 @@ import type {
 import { BannerBlock } from '@/blocks/Banner/Component'
 import { CallToActionBlock } from '@/blocks/CallToAction/Component'
 import { cn } from '@/utilities/ui'
+import { defaultLocale, type Locale } from '@/lib/i18n'
 import { renderPostTextNode, type SerializedPostTextNode } from './postTextConverter'
 
 type NodeTypes =
   | DefaultNodeTypes
   | SerializedBlockNode<CTABlockProps | MediaBlockProps | BannerBlockProps | CodeBlockProps>
 
-const internalDocToHref = ({ linkNode }: { linkNode: SerializedLinkNode }) => {
-  const { value, relationTo } = linkNode.fields.doc!
+export const resolveInternalDocHref = ({
+  linkNode,
+  locale,
+}: {
+  linkNode: SerializedLinkNode
+  locale: Locale
+}) => {
+  const document = linkNode.fields.doc
+  if (!document) return `/${locale}`
+
+  const { value, relationTo } = document
   if (typeof value !== 'object') {
-    throw new Error('Expected value to be an object')
+    return `/${locale}`
   }
-  const slug = value.slug
-  return relationTo === 'posts' ? `/posts/${slug}` : `/${slug}`
+
+  const slug = typeof value.slug === 'string' ? encodeURIComponent(value.slug) : ''
+  if (!slug || (relationTo === 'pages' && slug === 'home')) return `/${locale}`
+
+  return relationTo === 'posts' ? `/${locale}/posts/${slug}` : `/${locale}/${slug}`
 }
 
-const jsxConverters: JSXConvertersFunction<NodeTypes> = ({ defaultConverters }) => ({
+const createJSXConverters =
+  (locale: Locale): JSXConvertersFunction<NodeTypes> =>
+  ({ defaultConverters }) => ({
   ...defaultConverters,
-  ...LinkJSXConverter({ internalDocToHref }),
+  ...LinkJSXConverter({
+    internalDocToHref: ({ linkNode }) => resolveInternalDocHref({ linkNode, locale }),
+  }),
   text: ({ node }) => renderPostTextNode(node as SerializedPostTextNode),
   blocks: {
     banner: ({ node }) => <BannerBlock className="col-start-2 mb-4" {...node.fields} />,
@@ -61,13 +78,20 @@ type Props = {
   data: DefaultTypedEditorState
   enableGutter?: boolean
   enableProse?: boolean
+  locale?: Locale
 } & React.HTMLAttributes<HTMLDivElement>
 
 export default function RichText(props: Props) {
-  const { className, enableProse = true, enableGutter = true, ...rest } = props
+  const {
+    className,
+    enableProse = true,
+    enableGutter = true,
+    locale = defaultLocale,
+    ...rest
+  } = props
   return (
     <ConvertRichText
-      converters={jsxConverters}
+      converters={createJSXConverters(locale)}
       className={cn(
         'payload-richtext',
         {

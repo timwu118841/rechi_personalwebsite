@@ -83,6 +83,63 @@ describe('homepage settings', () => {
 })
 
 describe('post editor formatting', () => {
+  it('uses Payload built-in internal link fields so existing links remain editable', () => {
+    const contentField = Posts.fields
+      .flatMap((field) => ('tabs' in field ? field.tabs.flatMap((tab) => tab.fields) : [field]))
+      .find((field) => 'name' in field && field.name === 'content')
+    const editor = contentField && 'editor' in contentField ? contentField.editor : undefined
+    const getLinkFields = (
+      editor as {
+        editorConfig?: {
+          features?: {
+            getSubFields?: Map<string, () => Array<Record<string, unknown>>>
+          }
+        }
+      }
+    )?.editorConfig?.features?.getSubFields?.get('link')
+    const linkFields = getLinkFields?.() ?? []
+    const urlField = linkFields.find((field) => field.name === 'url') as
+      | { hooks?: { beforeChange?: unknown[] } }
+      | undefined
+    const docField = linkFields.find((field) => field.name === 'doc')
+
+    expect(docField).toMatchObject({
+      relationTo: ['pages', 'posts'],
+      required: true,
+      type: 'relationship',
+    })
+    expect(urlField?.hooks?.beforeChange).toHaveLength(1)
+  })
+
+  it('auto-generates localized post slugs while keeping manual override controls', () => {
+    const slugRow = Posts.fields.find(
+      (field) =>
+        field.type === 'row' &&
+        field.fields.some((nestedField) => 'name' in nestedField && nestedField.name === 'slug'),
+    )
+
+    expect(slugRow).toBeDefined()
+    if (!slugRow || slugRow.type !== 'row') return
+
+    const generateSlugField = slugRow.fields.find(
+      (field) => 'name' in field && field.name === 'generateSlug',
+    )
+    const slugField = slugRow.fields.find((field) => 'name' in field && field.name === 'slug')
+
+    expect(generateSlugField).toMatchObject({
+      defaultValue: true,
+      localized: true,
+      type: 'checkbox',
+    })
+    expect(slugField).toMatchObject({
+      label: { 'zh-TW': '網址代稱（Slug）', en: 'URL slug' },
+      localized: true,
+      required: true,
+      type: 'text',
+      unique: true,
+    })
+  })
+
   it('offers the approved fixed text colors and detailed font sizes', () => {
     expect(Object.keys(postTextColorStyles)).toHaveLength(16)
     expect(Object.keys(postFontSizeStyles)).toEqual([

@@ -265,6 +265,13 @@ export interface Post {
     noIndex?: boolean | null;
   };
   publishedAt?: string | null;
+  /**
+   * Updates from the title while drafting, then stays fixed after manual edits or publishing.
+   */
+  generateSlug?: boolean | null;
+  /**
+   * Part of the public URL. Avoid changing it after publishing.
+   */
   slug: string;
   authors?: (number | User)[] | null;
   populatedAuthors?:
@@ -984,6 +991,7 @@ export interface PostsSelect<T extends boolean = true> {
         noIndex?: T;
       };
   publishedAt?: T;
+  generateSlug?: T;
   slug?: T;
   authors?: T;
   populatedAuthors?:

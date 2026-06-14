@@ -1,4 +1,4 @@
-import type { CollectionConfig } from 'payload'
+import { slugField, type CollectionConfig } from 'payload'
 
 import { authenticated } from '../../access/authenticated'
 import { authenticatedOrPublished } from '../../access/authenticatedOrPublished'
@@ -222,18 +222,41 @@ export const Posts: CollectionConfig<'posts'> = {
         ],
       },
     },
-    {
-      name: 'slug',
-      label: { 'zh-TW': '網址代稱（Slug）', en: 'URL slug' },
-      type: 'text',
+    slugField({
       localized: true,
-      required: true,
-      unique: true,
-      index: true,
-      admin: {
-        position: 'sidebar',
+      overrides: (field) => {
+        const generateSlugField = field.fields.find(
+          (nestedField) => 'name' in nestedField && nestedField.name === 'generateSlug',
+        )
+        const slug = field.fields.find(
+          (nestedField) => 'name' in nestedField && nestedField.name === 'slug',
+        )
+
+        if (generateSlugField && 'name' in generateSlugField) {
+          generateSlugField.label = { 'zh-TW': '依標題自動產生網址', en: 'Generate from title' }
+          generateSlugField.admin = {
+            ...generateSlugField.admin,
+            description: {
+              'zh-TW': '草稿期間會依標題更新；手動修改或發布後即固定。',
+              en: 'Updates from the title while drafting, then stays fixed after manual edits or publishing.',
+            },
+          }
+        }
+
+        if (slug && 'name' in slug) {
+          slug.label = { 'zh-TW': '網址代稱（Slug）', en: 'URL slug' }
+          slug.admin = {
+            ...slug.admin,
+            description: {
+              'zh-TW': '公開網址的一部分。發布後請避免修改，以免既有連結失效。',
+              en: 'Part of the public URL. Avoid changing it after publishing.',
+            },
+          }
+        }
+
+        return field
       },
-    },
+    }),
     {
       name: 'authors',
       label: { 'zh-TW': '作者', en: 'Authors' },
