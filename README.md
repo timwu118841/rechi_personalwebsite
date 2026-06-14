@@ -9,7 +9,7 @@
 - **API**：Payload REST `/api/*`、GraphQL `/api/graphql`
 - **資料庫**：PostgreSQL，正式環境建議使用 Neon
 - **內容語言**：繁體中文 `zh-Hant`、英文 `en`
-- **部署**：Vercel；正式媒體需接 Vercel Blob 或 S3 相容物件儲存
+- **部署**：Vercel；正式媒體使用 Cloudflare R2
 
 ## 後台內容模型
 
@@ -78,15 +78,35 @@ openspec validate build-legal-knowledge-blog --strict
    - `DATABASE_URL`
    - `PAYLOAD_SECRET`：至少 32 字元的隨機值
    - `PREVIEW_SECRET`
+   - `CRON_SECRET`
    - `NEXT_PUBLIC_SERVER_URL`：正式完整網址，不含尾斜線
-4. 執行第一次部署，再開啟 `/admin` 建立管理員。
-5. 在可信任環境連到正式資料庫執行 `npm run seed`。
-6. 上傳圖片前，為 production 設定 Vercel Blob 或 S3 相容儲存；Vercel 執行環境的本機檔案不具持久性。
+4. 依下方說明設定 Cloudflare R2。
+5. 執行第一次部署，再開啟 `/admin` 建立管理員。
+6. 在可信任環境連到正式資料庫執行 `npm run seed`。
 
 Vercel Hobby 官方定位為個人、非商業用途。若網站日後加入業務招攬、預約或其他商業功能，應重新確認並升級合適方案。
+
+### Cloudflare R2 與 `media.tiwu.com`
+
+1. 在 Cloudflare 建立 R2 bucket，例如 `rechi-legal-media`。
+2. 建立只允許此 bucket 讀寫的 R2 S3 API token，取得 Access Key ID 與 Secret Access Key。
+3. 在 bucket 的 **Settings → Custom Domains** 綁定 `media.tiwu.com`。`tiwu.com` 必須位於同一個 Cloudflare 帳號；子網域不需要另外購買。
+4. 等待 Custom Domain 狀態成為 Active。
+5. 在 Vercel 的 Production 環境設定：
+
+```env
+R2_BUCKET=rechi-legal-media
+R2_ENDPOINT=https://你的_CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com
+R2_ACCESS_KEY_ID=你的_ACCESS_KEY_ID
+R2_SECRET_ACCESS_KEY=你的_SECRET_ACCESS_KEY
+R2_PUBLIC_URL=https://media.tiwu.com
+```
+
+R2 的 region 由程式固定為 `auto`，不用另外設定。五個 R2 變數必須全部設定；若只填其中一部分，網站會在啟動或建置時顯示缺少哪些設定。未設定任何 R2 變數時，本機仍會把圖片寫入 `public/media`。
+
+完成部署後，請從 `/admin` 上傳一張測試圖片，確認原圖與縮圖網址皆以 `https://media.tiwu.com/` 開頭。既有 `public/media` 圖片不會自動搬到 R2，需要重新上傳或另外執行搬移。
 
 ## 尚待後續設定
 
 - 正式網域、律師姓名、網站名稱、Logo、品牌色及形象照
-- Production 媒體儲存 provider
 - 真實文章內容與關鍵字策略

@@ -5,6 +5,11 @@ declare global {
       DATABASE_URL: string
       NEXT_PUBLIC_SERVER_URL: string
       VERCEL_PROJECT_PRODUCTION_URL: string
+      R2_ACCESS_KEY_ID?: string
+      R2_BUCKET?: string
+      R2_ENDPOINT?: string
+      R2_PUBLIC_URL?: string
+      R2_SECRET_ACCESS_KEY?: string
     }
   }
 }
