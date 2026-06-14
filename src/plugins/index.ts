@@ -7,19 +7,40 @@ import { revalidateRedirects } from '@/hooks/revalidateRedirects'
 import { GenerateTitle, GenerateURL } from '@payloadcms/plugin-seo/types'
 import { searchFields } from '@/search/fieldOverrides'
 import { beforeSyncWithSearch } from '@/search/beforeSync'
+import { generateAdminSEOTitle, generateAdminSEOURL } from '@/lib/admin-seo'
 
 import { Page, Post } from '@/payload-types'
 import { getServerSideURL } from '@/utilities/getURL'
 
-const generateTitle: GenerateTitle<Post | Page> = ({ doc }) => {
-  return doc?.title ? `${doc.title} | Payload Website Template` : 'Payload Website Template'
+const generateTitle: GenerateTitle<Post | Page> = async ({ doc, locale, req }) => {
+  let siteName: string | null | undefined
+
+  try {
+    const settings = await req.payload.findGlobal({
+      slug: 'site-settings',
+      locale: locale === 'en' ? 'en' : 'zh-Hant',
+      fallbackLocale: false,
+      depth: 0,
+    })
+    siteName = settings.siteName
+  } catch {
+    // Keep SEO generation available even if Site Settings cannot be loaded.
+  }
+
+  return generateAdminSEOTitle({
+    documentTitle: doc?.title,
+    locale,
+    siteName,
+  })
 }
 
-const generateURL: GenerateURL<Post | Page> = ({ doc }) => {
-  const url = getServerSideURL()
-
-  return doc?.slug ? `${url}/${doc.slug}` : url
-}
+const generateURL: GenerateURL<Post | Page> = ({ collectionSlug, doc, locale }) =>
+  generateAdminSEOURL({
+    baseURL: getServerSideURL(),
+    collection: collectionSlug === 'posts' ? 'posts' : 'pages',
+    locale,
+    slug: doc?.slug,
+  })
 
 export const plugins: Plugin[] = [
   redirectsPlugin({
