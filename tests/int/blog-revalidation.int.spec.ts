@@ -67,4 +67,42 @@ describe('post revalidation', () => {
     expect(revalidatePath).toHaveBeenCalledWith('/zh-Hant/categories/%E8%88%8A%E5%88%86%E9%A1%9E')
     expect(revalidatePath).toHaveBeenCalledWith('/en/categories/%E8%88%8A%E5%88%86%E9%A1%9E')
   })
+
+  it('does not throw when Payload omits previousDoc during a slug update', () => {
+    expect(() =>
+      revalidatePost({
+        doc: {
+          _status: 'published',
+          slug: 'new-slug',
+          categories: [],
+        },
+        previousDoc: undefined,
+        req: { context: {}, payload: { logger: { info: vi.fn() } } },
+      } as never),
+    ).not.toThrow()
+
+    expect(revalidatePath).toHaveBeenCalledWith('/zh-Hant/posts/new-slug')
+    expect(revalidatePath).toHaveBeenCalledWith('/en/posts/new-slug')
+  })
+
+  it('skips invalid old and new slug values during post revalidation', () => {
+    expect(() =>
+      revalidatePost({
+        doc: {
+          _status: 'published',
+          slug: undefined,
+          categories: [],
+        },
+        previousDoc: {
+          _status: 'published',
+          slug: '',
+          categories: [],
+        },
+        req: { context: {}, payload: { logger: { info: vi.fn() } } },
+      } as never),
+    ).not.toThrow()
+
+    expect(revalidatePath).not.toHaveBeenCalledWith('/zh-Hant/posts/undefined')
+    expect(revalidatePath).not.toHaveBeenCalledWith('/zh-Hant/posts/')
+  })
 })
