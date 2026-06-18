@@ -4,7 +4,6 @@ import { authenticated } from '../../access/authenticated'
 import { authenticatedOrPublished } from '../../access/authenticatedOrPublished'
 import { postEditor } from '../../fields/postEditor'
 import { slugifyUnicode } from '../../lib/slug'
-import { generatePreviewPath } from '../../utilities/generatePreviewPath'
 import { populateAuthors } from './hooks/populateAuthors'
 import { revalidateDelete, revalidatePost } from './hooks/revalidatePost'
 
@@ -35,28 +34,9 @@ export const Posts: CollectionConfig<'posts'> = {
   defaultPopulate: {
     title: true,
     slug: true,
-    categories: true,
-    meta: {
-      image: true,
-      description: true,
-    },
   },
   admin: {
     defaultColumns: ['title', 'slug', 'updatedAt'],
-    livePreview: {
-      url: ({ data, req }) =>
-        generatePreviewPath({
-          slug: data?.slug,
-          collection: 'posts',
-          req,
-        }),
-    },
-    preview: (data, { req }) =>
-      generatePreviewPath({
-        slug: data?.slug as string,
-        collection: 'posts',
-        req,
-      }),
     useAsTitle: 'title',
   },
   fields: [
@@ -307,6 +287,6 @@ export const Posts: CollectionConfig<'posts'> = {
       },
       schedulePublish: false,
     },
-    maxPerDoc: 50,
+    maxPerDoc: 10,
   },
 }
