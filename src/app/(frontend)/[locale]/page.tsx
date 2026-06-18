@@ -30,14 +30,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function LocaleHome({ params }: Props) {
   const { locale } = await params
   if (!isLocale(locale)) notFound()
-  const [posts, featuredPosts, categories, settings] = await Promise.all([
-    getPosts(locale, { limit: 12 }),
-    getPosts(locale, { featured: true, limit: 1 }),
+  const [posts, categories, settings] = await Promise.all([
+    getPosts(locale, { featuredFirst: true, limit: 13 }),
     getCategories(locale),
     getSiteSettings(locale),
   ])
-  const featured = featuredPosts[0]
-  const latest = featured ? posts.filter((post) => post.id !== featured.id) : posts
+  const featured = posts.find((post) => post.featured)
+  const latest = (featured ? posts.filter((post) => post.id !== featured.id) : posts).slice(0, 12)
   const t = copy[locale]
 
   return (
@@ -58,7 +57,9 @@ export default async function LocaleHome({ params }: Props) {
         <h2 className="section-title">{t.latest}</h2>
         {latest.length ? (
           <div className="post-list">
-            {latest.map((post) => <PostCard key={post.id} locale={locale} post={post} />)}
+            {latest.map((post) => (
+              <PostCard key={post.id} locale={locale} post={post} />
+            ))}
           </div>
         ) : (
           <p className="empty-state">{t.noPosts}</p>

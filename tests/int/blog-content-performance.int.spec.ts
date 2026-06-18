@@ -30,7 +30,7 @@ vi.mock('@payload-config', () => ({
   default: {},
 }))
 
-import { getPostBySlug } from '@/lib/content'
+import { getPostBySlug, getPosts } from '@/lib/content'
 
 describe('blog content query performance', () => {
   beforeEach(() => {
@@ -76,7 +76,10 @@ describe('blog content query performance', () => {
       ],
     })
 
-    const post = await getPostBySlug('zh-Hant', '%E9%9B%A2%E5%A9%9A%E8%B2%A1%E7%94%A2%E6%80%8E%E9%BA%BC%E5%88%86')
+    const post = await getPostBySlug(
+      'zh-Hant',
+      '%E9%9B%A2%E5%A9%9A%E8%B2%A1%E7%94%A2%E6%80%8E%E9%BA%BC%E5%88%86',
+    )
 
     expect(post?.slug).toBe('離婚財產怎麼分')
     expect(payloadFind).toHaveBeenCalledWith(
@@ -103,5 +106,33 @@ describe('blog content query performance', () => {
     await getPostBySlug('zh-Hant', 'cached-post')
 
     expect(payloadFind).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('blog list query performance', () => {
+  beforeEach(() => {
+    payloadFind.mockReset()
+    getPayload.mockResolvedValue({ find: payloadFind })
+  })
+
+  it('loads homepage posts and featured posts in one Payload query', async () => {
+    payloadFind.mockResolvedValueOnce({
+      docs: [
+        { id: 1, slug: 'featured', featured: true, title: '精選' },
+        { id: 2, slug: 'latest', featured: false, title: '最新' },
+      ],
+    })
+
+    const result = await getPosts('zh-Hant', { featuredFirst: true, limit: 12 })
+
+    expect(result.map((post) => post.slug)).toEqual(['featured', 'latest'])
+    expect(payloadFind).toHaveBeenCalledTimes(1)
+    expect(payloadFind).toHaveBeenCalledWith(
+      expect.objectContaining({
+        depth: 1,
+        limit: 12,
+        sort: expect.arrayContaining(['-featured', '-publishedAt']),
+      }),
+    )
   })
 })

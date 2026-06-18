@@ -5,11 +5,7 @@ import { Pages } from '@/collections/Pages'
 import { Posts } from '@/collections/Posts'
 import { Users } from '@/collections/Users'
 import { SiteSettings } from '@/globals/SiteSettings'
-import {
-  postEditorFeatures,
-  postFontSizeStyles,
-  postTextColorStyles,
-} from '@/fields/postEditor'
+import { postEditorFeatures, postFontSizeStyles, postTextColorStyles } from '@/fields/postEditor'
 
 describe('admin localization', () => {
   it('supports Traditional Chinese and English admin interfaces', async () => {
@@ -195,6 +191,17 @@ describe('post editor formatting', () => {
   })
 })
 
+describe('admin draft autosave performance', () => {
+  it('uses a slower autosave cadence so editing does not hammer the CMS backend', () => {
+    expect(typeof Posts.versions === 'object' ? Posts.versions.drafts : undefined).toMatchObject({
+      autosave: { interval: 30000 },
+    })
+    expect(typeof Pages.versions === 'object' ? Pages.versions.drafts : undefined).toMatchObject({
+      autosave: { interval: 30000 },
+    })
+  })
+})
+
 describe('Unicode automatic slugs', () => {
   const getSlugify = (fields: typeof Posts.fields) => {
     const slugRow = fields.find(
@@ -225,9 +232,7 @@ describe('Unicode automatic slugs', () => {
 
     expect(slugify?.({ valueToSlugify: '離婚財產怎麼分' })).toBe('離婚財產怎麼分')
     expect(slugify?.({ valueToSlugify: '公司／股東 爭議！' })).toBe('公司-股東-爭議')
-    expect(slugify?.({ valueToSlugify: '  Taiwan 公司法 2026  ' })).toBe(
-      'taiwan-公司法-2026',
-    )
+    expect(slugify?.({ valueToSlugify: '  Taiwan 公司法 2026  ' })).toBe('taiwan-公司法-2026')
   })
 
   it('returns undefined when no usable title exists', () => {
@@ -235,5 +240,23 @@ describe('Unicode automatic slugs', () => {
 
     expect(slugify?.({ valueToSlugify: undefined })).toBeUndefined()
     expect(slugify?.({ valueToSlugify: '！？ ' })).toBeUndefined()
+  })
+
+  it('does not persist Bopomofo composition fragments as slugs', () => {
+    const slugify = getSlugify(Posts.fields)
+
+    expect(slugify?.({ valueToSlugify: 'ㄎ' })).toBeUndefined()
+    expect(slugify?.({ valueToSlugify: 'ㄘㄜˋㄕˋ' })).toBeUndefined()
+  })
+
+  it('falls back to the completed title when the slug field contains a Bopomofo fragment', () => {
+    const slugify = getSlugify(Posts.fields)
+
+    expect(
+      slugify?.({
+        data: { title: '測試' },
+        valueToSlugify: 'ㄎ',
+      } as never),
+    ).toBe('測試')
   })
 })
