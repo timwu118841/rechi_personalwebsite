@@ -12,7 +12,12 @@ vi.mock('@/lib/content', () => ({
   getPosts,
 }))
 
-import { categoryStaticParams, localeStaticParams, pageStaticParams, postStaticParams } from '@/lib/static-params'
+import {
+  categoryStaticParams,
+  localeStaticParams,
+  pageStaticParams,
+  postStaticParams,
+} from '@/lib/static-params'
 
 describe('frontend static generation params', () => {
   beforeEach(() => {
@@ -26,7 +31,9 @@ describe('frontend static generation params', () => {
   })
 
   it('prebuilds post detail pages for every locale', async () => {
-    getPosts.mockResolvedValueOnce([{ slug: '測試文章' }]).mockResolvedValueOnce([{ slug: 'test-post' }])
+    getPosts
+      .mockResolvedValueOnce([{ slug: '測試文章' }, { slug: undefined }, { slug: '' }])
+      .mockResolvedValueOnce([{ slug: 'test-post' }])
 
     await expect(postStaticParams()).resolves.toEqual([
       { locale: 'zh-Hant', slug: '測試文章' },
@@ -36,7 +43,9 @@ describe('frontend static generation params', () => {
   })
 
   it('prebuilds category archive pages for every locale', async () => {
-    getCategories.mockResolvedValueOnce([{ slug: '家事民事' }]).mockResolvedValueOnce([{ slug: 'corporate' }])
+    getCategories
+      .mockResolvedValueOnce([{ slug: '家事民事' }, { slug: undefined }, { slug: '' }])
+      .mockResolvedValueOnce([{ slug: 'corporate' }])
 
     await expect(categoryStaticParams()).resolves.toEqual([
       { locale: 'zh-Hant', slug: '家事民事' },
@@ -46,7 +55,13 @@ describe('frontend static generation params', () => {
 
   it('prebuilds fixed pages except home and reserved routes', async () => {
     getPages
-      .mockResolvedValueOnce([{ slug: 'home' }, { slug: '關於律師' }, { slug: 'search' }])
+      .mockResolvedValueOnce([
+        { slug: 'home' },
+        { slug: '關於律師' },
+        { slug: 'search' },
+        { slug: undefined },
+        { slug: '' },
+      ])
       .mockResolvedValueOnce([{ slug: 'privacy' }])
 
     await expect(pageStaticParams()).resolves.toEqual([
