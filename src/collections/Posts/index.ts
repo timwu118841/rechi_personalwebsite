@@ -3,6 +3,7 @@ import { slugField, type CollectionConfig } from 'payload'
 import { authenticated } from '../../access/authenticated'
 import { authenticatedOrPublished } from '../../access/authenticatedOrPublished'
 import { postEditor } from '../../fields/postEditor'
+import { slugifyUnicode } from '../../lib/slug'
 import { generatePreviewPath } from '../../utilities/generatePreviewPath'
 import { populateAuthors } from './hooks/populateAuthors'
 import { revalidateDelete, revalidatePost } from './hooks/revalidatePost'
@@ -224,6 +225,7 @@ export const Posts: CollectionConfig<'posts'> = {
     },
     slugField({
       localized: true,
+      slugify: slugifyUnicode,
       overrides: (field) => {
         const generateSlugField = field.fields.find(
           (nestedField) => 'name' in nestedField && nestedField.name === 'generateSlug',

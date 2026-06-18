@@ -10,6 +10,7 @@ import { hero } from '@/heros/config'
 import { slugField } from 'payload'
 import { populatePublishedAt } from '../../hooks/populatePublishedAt'
 import { generatePreviewPath } from '../../utilities/generatePreviewPath'
+import { slugifyUnicode } from '../../lib/slug'
 import { revalidateDelete, revalidatePage } from './hooks/revalidatePage'
 
 import {
@@ -123,7 +124,9 @@ export const Pages: CollectionConfig<'pages'> = {
         position: 'sidebar',
       },
     },
-    slugField(),
+    slugField({
+      slugify: slugifyUnicode,
+    }),
   ],
   hooks: {
     afterChange: [revalidatePage],

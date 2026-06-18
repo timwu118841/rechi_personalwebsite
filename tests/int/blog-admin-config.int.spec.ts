@@ -194,3 +194,46 @@ describe('post editor formatting', () => {
     )
   })
 })
+
+describe('Unicode automatic slugs', () => {
+  const getSlugify = (fields: typeof Posts.fields) => {
+    const slugRow = fields.find(
+      (field) =>
+        field.type === 'row' &&
+        field.fields.some((nestedField) => 'name' in nestedField && nestedField.name === 'slug'),
+    )
+    if (!slugRow || slugRow.type !== 'row') return undefined
+
+    const slug = slugRow.fields.find(
+      (field) => 'name' in field && field.name === 'slug' && field.type === 'text',
+    )
+
+    return slug && 'custom' in slug
+      ? (slug.custom?.slugify as
+          | ((args: { valueToSlugify?: unknown }) => string | undefined)
+          | undefined)
+      : undefined
+  }
+
+  it('uses the same custom slugify for posts and fixed pages', () => {
+    expect(getSlugify(Posts.fields)).toBeTypeOf('function')
+    expect(getSlugify(Pages.fields)).toBeTypeOf('function')
+  })
+
+  it('keeps Chinese and normalizes spaces and punctuation', () => {
+    const slugify = getSlugify(Posts.fields)
+
+    expect(slugify?.({ valueToSlugify: '離婚財產怎麼分' })).toBe('離婚財產怎麼分')
+    expect(slugify?.({ valueToSlugify: '公司／股東 爭議！' })).toBe('公司-股東-爭議')
+    expect(slugify?.({ valueToSlugify: '  Taiwan 公司法 2026  ' })).toBe(
+      'taiwan-公司法-2026',
+    )
+  })
+
+  it('returns undefined when no usable title exists', () => {
+    const slugify = getSlugify(Posts.fields)
+
+    expect(slugify?.({ valueToSlugify: undefined })).toBeUndefined()
+    expect(slugify?.({ valueToSlugify: '！？ ' })).toBeUndefined()
+  })
+})
