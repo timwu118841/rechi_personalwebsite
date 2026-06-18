@@ -31,7 +31,13 @@ const localizedPublicContent: Where[] = [
 const getCachedPosts = unstable_cache(
   async (
     locale: Locale,
-    options: { category?: string; featured?: boolean; limit?: number; query?: string } = {},
+    options: {
+      category?: string
+      featured?: boolean
+      featuredFirst?: boolean
+      limit?: number
+      query?: string
+    } = {},
   ): Promise<Post[]> => {
     try {
       const payload = await getPayload({ config: configPromise })
@@ -55,10 +61,7 @@ const getCachedPosts = unstable_cache(
 
       if (options.query) {
         conditions.push({
-          or: [
-            { title: { contains: options.query } },
-            { excerpt: { contains: options.query } },
-          ],
+          or: [{ title: { contains: options.query } }, { excerpt: { contains: options.query } }],
         })
       }
 
@@ -66,9 +69,9 @@ const getCachedPosts = unstable_cache(
         collection: 'posts',
         locale,
         fallbackLocale: false,
-        depth: 2,
+        depth: 1,
         limit: options.limit ?? 20,
-        sort: '-publishedAt',
+        sort: options.featuredFirst ? ['-featured', '-publishedAt'] : '-publishedAt',
         where: {
           and: conditions,
         },
@@ -85,7 +88,13 @@ const getCachedPosts = unstable_cache(
 
 export async function getPosts(
   locale: Locale,
-  options: { category?: string; featured?: boolean; limit?: number; query?: string } = {},
+  options: {
+    category?: string
+    featured?: boolean
+    featuredFirst?: boolean
+    limit?: number
+    query?: string
+  } = {},
 ): Promise<Post[]> {
   return getCachedPosts(locale, options)
 }

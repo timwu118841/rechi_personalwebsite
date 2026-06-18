@@ -303,7 +303,7 @@ export const Posts: CollectionConfig<'posts'> = {
   versions: {
     drafts: {
       autosave: {
-        interval: 100, // We set this interval for optimal live preview
+        interval: 30000, // Blog editing favors admin responsiveness over near-instant live preview
       },
       schedulePublish: false,
     },
