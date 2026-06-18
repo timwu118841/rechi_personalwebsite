@@ -1,7 +1,11 @@
+export const revalidate = 300
+export const generateStaticParams = localeStaticParams
+
 import { notFound } from 'next/navigation'
 
 import { getSiteSettings } from '@/lib/content'
 import { copy, isLocale } from '@/lib/i18n'
+import { localeStaticParams } from '@/lib/static-params'
 
 export default async function AboutPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params

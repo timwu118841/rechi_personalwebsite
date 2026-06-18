@@ -12,16 +12,17 @@ import { articleJsonLd, postMetadata } from '@/lib/seo'
 import { copy, isLocale } from '@/lib/i18n'
 import { localizedCategoryHref } from '@/lib/routes'
 import type { Category } from '@/payload-types'
+import { postStaticParams } from '@/lib/static-params'
+
+export const revalidate = 300
+export const generateStaticParams = postStaticParams
 
 type Props = { params: Promise<{ locale: string; slug: string }> }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { locale, slug } = await params
   if (!isLocale(locale)) return {}
-  const [post, settings] = await Promise.all([
-    getPostBySlug(locale, slug),
-    getSiteSettings(locale),
-  ])
+  const [post, settings] = await Promise.all([getPostBySlug(locale, slug), getSiteSettings(locale)])
   if (!post) return {}
   const otherLocale = locale === 'zh-Hant' ? 'en' : 'zh-Hant'
   const translated = await getPostBySlug(otherLocale, slug)
@@ -32,10 +33,7 @@ export default async function PostPage({ params }: Props) {
   const { locale, slug } = await params
   if (!isLocale(locale)) notFound()
 
-  const [post, settings] = await Promise.all([
-    getPostBySlug(locale, slug),
-    getSiteSettings(locale),
-  ])
+  const [post, settings] = await Promise.all([getPostBySlug(locale, slug), getSiteSettings(locale)])
   if (!post) notFound()
 
   const categories = (post.categories || []).filter(
@@ -109,11 +107,11 @@ export default async function PostPage({ params }: Props) {
 
       {related.length > 0 && (
         <section className="content-section related-posts">
-          <h2 className="section-title">
-            {locale === 'zh-Hant' ? '相關文章' : 'Related stories'}
-          </h2>
+          <h2 className="section-title">{locale === 'zh-Hant' ? '相關文章' : 'Related stories'}</h2>
           <div className="post-list">
-            {related.map((item) => <PostCard key={item.id} locale={locale} post={item} />)}
+            {related.map((item) => (
+              <PostCard key={item.id} locale={locale} post={item} />
+            ))}
           </div>
         </section>
       )}

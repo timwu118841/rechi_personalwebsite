@@ -7,6 +7,10 @@ import { getPageBySlug, getSiteSettings } from '@/lib/content'
 import { isLocale } from '@/lib/i18n'
 import { localizedPageHref } from '@/lib/routes'
 import { mediaURL, siteURL } from '@/lib/seo'
+import { pageStaticParams } from '@/lib/static-params'
+
+export const revalidate = 300
+export const generateStaticParams = pageStaticParams
 
 type Props = { params: Promise<{ locale: string; slug: string }> }
 
@@ -14,10 +18,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { locale, slug } = await params
   if (!isLocale(locale)) return {}
 
-  const [page, settings] = await Promise.all([
-    getPageBySlug(locale, slug),
-    getSiteSettings(locale),
-  ])
+  const [page, settings] = await Promise.all([getPageBySlug(locale, slug), getSiteSettings(locale)])
   if (!page) return {}
 
   const title = page.meta?.title || page.title
