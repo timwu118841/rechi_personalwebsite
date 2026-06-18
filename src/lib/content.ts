@@ -37,6 +37,7 @@ const getCachedPosts = unstable_cache(
       featuredFirst?: boolean
       limit?: number
       query?: string
+      staticParams?: boolean
     } = {},
   ): Promise<Post[]> => {
     try {
@@ -72,6 +73,7 @@ const getCachedPosts = unstable_cache(
         depth: 1,
         limit: options.limit ?? 20,
         sort: options.featuredFirst ? ['-featured', '-publishedAt'] : '-publishedAt',
+        context: { skipPopulateAuthors: true },
         where: {
           and: conditions,
         },
@@ -94,6 +96,7 @@ export async function getPosts(
     featuredFirst?: boolean
     limit?: number
     query?: string
+    staticParams?: boolean
   } = {},
 ): Promise<Post[]> {
   return getCachedPosts(locale, options)

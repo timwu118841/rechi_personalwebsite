@@ -1,9 +1,13 @@
+export const revalidate = 300
+export const generateStaticParams = categoryStaticParams
+
 import { notFound } from 'next/navigation'
 
 import { PostCard } from '@/components/blog/PostCard'
 import { getCategories, getPosts } from '@/lib/content'
 import { copy, isLocale } from '@/lib/i18n'
 import { decodeSlugParam } from '@/lib/routes'
+import { categoryStaticParams } from '@/lib/static-params'
 
 export default async function CategoryPage({
   params,
@@ -26,7 +30,9 @@ export default async function CategoryPage({
       <h1>{category.title}</h1>
       {posts.length ? (
         <div className="post-list">
-          {posts.map((post) => <PostCard key={post.id} locale={locale} post={post} />)}
+          {posts.map((post) => (
+            <PostCard key={post.id} locale={locale} post={post} />
+          ))}
         </div>
       ) : (
         <p className="empty-state">{copy[locale].noPosts}</p>

@@ -5,6 +5,10 @@ import { copy, isLocale } from '@/lib/i18n'
 import { getNavigation, getSiteSettings } from '@/lib/content'
 import { resolveCMSLinkHref } from '@/lib/navigation'
 import Link from 'next/link'
+import { localeStaticParams } from '@/lib/static-params'
+
+export const revalidate = 300
+export const generateStaticParams = localeStaticParams
 
 export default async function LocaleLayout({
   children,
@@ -15,10 +19,7 @@ export default async function LocaleLayout({
 }) {
   const { locale: value } = await params
   if (!isLocale(value)) notFound()
-  const [settings, navigation] = await Promise.all([
-    getSiteSettings(value),
-    getNavigation(value),
-  ])
+  const [settings, navigation] = await Promise.all([getSiteSettings(value), getNavigation(value)])
 
   return (
     <div className="site-shell">
@@ -39,9 +40,7 @@ export default async function LocaleLayout({
                 <Link
                   href={href}
                   key={id || `${link.label}-${href}`}
-                  {...(link.newTab
-                    ? { rel: 'noopener noreferrer', target: '_blank' }
-                    : {})}
+                  {...(link.newTab ? { rel: 'noopener noreferrer', target: '_blank' } : {})}
                 >
                   {link.label}
                 </Link>

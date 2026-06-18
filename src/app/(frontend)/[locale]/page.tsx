@@ -7,6 +7,10 @@ import { copy, isLocale } from '@/lib/i18n'
 import { getCategories, getPosts, getSiteSettings } from '@/lib/content'
 import { siteURL } from '@/lib/seo'
 import { localizedCategoryHref } from '@/lib/routes'
+import { localeStaticParams } from '@/lib/static-params'
+
+export const revalidate = 300
+export const generateStaticParams = localeStaticParams
 
 type Props = { params: Promise<{ locale: string }> }
 

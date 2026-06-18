@@ -14,27 +14,11 @@ import { createR2PublicURL, resolveR2StorageConfig } from '@/lib/r2-storage'
 import { Page, Post } from '@/payload-types'
 import { getServerSideURL } from '@/utilities/getURL'
 
-const generateTitle: GenerateTitle<Post | Page> = async ({ doc, locale, req }) => {
-  let siteName: string | null | undefined
-
-  try {
-    const settings = await req.payload.findGlobal({
-      slug: 'site-settings',
-      locale: locale === 'en' ? 'en' : 'zh-Hant',
-      fallbackLocale: false,
-      depth: 0,
-    })
-    siteName = settings.siteName
-  } catch {
-    // Keep SEO generation available even if Site Settings cannot be loaded.
-  }
-
-  return generateAdminSEOTitle({
+const generateTitle: GenerateTitle<Post | Page> = ({ doc, locale }) =>
+  generateAdminSEOTitle({
     documentTitle: doc?.title,
     locale,
-    siteName,
   })
-}
 
 const generateURL: GenerateURL<Post | Page> = ({ collectionSlug, doc, locale }) =>
   generateAdminSEOURL({
