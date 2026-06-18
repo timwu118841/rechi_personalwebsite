@@ -68,6 +68,47 @@ describe('post revalidation', () => {
     expect(revalidatePath).toHaveBeenCalledWith('/en/categories/%E8%88%8A%E5%88%86%E9%A1%9E')
   })
 
+  it('revalidates the old detail path when a published post slug changes', () => {
+    revalidatePost({
+      doc: {
+        _status: 'published',
+        slug: 'new-post-slug',
+        categories: [],
+      },
+      previousDoc: {
+        _status: 'published',
+        slug: 'old-post-slug',
+        categories: [],
+      },
+      req: { context: {}, payload: { logger: { info: vi.fn() } } },
+    } as never)
+
+    expect(revalidatePath).toHaveBeenCalledWith('/zh-Hant/posts/new-post-slug')
+    expect(revalidatePath).toHaveBeenCalledWith('/en/posts/new-post-slug')
+    expect(revalidatePath).toHaveBeenCalledWith('/zh-Hant/posts/old-post-slug')
+    expect(revalidatePath).toHaveBeenCalledWith('/en/posts/old-post-slug')
+  })
+
+  it('deduplicates repeated post list revalidation paths during published updates', () => {
+    revalidatePost({
+      doc: {
+        _status: 'published',
+        slug: 'same-category-post',
+        categories: [{ id: 2, slug: '公司商務' }],
+      },
+      previousDoc: {
+        _status: 'published',
+        slug: 'same-category-post',
+        categories: [{ id: 2, slug: '公司商務' }],
+      },
+      req: { context: {}, payload: { logger: { info: vi.fn() } } },
+    } as never)
+
+    const paths = revalidatePath.mock.calls.map(([path]) => path)
+
+    expect(paths).toHaveLength(new Set(paths).size)
+  })
+
   it('does not throw when Payload omits previousDoc during a slug update', () => {
     expect(() =>
       revalidatePost({

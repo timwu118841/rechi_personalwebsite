@@ -1,13 +1,10 @@
 import { nestedDocsPlugin } from '@payloadcms/plugin-nested-docs'
 import { redirectsPlugin } from '@payloadcms/plugin-redirects'
 import { seoPlugin } from '@payloadcms/plugin-seo'
-import { searchPlugin } from '@payloadcms/plugin-search'
 import { s3Storage } from '@payloadcms/storage-s3'
 import { Plugin } from 'payload'
 import { revalidateRedirects } from '@/hooks/revalidateRedirects'
 import { GenerateTitle, GenerateURL } from '@payloadcms/plugin-seo/types'
-import { searchFields } from '@/search/fieldOverrides'
-import { beforeSyncWithSearch } from '@/search/beforeSync'
 import { generateAdminSEOTitle, generateAdminSEOURL } from '@/lib/admin-seo'
 import { createR2PublicURL, resolveR2StorageConfig } from '@/lib/r2-storage'
 
@@ -67,19 +64,6 @@ export const plugins: Plugin[] = [
   seoPlugin({
     generateTitle,
     generateURL,
-  }),
-  searchPlugin({
-    collections: ['posts'],
-    beforeSync: beforeSyncWithSearch,
-    searchOverrides: {
-      labels: {
-        singular: { 'zh-TW': '搜尋索引', en: 'Search result' },
-        plural: { 'zh-TW': '搜尋索引', en: 'Search results' },
-      },
-      fields: ({ defaultFields }) => {
-        return [...defaultFields, ...searchFields]
-      },
-    },
   }),
   ...(r2StorageConfig
     ? [

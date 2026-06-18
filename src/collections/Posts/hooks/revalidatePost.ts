@@ -14,19 +14,19 @@ function hasUsableSlug<T extends { slug?: unknown }>(
   return typeof doc?.slug === 'string' && doc.slug.trim().length > 0
 }
 
-function revalidatePostDetailPaths(doc: { slug?: unknown } | null | undefined) {
+function addPostDetailPaths(paths: Set<string>, doc: { slug?: unknown } | null | undefined) {
   if (!hasUsableSlug(doc)) return
 
-  for (const locale of locales) revalidatePath(localizedPostHref(locale, doc.slug))
+  for (const locale of locales) paths.add(localizedPostHref(locale, doc.slug))
 }
 
-function revalidatePostListPaths(doc: Pick<Post, 'categories'> | null | undefined) {
-  for (const locale of locales) revalidatePath(`/${locale}`)
+function addPostListPaths(paths: Set<string>, doc: Pick<Post, 'categories'> | null | undefined) {
+  for (const locale of locales) paths.add(`/${locale}`)
 
   const categories = doc?.categories || []
   for (const category of categories) {
     if (typeof category === 'object' && category?.slug) {
-      for (const locale of locales) revalidatePath(localizedCategoryHref(locale, category.slug))
+      for (const locale of locales) paths.add(localizedCategoryHref(locale, category.slug))
     }
   }
 }
@@ -42,33 +42,34 @@ export const revalidatePost: CollectionAfterChangeHook<Post> = ({
   req: { payload, context },
 }) => {
   if (!context.disableRevalidate) {
+    const paths = new Set<string>()
     const currentDoc = doc as RevalidatablePost
     const oldDoc = previousDoc as RevalidatablePost | undefined
 
     if (currentDoc._status === 'published') {
-      if (hasUsableSlug(currentDoc)) {
-        for (const locale of locales) {
-          const path = localizedPostHref(locale, currentDoc.slug)
-          payload.logger.info(`Revalidating post at path: ${path}`)
-          revalidatePath(path)
-        }
+      addPostDetailPaths(paths, currentDoc)
+      if (
+        oldDoc?._status === 'published' &&
+        hasUsableSlug(oldDoc) &&
+        (!hasUsableSlug(currentDoc) || oldDoc.slug !== currentDoc.slug)
+      ) {
+        addPostDetailPaths(paths, oldDoc)
       }
-      revalidatePostListPaths(currentDoc)
-      if (oldDoc?._status === 'published') revalidatePostListPaths(oldDoc)
+      addPostListPaths(paths, currentDoc)
+      if (oldDoc?._status === 'published') addPostListPaths(paths, oldDoc)
       revalidatePostCache()
     }
 
     // If the post was previously published, we need to revalidate the old path
     if (oldDoc?._status === 'published' && currentDoc._status !== 'published') {
-      if (hasUsableSlug(oldDoc)) {
-        for (const locale of locales) {
-          const oldPath = localizedPostHref(locale, oldDoc.slug)
-          payload.logger.info(`Revalidating old post at path: ${oldPath}`)
-          revalidatePath(oldPath)
-        }
-      }
-      revalidatePostListPaths(oldDoc)
+      addPostDetailPaths(paths, oldDoc)
+      addPostListPaths(paths, oldDoc)
       revalidatePostCache()
+    }
+
+    for (const path of paths) {
+      payload.logger.info(`Revalidating post path: ${path}`)
+      revalidatePath(path)
     }
   }
   return doc
@@ -76,8 +77,10 @@ export const revalidatePost: CollectionAfterChangeHook<Post> = ({
 
 export const revalidateDelete: CollectionAfterDeleteHook<Post> = ({ doc, req: { context } }) => {
   if (!context.disableRevalidate) {
-    revalidatePostDetailPaths(doc)
-    revalidatePostListPaths(doc)
+    const paths = new Set<string>()
+    addPostDetailPaths(paths, doc)
+    addPostListPaths(paths, doc)
+    for (const path of paths) revalidatePath(path)
     revalidatePostCache()
   }
 
