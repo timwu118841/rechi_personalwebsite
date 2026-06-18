@@ -3,6 +3,7 @@ import Link from 'next/link'
 import type { Post } from '@/payload-types'
 import { calculateReadingMinutes } from '@/lib/reading-time'
 import { copy, type Locale } from '@/lib/i18n'
+import { localizedPostHref } from '@/lib/routes'
 
 function categoryTitle(post: Post): string | undefined {
   const first = post.categories?.[0]
@@ -11,6 +12,7 @@ function categoryTitle(post: Post): string | undefined {
 
 export function PostCard({ post, locale, featured = false }: { post: Post; locale: Locale; featured?: boolean }) {
   const t = copy[locale]
+  const href = localizedPostHref(locale, post.slug)
   return (
     <article className={featured ? 'post-card post-card-featured' : 'post-card'}>
       <div className="post-kicker">
@@ -19,7 +21,7 @@ export function PostCard({ post, locale, featured = false }: { post: Post; local
         {calculateReadingMinutes(post.content, locale)} {t.minutes}
       </div>
       <h2>
-        <Link href={`/${locale}/posts/${post.slug}`}>{post.title}</Link>
+        <Link href={href}>{post.title}</Link>
       </h2>
       <p>{post.excerpt}</p>
       <div className="post-meta">
@@ -28,7 +30,7 @@ export function PostCard({ post, locale, featured = false }: { post: Post; local
             new Date(post.publishedAt || post.createdAt),
           )}
         </time>
-        <Link href={`/${locale}/posts/${post.slug}`}>{t.readMore} →</Link>
+        <Link href={href}>{t.readMore} →</Link>
       </div>
     </article>
   )

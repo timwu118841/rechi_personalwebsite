@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import type { Media, Post, SiteSetting } from '@/payload-types'
 import type { Locale } from './i18n'
 import { resolvePostAuthorName } from './post-author'
+import { localizedPostHref } from './routes'
 
 export const siteURL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'
 
@@ -20,7 +21,7 @@ export function postMetadata(
   const meta = post.meta
   const title = meta?.title || post.title
   const description = meta?.description || post.excerpt
-  const canonical = `${siteURL}/${locale}/posts/${post.slug}`
+  const canonical = `${siteURL}${localizedPostHref(locale, post.slug)}`
   const otherLocale = locale === 'zh-Hant' ? 'en' : 'zh-Hant'
   const image = mediaURL(meta?.image || post.heroImage)
 
@@ -32,7 +33,7 @@ export function postMetadata(
       languages: alternatePublished
         ? {
             [locale]: canonical,
-            [otherLocale]: `${siteURL}/${otherLocale}/posts/${post.slug}`,
+            [otherLocale]: `${siteURL}${localizedPostHref(otherLocale, post.slug)}`,
           }
         : { [locale]: canonical },
     },
@@ -61,7 +62,7 @@ export function articleJsonLd(post: Post, locale: Locale, settings: SiteSetting 
     inLanguage: locale,
     datePublished: post.publishedAt || post.createdAt,
     dateModified: post.updatedAt,
-    mainEntityOfPage: `${siteURL}/${locale}/posts/${post.slug}`,
+    mainEntityOfPage: `${siteURL}${localizedPostHref(locale, post.slug)}`,
     author: {
       '@type': 'Person',
       name: authorName,

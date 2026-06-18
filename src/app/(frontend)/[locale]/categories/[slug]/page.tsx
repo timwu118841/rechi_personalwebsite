@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { PostCard } from '@/components/blog/PostCard'
 import { getCategories, getPosts } from '@/lib/content'
 import { copy, isLocale } from '@/lib/i18n'
+import { decodeSlugParam } from '@/lib/routes'
 
 export default async function CategoryPage({
   params,
@@ -11,11 +12,12 @@ export default async function CategoryPage({
 }) {
   const { locale, slug } = await params
   if (!isLocale(locale)) notFound()
+  const decodedSlug = decodeSlugParam(slug)
   const [posts, categories] = await Promise.all([
-    getPosts(locale, { category: slug }),
+    getPosts(locale, { category: decodedSlug }),
     getCategories(locale),
   ])
-  const category = categories.find((item) => item.slug === slug)
+  const category = categories.find((item) => item.slug === decodedSlug)
   if (!category) notFound()
 
   return (

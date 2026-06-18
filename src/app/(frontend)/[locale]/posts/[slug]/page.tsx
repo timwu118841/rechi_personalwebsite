@@ -10,6 +10,7 @@ import { calculateReadingMinutes } from '@/lib/reading-time'
 import { resolvePostAuthorName } from '@/lib/post-author'
 import { articleJsonLd, postMetadata } from '@/lib/seo'
 import { copy, isLocale } from '@/lib/i18n'
+import { localizedCategoryHref } from '@/lib/routes'
 import type { Category } from '@/payload-types'
 
 type Props = { params: Promise<{ locale: string; slug: string }> }
@@ -60,7 +61,7 @@ export default async function PostPage({ params }: Props) {
           {categories.map((category, index) => (
             <span key={category.id}>
               {index > 0 ? '、' : ''}
-              <Link href={`/${locale}/categories/${category.slug}`}>{category.title}</Link>
+              <Link href={localizedCategoryHref(locale, category.slug)}>{category.title}</Link>
             </span>
           ))}
           {categories.length ? ' · ' : ''}

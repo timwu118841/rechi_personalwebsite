@@ -22,6 +22,7 @@ import { BannerBlock } from '@/blocks/Banner/Component'
 import { CallToActionBlock } from '@/blocks/CallToAction/Component'
 import { cn } from '@/utilities/ui'
 import { defaultLocale, type Locale } from '@/lib/i18n'
+import { localizedPageHref, localizedPostHref } from '@/lib/routes'
 import { renderPostTextNode, type SerializedPostTextNode } from './postTextConverter'
 
 type NodeTypes =
@@ -43,10 +44,10 @@ export const resolveInternalDocHref = ({
     return `/${locale}`
   }
 
-  const slug = typeof value.slug === 'string' ? encodeURIComponent(value.slug) : ''
-  if (!slug || (relationTo === 'pages' && slug === 'home')) return `/${locale}`
+  const slug = typeof value.slug === 'string' ? value.slug : ''
+  if (!slug) return `/${locale}`
 
-  return relationTo === 'posts' ? `/${locale}/posts/${slug}` : `/${locale}/${slug}`
+  return relationTo === 'posts' ? localizedPostHref(locale, slug) : localizedPageHref(locale, slug)
 }
 
 const createJSXConverters =

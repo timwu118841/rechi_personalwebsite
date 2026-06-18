@@ -3,11 +3,11 @@ import type { CollectionAfterChangeHook, CollectionAfterDeleteHook } from 'paylo
 import { revalidatePath, revalidateTag } from 'next/cache'
 
 import type { Page } from '../../../payload-types'
-
-const locales = ['zh-Hant', 'en'] as const
+import { locales } from '../../../lib/i18n'
+import { localizedPageHref } from '../../../lib/routes'
 
 function pagePaths(slug: string) {
-  return locales.map((locale) => `/${locale}/${slug}`)
+  return locales.map((locale) => localizedPageHref(locale, slug))
 }
 
 export const revalidatePage: CollectionAfterChangeHook<Page> = ({
@@ -21,6 +21,7 @@ export const revalidatePage: CollectionAfterChangeHook<Page> = ({
         payload.logger.info(`Revalidating page at path: ${path}`)
         revalidatePath(path)
       }
+      revalidateTag('pages', 'max')
       revalidateTag('pages-sitemap', 'max')
     }
 
@@ -30,6 +31,7 @@ export const revalidatePage: CollectionAfterChangeHook<Page> = ({
         payload.logger.info(`Revalidating old page at path: ${oldPath}`)
         revalidatePath(oldPath)
       }
+      revalidateTag('pages', 'max')
       revalidateTag('pages-sitemap', 'max')
     }
   }
@@ -39,6 +41,7 @@ export const revalidatePage: CollectionAfterChangeHook<Page> = ({
 export const revalidateDelete: CollectionAfterDeleteHook<Page> = ({ doc, req: { context } }) => {
   if (!context.disableRevalidate) {
     for (const path of pagePaths(doc.slug)) revalidatePath(path)
+    revalidateTag('pages', 'max')
     revalidateTag('pages-sitemap', 'max')
   }
 

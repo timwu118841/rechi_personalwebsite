@@ -6,6 +6,7 @@ import { PostCard } from '@/components/blog/PostCard'
 import { copy, isLocale } from '@/lib/i18n'
 import { getCategories, getPosts, getSiteSettings } from '@/lib/content'
 import { siteURL } from '@/lib/seo'
+import { localizedCategoryHref } from '@/lib/routes'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -68,7 +69,7 @@ export default async function LocaleHome({ params }: Props) {
         <h2 className="section-title">{t.categories}</h2>
         <div className="category-list">
           {categories.map((category) => (
-            <Link href={`/${locale}/categories/${category.slug}`} key={category.id}>
+            <Link href={localizedCategoryHref(locale, category.slug)} key={category.id}>
               {category.title}
             </Link>
           ))}

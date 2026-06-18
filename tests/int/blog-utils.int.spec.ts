@@ -5,6 +5,7 @@ import { calculateReadingMinutes } from '@/lib/reading-time'
 import { isPublishedDocument } from '@/lib/publication'
 import { resolvePostAuthorName } from '@/lib/post-author'
 import { resolveCMSLinkHref } from '@/lib/navigation'
+import { localizedCategoryHref, localizedPageHref, localizedPostHref } from '@/lib/routes'
 
 describe('locale helpers', () => {
   it('accepts supported locales only', () => {
@@ -111,5 +112,19 @@ describe('localized navigation', () => {
     expect(
       resolveCMSLinkHref({ type: 'custom', url: 'https://example.com' }, 'zh-Hant'),
     ).toBe('https://example.com')
+  })
+})
+
+describe('localized route helpers', () => {
+  it('encodes Chinese slug path segments', () => {
+    expect(localizedPostHref('zh-Hant', '離婚財產怎麼分')).toBe(
+      '/zh-Hant/posts/%E9%9B%A2%E5%A9%9A%E8%B2%A1%E7%94%A2%E6%80%8E%E9%BA%BC%E5%88%86',
+    )
+    expect(localizedPageHref('zh-Hant', '關於律師')).toBe(
+      '/zh-Hant/%E9%97%9C%E6%96%BC%E5%BE%8B%E5%B8%AB',
+    )
+    expect(localizedCategoryHref('zh-Hant', '公司商務')).toBe(
+      '/zh-Hant/categories/%E5%85%AC%E5%8F%B8%E5%95%86%E5%8B%99',
+    )
   })
 })

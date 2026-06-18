@@ -1,4 +1,5 @@
 import type { Locale } from './i18n'
+import { localizedPageHref, localizedPostHref } from './routes'
 
 type NavigationLink = {
   reference?: {
@@ -15,8 +16,9 @@ export function resolveCMSLinkHref(link: NavigationLink, locale: Locale): string
     typeof link.reference?.value === 'object' &&
     link.reference.value.slug
   ) {
-    const prefix = link.reference.relationTo === 'posts' ? '/posts' : ''
-    return `/${locale}${prefix}/${link.reference.value.slug}`
+    return link.reference.relationTo === 'posts'
+      ? localizedPostHref(locale, link.reference.value.slug)
+      : localizedPageHref(locale, link.reference.value.slug)
   }
 
   return link.url || null

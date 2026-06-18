@@ -2,6 +2,7 @@ import type { GlobalConfig } from 'payload'
 
 import { anyone } from '@/access/anyone'
 import { authenticated } from '@/access/authenticated'
+import { revalidateSiteSettings } from './revalidateSiteSettings'
 
 export const SiteSettings: GlobalConfig = {
   slug: 'site-settings',
@@ -78,4 +79,7 @@ export const SiteSettings: GlobalConfig = {
       defaultValue: '本文為一般性法律資訊與經驗分享，不構成個案法律意見或委任關係。',
     },
   ],
+  hooks: {
+    afterChange: [revalidateSiteSettings],
+  },
 }

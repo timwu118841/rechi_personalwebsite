@@ -5,6 +5,7 @@ import { RenderBlocks } from '@/blocks/RenderBlocks'
 import { RenderHero } from '@/heros/RenderHero'
 import { getPageBySlug, getSiteSettings } from '@/lib/content'
 import { isLocale } from '@/lib/i18n'
+import { localizedPageHref } from '@/lib/routes'
 import { mediaURL, siteURL } from '@/lib/seo'
 
 type Props = { params: Promise<{ locale: string; slug: string }> }
@@ -22,15 +23,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const title = page.meta?.title || page.title
   const description = page.meta?.description || settings?.defaultDescription
   const image = mediaURL(page.meta?.image)
+  const pageHref = localizedPageHref(locale, page.slug)
 
   return {
     title: `${title} | ${settings?.siteName || '法律筆記'}`,
     description,
-    alternates: { canonical: `${siteURL}/${locale}/${page.slug}` },
+    alternates: { canonical: `${siteURL}${pageHref}` },
     openGraph: {
       title,
       description: description || undefined,
-      url: `${siteURL}/${locale}/${page.slug}`,
+      url: `${siteURL}${pageHref}`,
       images: image ? [{ url: image }] : undefined,
     },
   }

@@ -2,6 +2,7 @@ import type { MetadataRoute } from 'next'
 
 import { getPages, getPosts } from '@/lib/content'
 import { locales } from '@/lib/i18n'
+import { localizedPageHref, localizedPostHref } from '@/lib/routes'
 import { siteURL } from '@/lib/seo'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -16,7 +17,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       return posts
         .filter((post) => !post.meta?.noIndex)
         .map((post) => ({
-          url: `${siteURL}/${locale}/posts/${post.slug}`,
+          url: `${siteURL}${localizedPostHref(locale, post.slug)}`,
           lastModified: new Date(post.updatedAt),
           changeFrequency: 'monthly' as const,
           priority: 0.8,
@@ -30,7 +31,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       return pages
         .filter((page) => page.slug !== 'home')
         .map((page) => ({
-          url: `${siteURL}/${locale}/${page.slug}`,
+          url: `${siteURL}${localizedPageHref(locale, page.slug)}`,
           lastModified: new Date(page.updatedAt),
           changeFrequency: 'monthly' as const,
           priority: 0.6,
