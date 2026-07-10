@@ -1,32 +1,36 @@
 # 上線與回歸檢查表
 
-## 發布前
+## Supabase 與 Vercel
 
+- [ ] 已套用 `supabase/migrations/202607100001_realtime_content.sql`
+- [ ] Auth 只有核准管理者帳號，`ADMIN_EMAILS` 與實際 email 相符
+- [ ] Vercel 已設定 `SITE_URL`、Supabase 三個 key、`ADMIN_EMAILS`；未設定 `ALLOW_FIXTURE_CONTENT=true`
 - [ ] `npm run deploy:validate`、`npm run quality`、`npm run test:e2e:ci` 全部成功
-- [ ] Keystatic Cloud 只邀請核准作者，公開註冊關閉，未登入帳號無法寫入
 - [ ] preview 回應含 `X-Robots-Tag: noindex, nofollow`
-- [ ] 正式站 `/keystatic` 完成登入、建立草稿、圖片上傳、預覽、發布與下架測試
-- [ ] 正式站首頁、文章、分類、標籤、搜尋、404、RSS、sitemap 與 robots 桌機／手機煙霧測試通過
-- [ ] 草稿、下架與未來日期文章不存在於公開 URL、Pagefind、RSS、JSON-LD 與 sitemap
-- [ ] Analytics 未設定／被阻擋時網站無錯；設定後只送出 allowlist 欄位
-- [ ] Search Console 驗證完成並提交正式 sitemap
 
-## 效能與 Web Vitals
+## 功能驗收
 
-CI 使用 Lighthouse 桌面設定跑三次，Performance、Accessibility、Best Practices 必須至少 95，SEO 必須 100。文章頁初始 JavaScript gzip 必須不超過 75 KB。
+- [ ] `/admin` 可登入、建立草稿、發布、下架與重新編輯，不產生 Git commit 或 deployment
+- [ ] 新文章立即出現在文章頁、列表、搜尋、RSS 與 sitemap
+- [ ] 封面、作者圖片、網站標題與作者簡介更新後能出現在前台
+- [ ] 未登入／非 allowlist 帳號無法讀取草稿或呼叫管理 API
+- [ ] 圖片格式與 5 MB 上限正常，Storage bucket 不含敏感案件資料
+- [ ] Dark Mode、文章分頁、分類、標籤、404 與無 JavaScript 閱讀正常
+- [ ] Umami 未設定／被阻擋時網站無錯；設定後不傳送搜尋字詞或敏感資料
 
-正式流量採不含搜尋字詞與法律個案資料的匿名彙總監控。每週依「首頁／文章／列表」頁型檢視行動與桌機第 75 百分位：
+## 效能與 SEO
 
-- LCP ≤ 2.5 秒
-- INP ≤ 200 毫秒
-- CLS ≤ 0.1
+- [ ] 公開回應含 `Vercel-CDN-Cache-Control` 與 `Vercel-Cache-Tag`
+- [ ] 發布或網站設定更新後，相關 cache tag 會失效且不需重新部署
+- [ ] Lighthouse Performance、Accessibility、Best Practices 至少 95，SEO 100
+- [ ] 文章頁初始 JavaScript gzip 不超過 75 KB，正文沒有 React hydration
+- [ ] Search Console 已提交 `/sitemap.xml`
 
-任一指標連續 7 天超標，建立效能回歸工作項目，先比較最近部署、圖片尺寸、第三方 script 與快取命中率；修正後以 CI lab data 與下一個 7 天 field data 共同驗證。樣本不足時不做個人層級判斷，只標記「資料不足」。
+正式流量每週依頁型檢視第 75 百分位：LCP ≤ 2.5 秒、INP ≤ 200 毫秒、CLS ≤ 0.1。
 
 ## 回滾
 
-1. 停止將新 deployment 提升為 production。
-2. 由託管平台把 production alias 指回上一個通過檢查的 immutable deployment。
-3. 若是內容問題，在 Keystatic 將文章改為草稿／下架並重新部署；保留 Git 歷史，不直接破壞資料。
-4. 重新驗證公開 URL、搜尋、RSS、sitemap、管理登入與安全標頭。
-5. 記錄原因、影響時間、回滾版本與後續修正。
+1. 將 Vercel production alias 指回上一個通過驗證的 deployment。
+2. 資料問題先在後台將文章下架；不要刪除資料表或 Storage object。
+3. 若需回復舊架構，原始 `src/content` 文章仍可作為唯讀來源。
+4. 驗證公開 URL、搜尋、RSS、sitemap、管理登入與安全標頭。

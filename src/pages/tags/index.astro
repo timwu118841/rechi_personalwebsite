@@ -1,24 +1,21 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import { getPublishedArticles, taxonomyKey } from '@/lib/articles';
-const articles = await getPublishedArticles();
-const tags = [...new Set(articles.flatMap((article) => article.data.tags))].map((name) => ({
-  name,
-  count: articles.filter((article) => article.data.tags.includes(name)).length,
-}));
+import { getContentRepository } from '@/lib/content/repository';
+const tags = await getContentRepository().listTags();
+if (Astro.cache.enabled)
+  Astro.cache.set({ maxAge: 86400, swr: 604800, tags: ['content', 'site-settings', 'taxonomies'] });
 ---
 
-<BaseLayout title="文章標籤" description="依標籤探索法律實務筆記。">
-  <header class="page-hero">
+<BaseLayout title="文章標籤" description="依標籤探索法律實務筆記。"
+  ><header class="page-hero">
     <div class="container">
       <p class="eyebrow">Tags</p><h1>文章標籤</h1><p>依照關鍵概念找到相關文章。</p>
     </div>
-  </header>
-  <section class="section">
+  </header><section class="section">
     <div class="container taxonomy-grid">
       {
         tags.map((tag) => (
-          <a class="taxonomy-card" href={`/tags/${taxonomyKey(tag.name)}/`}>
+          <a class="taxonomy-card" href={`/tags/${encodeURIComponent(tag.name)}/`}>
             <>
               <strong>#{tag.name}</strong>
               <span>{tag.count} 篇文章 →</span>
@@ -27,5 +24,5 @@ const tags = [...new Set(articles.flatMap((article) => article.data.tags))].map(
         ))
       }
     </div>
-  </section>
-</BaseLayout>
+  </section></BaseLayout
+>

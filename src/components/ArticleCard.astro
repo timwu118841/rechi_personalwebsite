@@ -1,61 +1,49 @@
 ---
-import { Image } from 'astro:assets';
-import type { ArticleEntry } from '@/lib/articles';
-import {
-  articleSlug,
-  formatDate,
-  getCategoryMap,
-  getContentTypeMap,
-  readingTimeMinutes,
-} from '@/lib/articles';
+import type { Article, MediaAsset } from '@/lib/content/repository';
+import { formatDate, readingTimeMinutes } from '@/lib/articles';
 import TagList from './TagList.astro';
 
 interface Props {
-  article: ArticleEntry;
+  article: Article;
+  fallbackImage?: MediaAsset;
 }
-const { article } = Astro.props;
-const slug = articleSlug(article);
-const minutes = readingTimeMinutes(article.body || '');
-const [categories, contentTypes] = await Promise.all([
-  getCategoryMap({ includeHidden: true }),
-  getContentTypeMap(),
-]);
-const category = categories.get(article.data.category);
-const categoryName = category?.name || article.data.category;
-const contentType = contentTypes.get(article.data.contentType);
-const contentTypeName = contentType?.name || article.data.contentType;
+const { article, fallbackImage } = Astro.props;
+const image = article.cover || fallbackImage;
+const minutes = readingTimeMinutes(article.body);
 ---
 
 <article class="article-card">
-  <a class="card-image" href={`/articles/${slug}/`} tabindex="-1" aria-hidden="true">
+  <a class="card-image" href={`/articles/${article.slug}/`} tabindex="-1" aria-hidden="true">
     {
-      article.data.cover ? (
-        <Image
-          src={article.data.cover}
+      image ? (
+        <img
+          src={image.url}
           alt=""
-          widths={[480, 720]}
-          sizes="(max-width: 560px) 100vw, 33vw"
+          width={image.width}
+          height={image.height}
           loading="lazy"
+          decoding="async"
         />
       ) : (
-        <span class="card-pattern">
-          <span>法</span>
+        <span class="card-pattern" aria-hidden="true">
+          <span>閱讀筆記</span>
         </span>
       )
     }
   </a>
   <div class="card-body">
     <div class="card-meta">
-      <span>{contentTypeName} · {categoryName}</span><span
-        >{formatDate(article.data.publishedAt)}</span
-      ><span>{minutes} 分鐘閱讀</span>
+      <span>{article.contentTypeName} · {article.categoryName}</span>
+      <span>{formatDate(article.publishedAt)}</span><span>{minutes} 分鐘閱讀</span>
     </div>
-    <h3><a href={`/articles/${slug}/`}>{article.data.title}</a></h3>
-    <p>{article.data.description}</p>
+    <h3><a href={`/articles/${article.slug}/`}>{article.title}</a></h3>
+    <p>{article.description}</p>
     <div class="card-footer">
-      <TagList tags={article.data.tags.slice(0, 2)} />
-      <a class="read-more" href={`/articles/${slug}/`} aria-label={`閱讀「${article.data.title}」`}
-        >閱讀 →</a
+      <TagList tags={article.tags.slice(0, 2)} />
+      <a
+        class="read-more"
+        href={`/articles/${article.slug}/`}
+        aria-label={`閱讀「${article.title}」`}>閱讀 →</a
       >
     </div>
   </div>

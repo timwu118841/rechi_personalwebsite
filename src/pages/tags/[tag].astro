@@ -1,30 +1,50 @@
 ---
 import ArticleCard from '@/components/ArticleCard.astro';
+import Pagination from '@/components/Pagination.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import { getPublishedArticles, type ArticleEntry } from '@/lib/articles';
-export async function getStaticPaths() {
-  const articles = await getPublishedArticles();
-  return [...new Set(articles.flatMap((article) => article.data.tags))].map((tag) => ({
-    params: { tag },
-    props: { tag, articles: articles.filter((article) => article.data.tags.includes(tag)) },
-  }));
-}
-interface Props {
-  tag: string;
-  articles: ArticleEntry[];
-}
-const { tag, articles } = Astro.props;
+import { getContentRepository } from '@/lib/content/repository';
+import { DEFAULT_PAGE_SIZE, pageCanonical, parsePage } from '@/lib/pagination';
+const page = parsePage(Astro.url.searchParams.get('page'));
+if (page === null) return Astro.rewrite('/404');
+const tag = decodeURIComponent(Astro.params.tag || '');
+const repository = getContentRepository();
+const [knownTags, result, settings] = await Promise.all([
+  repository.listTags(),
+  repository.listPublishedArticles({ tag, page, pageSize: DEFAULT_PAGE_SIZE }),
+  repository.getSiteSettings(),
+]);
+if (
+  !knownTags.some((item) => item.name === tag) ||
+  (page > result.totalPages && result.totalItems > 0)
+)
+  return Astro.rewrite('/404');
+if (Astro.cache.enabled)
+  Astro.cache.set({
+    maxAge: 86400,
+    swr: 604800,
+    tags: ['content', 'site-settings', 'taxonomies', `tag:${tag}`],
+  });
+const basePath = `/tags/${encodeURIComponent(tag)}/`;
 ---
 
-<BaseLayout title={`#${tag}`} description={`閱讀標記為「${tag}」的法律文章。`}>
-  <header class="page-hero">
+<BaseLayout
+  siteSettings={settings}
+  title={`#${tag}`}
+  description={`閱讀標記為「${tag}」的法律文章。`}
+  canonical={pageCanonical(basePath, page, Astro.site!)}
+  ><header class="page-hero">
     <div class="container">
-      <p class="eyebrow">Tag</p><h1>#{tag}</h1><p>共 {articles.length} 篇文章</p>
+      <p class="eyebrow">Tag</p><h1>#{tag}</h1><p>共 {result.totalItems} 篇文章</p>
     </div>
-  </header>
-  <section class="section">
+  </header><section class="section">
     <div class="container">
-      <div class="article-grid">{articles.map((article) => <ArticleCard article={article} />)}</div>
+      <div class="article-grid">
+        {
+          result.items.map((article) => (
+            <ArticleCard article={article} fallbackImage={settings.defaultSocialImage} />
+          ))
+        }
+      </div><Pagination page={page} totalPages={result.totalPages} basePath={basePath} />
     </div>
-  </section>
-</BaseLayout>
+  </section></BaseLayout
+>

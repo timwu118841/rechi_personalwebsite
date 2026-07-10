@@ -1,15 +1,6 @@
 # 法律實務筆記
 
-個人法律經驗與實務觀察部落格，提供簡潔、易讀且適合行動裝置的閱讀體驗。
-
-## 功能
-
-- 文章發布、草稿與下架管理
-- 自訂內容類型、文章分類與標籤
-- 圖形化文章編輯後台
-- 站內全文搜尋
-- SEO、RSS 與 sitemap
-- 隱私友善的流量分析整合
+以 Astro、Supabase 與 Vercel 建立的個人法律經驗部落格。文章、網站標題、作者簡介與圖片可從受保護後台即時更新，不需要為每篇文章重新部署。
 
 ## 本機啟動
 
@@ -22,26 +13,31 @@ npm run dev
 ```
 
 - 網站：<http://localhost:4321>
-- 管理後台：<http://localhost:4321/keystatic>
+- 管理後台：<http://localhost:4321/admin>
 
-## 內容管理
+沒有設定 Supabase 時，公開網站會使用 `src/content` 的唯讀示範文章；後台會顯示資料庫設定提示。
 
-後台分為：
+## 啟用即時內容後台
 
-- **內容編輯**：建立與編輯文章
-- **內容設定**：管理內容類型與文章分類
+1. 建立 Supabase project。
+2. 在 SQL Editor 執行 `supabase/migrations/202607100001_realtime_content.sql`。
+3. 在 Supabase Authentication 建立管理者帳號。
+4. 將 `.env.example` 的 Supabase 變數與 `ADMIN_EMAILS` 填入 `.env`；正式站也要在 Vercel 設定相同環境變數。
+5. 如需匯入目前的示範文章，執行 `npm run content:import`。
 
-文章必須設為「已發布」，且發布日期已到，才會顯示在公開網站。
+`SUPABASE_SECRET_KEY` 只能放在本機或 Vercel server environment，不可加上 `PUBLIC_`，也不可放進瀏覽器程式。
 
 ## 常用指令
 
 ```bash
-npm run dev       # 開發伺服器
-npm run build     # 建立正式版本
-npm run preview   # 預覽正式版本
-npm run quality   # 執行品質檢查
-npm run test:e2e  # 執行瀏覽器測試
+npm run dev              # 開發伺服器
+npm run build            # 建立 Vercel server output
+npm run quality          # format、lint、型別、測試與 build
+npm run test:e2e         # 瀏覽器測試
+npm run deploy:validate  # 驗證正式環境變數
 ```
+
+正式部署前的操作順序與回滾方式請見 `docs/release-checklist.md`。
 
 ## 免責聲明
 

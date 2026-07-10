@@ -1,0 +1,26 @@
+---
+import AdminApp from '@/components/admin/AdminApp';
+import { getPublicSupabaseConfig } from '@/lib/content/env';
+
+export const prerender = false;
+const config = getPublicSupabaseConfig();
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+Astro.response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+---
+
+<!doctype html>
+<html lang="zh-Hant-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>內容管理｜法律實務筆記</title>
+  </head>
+  <body>
+    <AdminApp
+      client:load
+      supabaseUrl={config?.url}
+      supabasePublishableKey={config?.publishableKey}
+    />
+  </body>
+</html>

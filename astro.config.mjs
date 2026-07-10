@@ -1,24 +1,17 @@
 import markdoc from '@astrojs/markdoc';
 import react from '@astrojs/react';
-import sitemap from '@astrojs/sitemap';
 import vercel from '@astrojs/vercel';
-import keystatic from '@keystatic/astro';
+import { cacheVercel } from '@astrojs/vercel/cache';
 import { defineConfig } from 'astro/config';
 
 const site = process.env.SITE_URL || 'http://localhost:4321';
 
 export default defineConfig({
   site,
-  output: 'static',
+  output: 'server',
   adapter: vercel(),
-  integrations: [
-    react(),
-    markdoc(),
-    keystatic(),
-    sitemap({
-      filter: (page) => !page.includes('/keystatic') && !page.includes('/search'),
-    }),
-  ],
+  cache: { provider: cacheVercel() },
+  integrations: [react(), markdoc()],
   markdown: {
     shikiConfig: { theme: 'github-dark-default', wrap: true },
   },

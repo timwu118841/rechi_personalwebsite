@@ -20,7 +20,7 @@ export default defineConfig({
     { name: 'mobile-chromium', use: { ...devices['Pixel 7'] } },
   ],
   webServer: {
-    command: `node scripts/serve-build.mjs ${port}`,
+    command: `PLAYWRIGHT_PORT=${port} ALLOW_FIXTURE_CONTENT=true ASTRO_TELEMETRY_DISABLED=1 node scripts/start-test-server.mjs`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

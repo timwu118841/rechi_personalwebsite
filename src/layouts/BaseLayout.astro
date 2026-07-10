@@ -1,15 +1,17 @@
 ---
 import Analytics from '@/components/Analytics.astro';
-import SeoHead from '@/components/SeoHead.astro';
+import SeoHead, { type Props as SeoProps } from '@/components/SeoHead.astro';
 import SiteFooter from '@/components/SiteFooter.astro';
 import SiteHeader from '@/components/SiteHeader.astro';
+import { getContentRepository, type SiteSettings } from '@/lib/content/repository';
 import '@/styles/global.css';
 
-type SeoProps = Parameters<typeof SeoHead>[0] extends never ? never : any;
-interface Props extends SeoProps {
+interface Props extends Omit<SeoProps, 'settings'> {
   bodyClass?: string;
+  siteSettings?: SiteSettings;
 }
-const { bodyClass = '', ...seo } = Astro.props;
+const { bodyClass = '', siteSettings, ...seo } = Astro.props;
+const settings = siteSettings || (await getContentRepository().getSiteSettings());
 ---
 
 <!doctype html>
@@ -18,15 +20,31 @@ const { bodyClass = '', ...seo } = Astro.props;
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#fbfaf6" />
+    <script is:inline>
+      (() => {
+        try {
+          const saved = localStorage.getItem('color-theme');
+          document.documentElement.dataset.theme =
+            saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        } catch {
+          document.documentElement.removeAttribute('data-theme');
+        }
+      })();
+    </script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="alternate" type="application/rss+xml" title="法律實務筆記 RSS" href="/rss.xml" />
-    <SeoHead {...seo} />
+    <link
+      rel="alternate"
+      type="application/rss+xml"
+      title={`${settings.siteTitle} RSS`}
+      href="/rss.xml"
+    />
+    <SeoHead settings={settings} {...seo} />
   </head>
   <body class={bodyClass}>
     <a class="skip-link" href="#main-content">跳到主要內容</a>
-    <SiteHeader />
+    <SiteHeader settings={settings} />
     <main id="main-content" tabindex="-1"><slot /></main>
-    <SiteFooter />
+    <SiteFooter settings={settings} />
     <Analytics />
   </body>
 </html>
