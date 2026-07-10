@@ -1,0 +1,53 @@
+---
+import ArticleCard from '@/components/ArticleCard.astro';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import {
+  getCategories,
+  getPublishedArticles,
+  type ArticleEntry,
+  type CategorySummary,
+} from '@/lib/articles';
+export async function getStaticPaths() {
+  const [articles, categories] = await Promise.all([getPublishedArticles(), getCategories()]);
+  return categories.map((category) => ({
+    params: { category: category.slug },
+    props: {
+      category,
+      articles: articles.filter((article) => article.data.category === category.slug),
+    },
+  }));
+}
+interface Props {
+  category: CategorySummary;
+  articles: ArticleEntry[];
+}
+const { category, articles } = Astro.props;
+---
+
+<BaseLayout title={`${category.name}分類`} description={category.description}>
+  <header class="page-hero">
+    <div class="container">
+      <p class="eyebrow">Category</p><h1>{category.name}</h1><p>{category.description}</p><p>
+        共 {articles.length} 篇文章
+      </p>
+    </div>
+  </header>
+  <section class="section">
+    <div class="container">
+      {
+        articles.length > 0 ? (
+          <div class="article-grid">
+            {articles.map((article) => (
+              <ArticleCard article={article} />
+            ))}
+          </div>
+        ) : (
+          <div class="empty-state">
+            <h2>這個分類還沒有公開文章</h2>
+            <p>文章發布後會自動出現在這裡。</p>
+          </div>
+        )
+      }
+    </div>
+  </section>
+</BaseLayout>

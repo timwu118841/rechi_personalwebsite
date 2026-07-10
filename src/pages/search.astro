@@ -1,0 +1,73 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="站內搜尋" description="搜尋已發布的法律文章。" noindex={true}>
+  <header class="page-hero">
+    <div class="container search-shell">
+      <p class="eyebrow">Search</p><h1>搜尋文章</h1><p>輸入法律概念、工作情境或文章主題。</p>
+    </div>
+  </header>
+  <section class="section">
+    <div class="container search-shell">
+      <form class="search-form" id="search-form" role="search">
+        <label class="sr-only" for="search-input">搜尋文章</label><input
+          id="search-input"
+          name="q"
+          type="search"
+          autocomplete="off"
+          placeholder="例如：契約、溝通、訴訟風險…"
+          required
+        /><button type="submit">搜尋</button>
+      </form>
+      <p class="search-status" id="search-status" aria-live="polite">
+        搜尋索引會在正式建置後啟用。
+      </p>
+      <div class="search-results" id="search-results"></div>
+      <noscript
+        ><div class="empty-state">
+          <h2>搜尋需要 JavaScript</h2><p>
+            你仍可前往<a href="/articles/">所有文章</a>或<a href="/categories/">文章分類</a
+            >探索內容。
+          </p>
+        </div></noscript
+      >
+    </div>
+  </section>
+  <script is:inline>
+    const form = document.querySelector('#search-form');
+    const input = document.querySelector('#search-input');
+    const status = document.querySelector('#search-status');
+    const results = document.querySelector('#search-results');
+    const escapeHtml = (value) =>
+      String(value).replace(
+        /[&<>'"]/g,
+        (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char],
+      );
+    form?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const query = input.value.trim();
+      if (!query) return;
+      status.textContent = '搜尋中…';
+      results.innerHTML = '';
+      try {
+        const pagefind = await import('/pagefind/pagefind.js');
+        const search = await pagefind.search(query);
+        const items = await Promise.all(search.results.slice(0, 20).map((result) => result.data()));
+        status.textContent = items.length
+          ? `找到 ${items.length} 筆結果`
+          : '找不到符合的文章，試試其他關鍵字。';
+        results.innerHTML = items
+          .map(
+            (item) =>
+              `<article class="search-result"><h2><a href="${escapeHtml(item.url)}">${escapeHtml(item.meta.title || item.url)}</a></h2><p>${item.excerpt || ''}</p></article>`,
+          )
+          .join('');
+        window.blogAnalytics?.track('site_search', { resultCount: items.length });
+      } catch {
+        status.innerHTML =
+          '本機開發模式尚未產生搜尋索引。請前往<a href="/articles/">所有文章</a>探索內容。';
+      }
+    });
+  </script>
+</BaseLayout>

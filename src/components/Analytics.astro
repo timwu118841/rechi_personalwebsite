@@ -1,0 +1,50 @@
+---
+const websiteId = import.meta.env.PUBLIC_UMAMI_WEBSITE_ID;
+const scriptUrl = import.meta.env.PUBLIC_UMAMI_SCRIPT_URL || 'https://cloud.umami.is/script.js';
+const enabled = import.meta.env.PROD && Boolean(websiteId);
+---
+
+{enabled && <script is:inline defer src={scriptUrl} data-website-id={websiteId} />}
+<script is:inline>
+  (() => {
+    const allowed = new Set(['article_read', 'external_link', 'site_search']);
+    window.blogAnalytics = {
+      track(name, data = {}) {
+        if (!allowed.has(name)) return;
+        const safe = {};
+        for (const key of ['article', 'threshold', 'host', 'resultCount']) {
+          if (Object.prototype.hasOwnProperty.call(data, key)) safe[key] = data[key];
+        }
+        if (window.umami?.track) window.umami.track(name, safe);
+      },
+    };
+
+    document.addEventListener('click', (event) => {
+      const link = event.target.closest?.('a[href]');
+      if (!link) return;
+      const url = new URL(link.href, window.location.href);
+      if (url.origin !== window.location.origin) {
+        window.blogAnalytics.track('external_link', { host: url.hostname });
+      }
+    });
+
+    const article = document.querySelector('[data-article-slug]');
+    if (!article) return;
+    const sent = new Set();
+    const report = () => {
+      const total = document.documentElement.scrollHeight - window.innerHeight;
+      if (total <= 0) return;
+      const progress = Math.round((window.scrollY / total) * 100);
+      for (const threshold of [25, 50, 75, 90]) {
+        if (progress >= threshold && !sent.has(threshold)) {
+          sent.add(threshold);
+          window.blogAnalytics.track('article_read', {
+            article: article.dataset.articleSlug,
+            threshold,
+          });
+        }
+      }
+    };
+    window.addEventListener('scroll', report, { passive: true });
+  })();
+</script>

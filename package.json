@@ -1,0 +1,57 @@
+{
+  "name": "rechi-legal-notes",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
+    "start": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
+    "build": "npm run content:validate && ASTRO_TELEMETRY_DISABLED=1 astro check && ASTRO_TELEMETRY_DISABLED=1 astro build && pagefind --site dist/client && npm run verify:build",
+    "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview",
+    "check": "ASTRO_TELEMETRY_DISABLED=1 astro check",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ci": "npm run build && playwright test",
+    "content:validate": "node scripts/validate-content.mjs",
+    "deploy:validate": "node scripts/validate-deploy-env.mjs",
+    "verify:build": "node scripts/verify-build.mjs",
+    "quality": "npm run format:check && npm run lint && npm run check && npm run test && npm run build"
+  },
+  "dependencies": {
+    "@astrojs/markdoc": "latest",
+    "@astrojs/node": "latest",
+    "@astrojs/react": "latest",
+    "@astrojs/rss": "latest",
+    "@astrojs/sitemap": "latest",
+    "@keystatic/astro": "latest",
+    "@keystatic/core": "latest",
+    "astro": "latest",
+    "pagefind": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@astrojs/check": "latest",
+    "@axe-core/playwright": "^4.12.1",
+    "@eslint/js": "latest",
+    "@playwright/test": "^1.61.1",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "eslint": "latest",
+    "eslint-plugin-astro": "1.5.0",
+    "globals": "latest",
+    "prettier": "latest",
+    "prettier-plugin-astro": "latest",
+    "typescript": "latest",
+    "typescript-eslint": "latest",
+    "vitest": "latest"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

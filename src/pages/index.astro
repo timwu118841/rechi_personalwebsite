@@ -1,0 +1,70 @@
+---
+import ArticleCard from '@/components/ArticleCard.astro';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { getPublishedArticles } from '@/lib/articles';
+
+const articles = await getPublishedArticles();
+const featured = articles.find((article) => article.data.featured) ?? articles[0];
+const latest = articles.filter((article) => article.id !== featured?.id).slice(0, 3);
+---
+
+<BaseLayout>
+  <section class="hero">
+    <div class="container hero-grid">
+      <div>
+        <p class="eyebrow">Legal practice, clearly written</p>
+        <h1>把法律經驗，寫成<em>看得懂</em>的知識。</h1>
+      </div>
+      <div class="hero-copy">
+        <p>從實務現場出發，整理制度、溝通與判斷背後的脈絡。少一點術語，多一點真正能帶走的理解。</p>
+        <a class="button" href="/articles/">開始閱讀 <span aria-hidden="true">→</span></a>
+        <p class="hero-note">內容為一般資訊與經驗分享，不構成個案法律意見。</p>
+      </div>
+    </div>
+  </section>
+
+  {
+    featured && (
+      <section class="section" aria-labelledby="featured-title">
+        <div class="container">
+          <div class="section-heading">
+            <div>
+              <>
+                <p class="eyebrow">Editor’s pick</p>
+                <h2 id="featured-title">精選閱讀</h2>
+              </>
+            </div>
+          </div>
+          <div class="article-grid">
+            <ArticleCard article={featured} />
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  <section class="section" aria-labelledby="latest-title">
+    <div class="container">
+      <div class="section-heading">
+        <div><p class="eyebrow">Latest notes</p><h2 id="latest-title">最新文章</h2></div>
+        <a href="/articles/">查看所有文章</a>
+      </div>
+      {
+        latest.length > 0 ? (
+          <div class="article-grid">
+            {latest.map((article) => (
+              <ArticleCard article={article} />
+            ))}
+          </div>
+        ) : (
+          <div class="empty-state">
+            <>
+              <h2>更多文章正在整理中</h2>
+              <p class="muted">先從精選文章開始閱讀，新的實務筆記會陸續發布。</p>
+            </>
+          </div>
+        )
+      }
+    </div>
+  </section>
+</BaseLayout>

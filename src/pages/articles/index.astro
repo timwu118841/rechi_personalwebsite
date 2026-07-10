@@ -1,0 +1,36 @@
+---
+import ArticleCard from '@/components/ArticleCard.astro';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { getPublishedArticles } from '@/lib/articles';
+const articles = await getPublishedArticles();
+---
+
+<BaseLayout title="所有文章" description="閱讀法律實務、制度觀察與工作經驗整理。">
+  <header class="page-hero">
+    <div class="container">
+      <p class="eyebrow">All articles</p><h1>所有文章</h1><p>
+        法律不只存在於法條裡，也存在於每一次判斷、溝通與選擇之中。
+      </p>
+    </div>
+  </header>
+  <section class="section">
+    <div class="container">
+      {
+        articles.length > 0 ? (
+          <div class="article-grid">
+            {articles.map((article) => (
+              <ArticleCard article={article} />
+            ))}
+          </div>
+        ) : (
+          <div class="empty-state">
+            <>
+              <h2>尚無公開文章</h2>
+              <p>文章準備完成後會出現在這裡。</p>
+            </>
+          </div>
+        )
+      }
+    </div>
+  </section>
+</BaseLayout>

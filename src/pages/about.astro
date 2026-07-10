@@ -1,0 +1,35 @@
+---
+import LegalDisclaimer from '@/components/LegalDisclaimer.astro';
+import { siteConfig } from '@/config/site';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="關於本站" description="了解法律實務筆記的寫作方向、作者與內容原則。">
+  <header class="page-hero">
+    <div class="container">
+      <p class="eyebrow">About</p><h1>讓法律知識，回到人的處境。</h1><p>
+        這是一個整理法律實務經驗、制度觀察與工作方法的個人部落格。
+      </p>
+    </div>
+  </header>
+  <section class="section">
+    <div class="container about-grid">
+      <aside class="about-aside">
+        <p class="eyebrow">Author</p><h2>{siteConfig.author.name}</h2><p>
+          {siteConfig.author.role}
+        </p><p class="muted">{siteConfig.author.bio}</p>
+      </aside>
+      <div class="about-copy">
+        <p>
+          法律問題很少只有一個乾淨俐落的答案。真正的實務工作，往往是理解事實、評估風險、釐清期待，再協助當事人做出能承擔的選擇。
+        </p><p>本站希望把這些不容易從教科書看見的經驗，整理成清楚、可閱讀、可被搜尋的文章。</p><h2>
+          內容原則
+        </h2><ul>
+          <li>不揭露不必要的案件與個人識別資訊</li><li>區分一般資訊、個人觀察與個案法律意見</li><li>
+            盡可能交代判斷脈絡，而不只給出結論
+          </li>
+        </ul><LegalDisclaimer />
+      </div>
+    </div>
+  </section>
+</BaseLayout>

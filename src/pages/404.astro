@@ -1,0 +1,13 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="找不到頁面" description="你造訪的頁面不存在或已被移動。" noindex={true}>
+  <section class="section">
+    <div class="reading-container empty-state">
+      <p class="eyebrow">404</p><h1>這一頁找不到了</h1><p class="muted">
+        網址可能已變更，或文章尚未公開。
+      </p><a class="button" href="/">回到首頁</a>
+    </div>
+  </section>
+</BaseLayout>

@@ -1,0 +1,62 @@
+---
+import { Image } from 'astro:assets';
+import type { ArticleEntry } from '@/lib/articles';
+import {
+  articleSlug,
+  formatDate,
+  getCategoryMap,
+  getContentTypeMap,
+  readingTimeMinutes,
+} from '@/lib/articles';
+import TagList from './TagList.astro';
+
+interface Props {
+  article: ArticleEntry;
+}
+const { article } = Astro.props;
+const slug = articleSlug(article);
+const minutes = readingTimeMinutes(article.body || '');
+const [categories, contentTypes] = await Promise.all([
+  getCategoryMap({ includeHidden: true }),
+  getContentTypeMap(),
+]);
+const category = categories.get(article.data.category);
+const categoryName = category?.name || article.data.category;
+const contentType = contentTypes.get(article.data.contentType);
+const contentTypeName = contentType?.name || article.data.contentType;
+---
+
+<article class="article-card">
+  <a class="card-image" href={`/articles/${slug}/`} tabindex="-1" aria-hidden="true">
+    {
+      article.data.cover ? (
+        <Image
+          src={article.data.cover}
+          alt=""
+          widths={[480, 720]}
+          sizes="(max-width: 560px) 100vw, 33vw"
+          loading="lazy"
+        />
+      ) : (
+        <span class="card-pattern">
+          <span>法</span>
+        </span>
+      )
+    }
+  </a>
+  <div class="card-body">
+    <div class="card-meta">
+      <span>{contentTypeName} · {categoryName}</span><span
+        >{formatDate(article.data.publishedAt)}</span
+      ><span>{minutes} 分鐘閱讀</span>
+    </div>
+    <h3><a href={`/articles/${slug}/`}>{article.data.title}</a></h3>
+    <p>{article.data.description}</p>
+    <div class="card-footer">
+      <TagList tags={article.data.tags.slice(0, 2)} />
+      <a class="read-more" href={`/articles/${slug}/`} aria-label={`閱讀「${article.data.title}」`}
+        >閱讀 →</a
+      >
+    </div>
+  </div>
+</article>

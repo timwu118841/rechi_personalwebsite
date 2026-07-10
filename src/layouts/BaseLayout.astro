@@ -1,0 +1,32 @@
+---
+import Analytics from '@/components/Analytics.astro';
+import SeoHead from '@/components/SeoHead.astro';
+import SiteFooter from '@/components/SiteFooter.astro';
+import SiteHeader from '@/components/SiteHeader.astro';
+import '@/styles/global.css';
+
+type SeoProps = Parameters<typeof SeoHead>[0] extends never ? never : any;
+interface Props extends SeoProps {
+  bodyClass?: string;
+}
+const { bodyClass = '', ...seo } = Astro.props;
+---
+
+<!doctype html>
+<html lang="zh-Hant-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#fbfaf6" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="alternate" type="application/rss+xml" title="法律實務筆記 RSS" href="/rss.xml" />
+    <SeoHead {...seo} />
+  </head>
+  <body class={bodyClass}>
+    <a class="skip-link" href="#main-content">跳到主要內容</a>
+    <SiteHeader />
+    <main id="main-content" tabindex="-1"><slot /></main>
+    <SiteFooter />
+    <Analytics />
+  </body>
+</html>

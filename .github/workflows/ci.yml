@@ -1,0 +1,33 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SITE_URL: https://example.com
+      PUBLIC_SITE_NAME: 法律實務筆記
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run quality
+      - run: npm run test:e2e
+      - name: Lighthouse quality gate
+        uses: treosh/lighthouse-ci-action@v12
+        with:
+          configPath: ./lighthouserc.cjs
+          uploadArtifacts: true
+          temporaryPublicStorage: true

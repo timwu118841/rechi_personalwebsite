@@ -1,0 +1,30 @@
+---
+import ArticleCard from '@/components/ArticleCard.astro';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { getPublishedArticles, type ArticleEntry } from '@/lib/articles';
+export async function getStaticPaths() {
+  const articles = await getPublishedArticles();
+  return [...new Set(articles.flatMap((article) => article.data.tags))].map((tag) => ({
+    params: { tag },
+    props: { tag, articles: articles.filter((article) => article.data.tags.includes(tag)) },
+  }));
+}
+interface Props {
+  tag: string;
+  articles: ArticleEntry[];
+}
+const { tag, articles } = Astro.props;
+---
+
+<BaseLayout title={`#${tag}`} description={`閱讀標記為「${tag}」的法律文章。`}>
+  <header class="page-hero">
+    <div class="container">
+      <p class="eyebrow">Tag</p><h1>#{tag}</h1><p>共 {articles.length} 篇文章</p>
+    </div>
+  </header>
+  <section class="section">
+    <div class="container">
+      <div class="article-grid">{articles.map((article) => <ArticleCard article={article} />)}</div>
+    </div>
+  </section>
+</BaseLayout>

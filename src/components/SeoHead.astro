@@ -1,0 +1,58 @@
+---
+import { siteConfig } from '@/config/site';
+
+interface Props {
+  title?: string;
+  description?: string;
+  canonical?: string;
+  image?: string;
+  type?: 'website' | 'article';
+  noindex?: boolean;
+  publishedAt?: Date;
+  updatedAt?: Date;
+  jsonLd?: Record<string, unknown> | Record<string, unknown>[];
+}
+
+const {
+  title,
+  description = siteConfig.description,
+  canonical,
+  image = '/social-card.svg',
+  type = 'website',
+  noindex = false,
+  publishedAt,
+  updatedAt,
+  jsonLd,
+} = Astro.props;
+
+const pageTitle = title ? `${title}｜${siteConfig.name}` : siteConfig.name;
+const canonicalUrl = canonical || new URL(Astro.url.pathname, Astro.site).toString();
+const imageUrl = new URL(image, Astro.site).toString();
+---
+
+<title>{pageTitle}</title>
+<meta name="description" content={description} />
+<link rel="canonical" href={canonicalUrl} />
+<meta
+  name="robots"
+  content={noindex ? 'noindex, nofollow' : 'index, follow, max-image-preview:large'}
+/>
+<meta property="og:locale" content="zh_TW" />
+<meta property="og:type" content={type} />
+<meta property="og:site_name" content={siteConfig.name} />
+<meta property="og:title" content={pageTitle} />
+<meta property="og:description" content={description} />
+<meta property="og:url" content={canonicalUrl} />
+<meta property="og:image" content={imageUrl} />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={pageTitle} />
+<meta name="twitter:description" content={description} />
+<meta name="twitter:image" content={imageUrl} />
+{publishedAt && <meta property="article:published_time" content={publishedAt.toISOString()} />}
+{updatedAt && <meta property="article:modified_time" content={updatedAt.toISOString()} />}
+{
+  siteConfig.googleSiteVerification && (
+    <meta name="google-site-verification" content={siteConfig.googleSiteVerification} />
+  )
+}
+{jsonLd && <script is:inline type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}

@@ -1,0 +1,25 @@
+---
+import { siteConfig } from '@/config/site';
+---
+
+<footer class="site-footer" data-pagefind-ignore>
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <p class="footer-title">{siteConfig.name}</p>
+        <p class="footer-copy">{siteConfig.description}</p>
+      </div>
+      <nav class="footer-links" aria-label="頁尾導覽">
+        <a href="/articles/">所有文章</a>
+        <a href="/categories/">文章分類</a>
+        <a href="/about/">關於本站</a>
+        <a href="/rss.xml">RSS</a>
+        <a href="/keystatic" rel="nofollow">管理登入</a>
+      </nav>
+    </div>
+    <div class="footer-bottom">
+      <span>© {new Date().getFullYear()} {siteConfig.author.name}</span>
+      <span>法律資訊與經驗分享，不構成個案法律意見。</span>
+    </div>
+  </div>
+</footer>
