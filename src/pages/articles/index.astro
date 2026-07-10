@@ -1,11 +1,33 @@
 ---
 import ArticleCard from '@/components/ArticleCard.astro';
+import Pagination from '@/components/Pagination.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import { getPublishedArticles } from '@/lib/articles';
-const articles = await getPublishedArticles();
+import { getContentRepository } from '@/lib/content/repository';
+import { DEFAULT_PAGE_SIZE, pageCanonical, parsePage } from '@/lib/pagination';
+
+const page = parsePage(Astro.url.searchParams.get('page'));
+if (page === null) return Astro.rewrite('/404');
+const repository = getContentRepository();
+const [result, settings] = await Promise.all([
+  repository.listPublishedArticles({ page, pageSize: DEFAULT_PAGE_SIZE }),
+  repository.getSiteSettings(),
+]);
+if (page > result.totalPages && result.totalItems > 0) return Astro.rewrite('/404');
+if (Astro.cache.enabled)
+  Astro.cache.set({
+    maxAge: 86400,
+    swr: 604800,
+    tags: ['content', 'site-settings', 'article-list'],
+  });
+const canonical = pageCanonical('/articles/', page, Astro.site!);
 ---
 
-<BaseLayout title="所有文章" description="閱讀法律實務、制度觀察與工作經驗整理。">
+<BaseLayout
+  siteSettings={settings}
+  title="所有文章"
+  description="閱讀法律實務、制度觀察與工作經驗整理。"
+  canonical={canonical}
+>
   <header class="page-hero">
     <div class="container">
       <p class="eyebrow">All articles</p><h1>所有文章</h1><p>
@@ -16,12 +38,17 @@ const articles = await getPublishedArticles();
   <section class="section">
     <div class="container">
       {
-        articles.length > 0 ? (
-          <div class="article-grid">
-            {articles.map((article) => (
-              <ArticleCard article={article} />
-            ))}
-          </div>
+        result.items.length > 0 ? (
+          <>
+            <>
+              <div class="article-grid">
+                {result.items.map((article) => (
+                  <ArticleCard article={article} fallbackImage={settings.defaultSocialImage} />
+                ))}
+              </div>
+              <Pagination page={page} totalPages={result.totalPages} basePath="/articles/" />
+            </>
+          </>
         ) : (
           <div class="empty-state">
             <>

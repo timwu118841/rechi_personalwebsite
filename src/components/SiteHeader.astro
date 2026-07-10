@@ -1,14 +1,18 @@
 ---
 import { siteConfig } from '@/config/site';
+import type { SiteSettings } from '@/lib/content/repository';
+interface Props {
+  settings: SiteSettings;
+}
+const { settings } = Astro.props;
 const path = Astro.url.pathname;
 const current = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
 ---
 
-<header class="site-header" data-pagefind-ignore>
+<header class="site-header">
   <div class="container header-inner">
-    <a class="brand" href="/" aria-label={`${siteConfig.name}首頁`}>
-      <span class="brand-mark" aria-hidden="true">法</span>
-      <span>{siteConfig.shortName}</span>
+    <a class="brand" href="/" aria-label={`${settings.siteTitle}首頁`}>
+      <span class="brand-mark" aria-hidden="true">R</span><span>{settings.shortTitle}</span>
     </a>
     <nav class="site-nav" aria-label="主要導覽">
       {
@@ -18,20 +22,46 @@ const current = (href: string) => (href === '/' ? path === '/' : path.startsWith
           </a>
         ))
       }
-      <a
-        class="search-link"
-        href="/search/"
-        aria-current={current('/search/') ? 'page' : undefined}
+      <a class="search-link" href="/search/" aria-current={current('/search/') ? 'page' : undefined}
+        ><span aria-hidden="true">⌕</span> 搜尋</a
       >
-        <span aria-hidden="true">⌕</span> 搜尋
-      </a>
+      <button class="theme-toggle" type="button" aria-label="切換深色模式" aria-pressed="false"
+        ><span aria-hidden="true">◐</span></button
+      >
     </nav>
-    <details class="mobile-nav">
-      <summary>選單</summary>
-      <nav aria-label="行動版導覽">
-        {siteConfig.nav.map((item) => <a href={item.href}>{item.label}</a>)}
-        <a href="/search/">搜尋</a>
-      </nav>
-    </details>
+    <div class="mobile-actions">
+      <button class="theme-toggle" type="button" aria-label="切換深色模式" aria-pressed="false"
+        ><span aria-hidden="true">◐</span></button
+      >
+      <details class="mobile-nav">
+        <summary>選單</summary><nav aria-label="行動版導覽">
+          {siteConfig.nav.map((item) => <a href={item.href}>{item.label}</a>)}<a href="/search/"
+            >搜尋</a
+          >
+        </nav>
+      </details>
+    </div>
   </div>
 </header>
+<script is:inline>
+  (() => {
+    const root = document.documentElement;
+    const current = () =>
+      root.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const update = (theme) => {
+      root.dataset.theme = theme;
+      document.querySelectorAll('.theme-toggle').forEach((button) => {
+        button.setAttribute('aria-pressed', String(theme === 'dark'));
+        button.setAttribute('aria-label', theme === 'dark' ? '切換淺色模式' : '切換深色模式');
+      });
+    };
+    update(current());
+    document.querySelectorAll('.theme-toggle').forEach((button) =>
+      button.addEventListener('click', () => {
+        const next = current() === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('color-theme', next);
+        update(next);
+      }),
+    );
+  })();
+</script>

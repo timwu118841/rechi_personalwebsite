@@ -1,0 +1,21 @@
+---
+interface Props {
+  page: number;
+  totalPages: number;
+  basePath: string;
+}
+const { page, totalPages, basePath } = Astro.props;
+const href = (target: number) => (target === 1 ? basePath : `${basePath}?page=${target}`);
+---
+
+{
+  totalPages > 1 && (
+    <nav class="pagination" aria-label="文章分頁">
+      {page > 1 ? <a href={href(page - 1)}>← 上一頁</a> : <span aria-hidden="true" />}
+      <span>
+        第 {page} 頁，共 {totalPages} 頁
+      </span>
+      {page < totalPages ? <a href={href(page + 1)}>下一頁 →</a> : <span aria-hidden="true" />}
+    </nav>
+  )
+}

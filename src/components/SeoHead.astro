@@ -1,7 +1,9 @@
 ---
 import { siteConfig } from '@/config/site';
+import type { SiteSettings } from '@/lib/content/repository';
 
-interface Props {
+export interface Props {
+  settings: SiteSettings;
   title?: string;
   description?: string;
   canonical?: string;
@@ -14,18 +16,18 @@ interface Props {
 }
 
 const {
+  settings,
   title,
-  description = siteConfig.description,
+  description = settings.siteDescription,
   canonical,
-  image = '/social-card.svg',
+  image = settings.defaultSocialImage?.url || '/social-card.svg',
   type = 'website',
   noindex = false,
   publishedAt,
   updatedAt,
   jsonLd,
 } = Astro.props;
-
-const pageTitle = title ? `${title}｜${siteConfig.name}` : siteConfig.name;
+const pageTitle = title ? `${title}｜${settings.siteTitle}` : settings.siteTitle;
 const canonicalUrl = canonical || new URL(Astro.url.pathname, Astro.site).toString();
 const imageUrl = new URL(image, Astro.site).toString();
 ---
@@ -39,7 +41,7 @@ const imageUrl = new URL(image, Astro.site).toString();
 />
 <meta property="og:locale" content="zh_TW" />
 <meta property="og:type" content={type} />
-<meta property="og:site_name" content={siteConfig.name} />
+<meta property="og:site_name" content={settings.siteTitle} />
 <meta property="og:title" content={pageTitle} />
 <meta property="og:description" content={description} />
 <meta property="og:url" content={canonicalUrl} />

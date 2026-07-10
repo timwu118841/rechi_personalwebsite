@@ -1,62 +1,45 @@
 ---
-import { Image } from 'astro:assets';
-import { render } from 'astro:content';
 import LegalDisclaimer from '@/components/LegalDisclaimer.astro';
 import TagList from '@/components/TagList.astro';
-import { siteConfig } from '@/config/site';
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import {
-  articleSlug,
-  formatDate,
-  getCategoryMap,
-  getContentTypeMap,
-  getPublishedArticles,
-  readingTimeMinutes,
-  type ArticleEntry,
-} from '@/lib/articles';
+import { formatDate, readingTimeMinutes } from '@/lib/articles';
+import { getContentRepository } from '@/lib/content/repository';
+import { renderMarkdown } from '@/lib/content/markdown';
 
-export async function getStaticPaths() {
-  const articles = await getPublishedArticles();
-  return articles.map((article) => ({
-    params: { slug: articleSlug(article) },
-    props: { article },
-  }));
-}
-
-interface Props {
-  article: ArticleEntry;
-}
-const { article } = Astro.props;
-const { Content } = await render(article);
-const slug = articleSlug(article);
-const canonical = article.data.canonicalUrl || new URL(`/articles/${slug}/`, Astro.site).toString();
-const minutes = readingTimeMinutes(article.body || '');
-const [categories, contentTypes] = await Promise.all([
-  getCategoryMap({ includeHidden: true }),
-  getContentTypeMap(),
+const slug = Astro.params.slug || '';
+const repository = getContentRepository();
+const [article, settings] = await Promise.all([
+  repository.getPublishedArticle(slug),
+  repository.getSiteSettings(),
 ]);
-const category = categories.get(article.data.category);
-const categoryName = category?.name || article.data.category;
-const contentType = contentTypes.get(article.data.contentType);
-const contentTypeName = contentType?.name || article.data.contentType;
-const articleUrl = new URL(`/articles/${slug}/`, Astro.site).toString();
+if (!article) return Astro.rewrite('/404');
+if (Astro.cache.enabled)
+  Astro.cache.set({
+    maxAge: 86400,
+    swr: 604800,
+    tags: ['content', 'site-settings', `article:${article.slug}`],
+  });
+const canonical =
+  article.canonicalUrl || new URL(`/articles/${article.slug}/`, Astro.site).toString();
+const articleUrl = new URL(`/articles/${article.slug}/`, Astro.site).toString();
+const image = article.cover || settings.defaultSocialImage;
+const minutes = readingTimeMinutes(article.body);
+const bodyHtml = renderMarkdown(article.body);
 const jsonLd = [
   {
     '@context': 'https://schema.org',
     '@type': 'BlogPosting',
-    headline: article.data.title,
-    description: article.data.description,
-    datePublished: article.data.publishedAt.toISOString(),
-    dateModified: (article.data.updatedAt || article.data.publishedAt).toISOString(),
+    headline: article.title,
+    description: article.description,
+    datePublished: article.publishedAt.toISOString(),
+    dateModified: (article.updatedAt || article.publishedAt).toISOString(),
     mainEntityOfPage: articleUrl,
-    author: { '@type': 'Person', name: siteConfig.author.name },
-    publisher: { '@type': 'Person', name: siteConfig.author.name },
-    image: article.data.cover
-      ? new URL(article.data.cover.src, Astro.site).toString()
-      : new URL('/social-card.svg', Astro.site).toString(),
-    articleSection: categoryName,
-    genre: contentTypeName,
-    keywords: article.data.tags.join(', '),
+    author: { '@type': 'Person', name: settings.authorName },
+    publisher: { '@type': 'Person', name: settings.authorName },
+    image: new URL(image?.url || '/social-card.svg', Astro.site).toString(),
+    articleSection: article.categoryName,
+    genre: article.contentTypeName,
+    keywords: article.tags.join(', '),
     inLanguage: 'zh-Hant-TW',
   },
   {
@@ -70,75 +53,83 @@ const jsonLd = [
         name: '文章',
         item: new URL('/articles/', Astro.site).toString(),
       },
-      { '@type': 'ListItem', position: 3, name: article.data.title, item: articleUrl },
+      { '@type': 'ListItem', position: 3, name: article.title, item: articleUrl },
     ],
   },
 ];
 ---
 
 <BaseLayout
-  title={article.data.seoTitle || article.data.title}
-  description={article.data.seoDescription || article.data.description}
+  siteSettings={settings}
+  title={article.seoTitle || article.title}
+  description={article.seoDescription || article.description}
   canonical={canonical}
-  image={article.data.cover?.src}
+  image={image?.url}
   type="article"
-  publishedAt={article.data.publishedAt}
-  updatedAt={article.data.updatedAt}
+  publishedAt={article.publishedAt}
+  updatedAt={article.updatedAt}
   jsonLd={jsonLd}
 >
-  <article data-pagefind-body data-article-slug={slug}>
+  <article data-article-slug={article.slug}>
     <header class="article-header reading-container">
-      <p class="eyebrow">{contentTypeName} · {categoryName}</p>
-      <h1 data-pagefind-meta="title">{article.data.title}</h1>
-      <p class="article-dek" data-pagefind-meta="description">{article.data.description}</p>
-      <div class="article-byline">
+      <p class="eyebrow">{article.contentTypeName} · {article.categoryName}</p><h1>
+        {article.title}
+      </h1><p class="article-dek">{article.description}</p><div class="article-byline">
         <span class="author-chip"
-          ><span class="author-avatar" aria-hidden="true">R</span>{siteConfig.author.name}</span
+          >{
+            settings.authorImage ? (
+              <img
+                class="author-avatar-image"
+                src={settings.authorImage.url}
+                alt=""
+                width={settings.authorImage.width}
+                height={settings.authorImage.height}
+              />
+            ) : (
+              <span class="author-avatar" aria-hidden="true">
+                {settings.authorName.slice(0, 1)}
+              </span>
+            )
+          }{settings.authorName}</span
+        ><time datetime={article.publishedAt.toISOString()}>{formatDate(article.publishedAt)}</time
+        >{article.updatedAt && <span>更新於 {formatDate(article.updatedAt)}</span>}<span
+          >{minutes} 分鐘閱讀</span
         >
-        <time datetime={article.data.publishedAt.toISOString()}
-          >{formatDate(article.data.publishedAt)}</time
-        >
-        {article.data.updatedAt && <span>更新於 {formatDate(article.data.updatedAt)}</span>}
-        <span>{minutes} 分鐘閱讀</span>
       </div>
     </header>
     {
-      article.data.cover && (
+      image && (
         <div class="article-cover">
-          <Image
-            src={article.data.cover}
-            alt={article.data.coverAlt || ''}
-            widths={[768, 1200, 1600]}
-            sizes="(max-width: 1024px) 100vw, 1024px"
+          <img
+            src={image.url}
+            alt={article.cover?.alt || image.alt}
+            width={image.width}
+            height={image.height}
             loading="eager"
             fetchpriority="high"
+            decoding="async"
           />
         </div>
       )
     }
     <div class="reading-container">
-      <div class="prose"><Content /></div>
-      <div class="article-end">
-        <TagList tags={article.data.tags} />
-        <div data-pagefind-ignore>
-          <LegalDisclaimer />
-          <div class="share-row" aria-label="分享文章">
-            <strong>分享：</strong>
-            <a
-              href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(articleUrl)}`}
-              target="_blank"
-              rel="noopener noreferrer">Facebook</a
-            >
-            <a
-              href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(articleUrl)}`}
-              target="_blank"
-              rel="noopener noreferrer">LinkedIn</a
-            >
-            <a
-              href={`mailto:?subject=${encodeURIComponent(article.data.title)}&body=${encodeURIComponent(articleUrl)}`}
-              >Email</a
-            >
-          </div>
+      <div class="prose" set:html={bodyHtml} /><div class="article-end">
+        <TagList tags={article.tags} /><LegalDisclaimer /><div
+          class="share-row"
+          aria-label="分享文章"
+        >
+          <strong>分享：</strong><a
+            href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(articleUrl)}`}
+            target="_blank"
+            rel="noopener noreferrer">Facebook</a
+          ><a
+            href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(articleUrl)}`}
+            target="_blank"
+            rel="noopener noreferrer">LinkedIn</a
+          ><a
+            href={`mailto:?subject=${encodeURIComponent(article.title)}&body=${encodeURIComponent(articleUrl)}`}
+            >Email</a
+          >
         </div>
       </div>
     </div>

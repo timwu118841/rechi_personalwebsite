@@ -1,33 +1,28 @@
 import rss from '@astrojs/rss';
-import { siteConfig } from '@/config/site';
-import {
-  articleSlug,
-  getCategoryMap,
-  getContentTypeMap,
-  getPublishedArticles,
-} from '@/lib/articles';
+import type { APIRoute } from 'astro';
+import { getContentRepository } from '@/lib/content/repository';
 
-export async function GET(context: { site: URL }) {
-  const articles = await getPublishedArticles();
-  const [categories, contentTypes] = await Promise.all([
-    getCategoryMap({ includeHidden: true }),
-    getContentTypeMap(),
+export const prerender = false;
+
+export const GET: APIRoute = async (context) => {
+  const repository = getContentRepository();
+  const [{ items: articles }, settings] = await Promise.all([
+    repository.listPublishedArticles({ pageSize: 1000 }),
+    repository.getSiteSettings(),
   ]);
+  if (context.cache.enabled)
+    context.cache.set({ maxAge: 86400, swr: 604800, tags: ['content', 'site-settings', 'rss'] });
   return rss({
-    title: siteConfig.name,
-    description: siteConfig.description,
-    site: context.site,
+    title: settings.siteTitle,
+    description: settings.siteDescription,
+    site: context.site!,
     items: articles.map((article) => ({
-      title: article.data.title,
-      description: article.data.description,
-      pubDate: article.data.publishedAt,
-      link: `/articles/${articleSlug(article)}/`,
-      categories: [
-        contentTypes.get(article.data.contentType)?.name || article.data.contentType,
-        categories.get(article.data.category)?.name || article.data.category,
-        ...article.data.tags,
-      ],
+      title: article.title,
+      description: article.description,
+      pubDate: article.publishedAt,
+      link: `/articles/${article.slug}/`,
+      categories: [article.contentTypeName, article.categoryName, ...article.tags],
     })),
     customData: '<language>zh-TW</language>',
   });
-}
+};

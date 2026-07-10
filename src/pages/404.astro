@@ -1,5 +1,7 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro';
+Astro.response.status = 404;
+Astro.cache.set(false);
 ---
 
 <BaseLayout title="找不到頁面" description="你造訪的頁面不存在或已被移動。" noindex={true}>

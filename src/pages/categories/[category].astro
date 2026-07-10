@@ -1,53 +1,63 @@
 ---
 import ArticleCard from '@/components/ArticleCard.astro';
+import Pagination from '@/components/Pagination.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import {
-  getCategories,
-  getPublishedArticles,
-  type ArticleEntry,
-  type CategorySummary,
-} from '@/lib/articles';
-export async function getStaticPaths() {
-  const [articles, categories] = await Promise.all([getPublishedArticles(), getCategories()]);
-  return categories.map((category) => ({
-    params: { category: category.slug },
-    props: {
-      category,
-      articles: articles.filter((article) => article.data.category === category.slug),
-    },
-  }));
-}
-interface Props {
-  category: CategorySummary;
-  articles: ArticleEntry[];
-}
-const { category, articles } = Astro.props;
+import { getContentRepository } from '@/lib/content/repository';
+import { DEFAULT_PAGE_SIZE, pageCanonical, parsePage } from '@/lib/pagination';
+const page = parsePage(Astro.url.searchParams.get('page'));
+if (page === null) return Astro.rewrite('/404');
+const slug = Astro.params.category || '';
+const repository = getContentRepository();
+const [categories, result, settings] = await Promise.all([
+  repository.listCategories(),
+  repository.listPublishedArticles({ category: slug, page, pageSize: DEFAULT_PAGE_SIZE }),
+  repository.getSiteSettings(),
+]);
+const category = categories.find((item) => item.slug === slug);
+if (!category || (page > result.totalPages && result.totalItems > 0)) return Astro.rewrite('/404');
+if (Astro.cache.enabled)
+  Astro.cache.set({
+    maxAge: 86400,
+    swr: 604800,
+    tags: ['content', 'site-settings', 'taxonomies', `category:${slug}`],
+  });
+const basePath = `/categories/${slug}/`;
 ---
 
-<BaseLayout title={`${category.name}分類`} description={category.description}>
-  <header class="page-hero">
+<BaseLayout
+  siteSettings={settings}
+  title={`${category.name}分類`}
+  description={category.description}
+  canonical={pageCanonical(basePath, page, Astro.site!)}
+  ><header class="page-hero">
     <div class="container">
       <p class="eyebrow">Category</p><h1>{category.name}</h1><p>{category.description}</p><p>
-        共 {articles.length} 篇文章
+        共 {result.totalItems} 篇文章
       </p>
     </div>
-  </header>
-  <section class="section">
+  </header><section class="section">
     <div class="container">
       {
-        articles.length > 0 ? (
-          <div class="article-grid">
-            {articles.map((article) => (
-              <ArticleCard article={article} />
-            ))}
-          </div>
+        result.items.length > 0 ? (
+          <>
+            <>
+              <div class="article-grid">
+                {result.items.map((article) => (
+                  <ArticleCard article={article} fallbackImage={settings.defaultSocialImage} />
+                ))}
+              </div>
+              <Pagination page={page} totalPages={result.totalPages} basePath={basePath} />
+            </>
+          </>
         ) : (
           <div class="empty-state">
-            <h2>這個分類還沒有公開文章</h2>
-            <p>文章發布後會自動出現在這裡。</p>
+            <>
+              <h2>這個分類還沒有公開文章</h2>
+              <p>文章發布後會自動出現在這裡。</p>
+            </>
           </div>
         )
       }
     </div>
-  </section>
-</BaseLayout>
+  </section></BaseLayout
+>

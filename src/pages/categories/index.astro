@@ -1,34 +1,43 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import { getCategories, getPublishedArticles } from '@/lib/articles';
-const articles = await getPublishedArticles();
-const categories = (await getCategories()).map((category) => ({
+import { getContentRepository } from '@/lib/content/repository';
+const repository = getContentRepository();
+const [articles, categories] = await Promise.all([
+  repository.listPublishedArticles({ pageSize: 1000 }),
+  repository.listCategories(),
+]);
+const summaries = categories.map((category) => ({
   ...category,
-  count: articles.filter((article) => article.data.category === category.slug).length,
+  count: articles.items.filter((article) => article.category === category.slug).length,
 }));
+if (Astro.cache.enabled)
+  Astro.cache.set({ maxAge: 86400, swr: 604800, tags: ['content', 'site-settings', 'taxonomies'] });
 ---
 
-<BaseLayout title="文章分類" description="依主題探索法律實務筆記。">
-  <header class="page-hero">
+<BaseLayout title="文章分類" description="依主題探索法律實務筆記。"
+  ><header class="page-hero">
     <div class="container">
       <p class="eyebrow">Topics</p><h1>文章分類</h1><p>
         從實務、制度到職涯，用不同角度理解法律工作的現場。
       </p>
     </div>
-  </header>
-  <section class="section">
+  </header><section class="section">
     <div class="container taxonomy-grid">
       {
-        categories.map((category) => (
+        summaries.map((category) => (
           <a class="taxonomy-card" href={`/categories/${category.slug}/`}>
-            <div class="taxonomy-card-copy">
-              <strong>{category.name}</strong>
-              <p>{category.description}</p>
-            </div>
-            <span>{category.count} 篇文章 →</span>
+            <>
+              <div class="taxonomy-card-copy">
+                <>
+                  <strong>{category.name}</strong>
+                  <p>{category.description}</p>
+                </>
+              </div>
+              <span>{category.count} 篇文章 →</span>
+            </>
           </a>
         ))
       }
     </div>
-  </section>
-</BaseLayout>
+  </section></BaseLayout
+>

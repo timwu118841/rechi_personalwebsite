@@ -1,4 +1,10 @@
-const required = ['SITE_URL', 'PUBLIC_KEYSTATIC_CLOUD_PROJECT', 'KEYSTATIC_SECRET'];
+const required = [
+  'SITE_URL',
+  'PUBLIC_SUPABASE_URL',
+  'PUBLIC_SUPABASE_PUBLISHABLE_KEY',
+  'SUPABASE_SECRET_KEY',
+  'ADMIN_EMAILS',
+];
 const missing = required.filter((name) => !process.env[name]?.trim());
 
 let siteUrl;
@@ -12,8 +18,17 @@ if (siteUrl && siteUrl.protocol !== 'https:') {
   missing.push('SITE_URL（正式站必須使用 https）');
 }
 
-if (process.env.KEYSTATIC_SECRET && process.env.KEYSTATIC_SECRET.length < 32) {
-  missing.push('KEYSTATIC_SECRET（至少 32 個字元）');
+for (const name of ['PUBLIC_SUPABASE_URL']) {
+  try {
+    const value = new URL(process.env[name] || '');
+    if (value.protocol !== 'https:') missing.push(`${name}（必須使用 https）`);
+  } catch {
+    missing.push(`${name}（必須是完整 URL）`);
+  }
+}
+
+if (process.env.SUPABASE_SECRET_KEY && process.env.SUPABASE_SECRET_KEY.length < 24) {
+  missing.push('SUPABASE_SECRET_KEY（格式不正確）');
 }
 
 if (missing.length) {
