@@ -1,7 +1,7 @@
 import markdoc from '@astrojs/markdoc';
-import node from '@astrojs/node';
 import react from '@astrojs/react';
 import sitemap from '@astrojs/sitemap';
+import vercel from '@astrojs/vercel';
 import keystatic from '@keystatic/astro';
 import { defineConfig } from 'astro/config';
 
@@ -10,7 +10,7 @@ const site = process.env.SITE_URL || 'http://localhost:4321';
 export default defineConfig({
   site,
   output: 'static',
-  adapter: node({ mode: 'standalone' }),
+  adapter: vercel(),
   integrations: [
     react(),
     markdoc(),

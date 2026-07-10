@@ -20,7 +20,7 @@ export default defineConfig({
     { name: 'mobile-chromium', use: { ...devices['Pixel 7'] } },
   ],
   webServer: {
-    command: `npm run preview -- --host 127.0.0.1 --port ${port}`,
+    command: `node scripts/serve-build.mjs ${port}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

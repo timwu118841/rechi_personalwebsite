@@ -3,6 +3,7 @@ import { access, readFile, readdir } from 'node:fs/promises';
 import { extname, join, relative, resolve } from 'node:path';
 
 const root = resolve('dist/client');
+const vercelRoot = resolve('.vercel/output/static');
 const failures = [];
 
 async function exists(path) {
@@ -25,6 +26,22 @@ const required = [
 ];
 for (const path of required) {
   if (!(await exists(join(root, path)))) failures.push(`缺少建置產物：${path}`);
+  if (!(await exists(join(vercelRoot, path)))) failures.push(`Vercel 輸出缺少靜態產物：${path}`);
+}
+
+const vercelConfigPath = resolve('.vercel/output/config.json');
+const vercelFunctionPath = resolve('.vercel/output/functions/_render.func/.vc-config.json');
+if (!(await exists(vercelFunctionPath))) failures.push('Vercel 輸出缺少 server function');
+if (await exists(vercelConfigPath)) {
+  const vercelConfig = JSON.parse(await readFile(vercelConfigPath, 'utf8'));
+  const routes = Array.isArray(vercelConfig.routes) ? vercelConfig.routes : [];
+  const hasKeystaticRoute = routes.some(
+    (route) =>
+      typeof route.src === 'string' && route.src.includes('keystatic') && route.dest === '_render',
+  );
+  if (!hasKeystaticRoute) failures.push('Vercel 輸出缺少 Keystatic server route');
+} else {
+  failures.push('Vercel 輸出缺少 config.json');
 }
 
 const articlePath = join(root, 'articles/welcome/index.html');

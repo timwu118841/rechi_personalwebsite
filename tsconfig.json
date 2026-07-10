@@ -10,5 +10,5 @@
     "jsxImportSource": "react"
   },
   "include": [".astro/types.d.ts", "**/*"],
-  "exclude": ["dist"]
+  "exclude": ["dist", ".vercel", "playwright-report", "test-results"]
 }

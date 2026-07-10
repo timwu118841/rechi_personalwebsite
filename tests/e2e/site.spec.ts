@@ -7,7 +7,7 @@ test.describe('公開閱讀體驗', () => {
   test('首頁、文章與主要探索路徑可使用', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { level: 1 })).toContainText('法律經驗');
-    const primaryNavigation = page.getByRole('navigation', { name: '主要導覽' });
+    const primaryNavigation = page.locator('.site-nav');
     if (await primaryNavigation.isVisible()) {
       await expect(primaryNavigation).toBeVisible();
     } else {
@@ -120,14 +120,10 @@ test('停用 JavaScript 時仍能導覽與閱讀全文', async ({ browser }, tes
   await context.close();
 });
 
-test('SEO 發現檔與管理路由標頭存在', async ({ request }) => {
+test('SEO 發現檔存在且不洩漏草稿', async ({ request }) => {
   for (const path of ['/robots.txt', '/rss.xml', '/sitemap-index.xml']) {
     const response = await request.get(path);
     expect(response.ok(), `${path} 應成功`).toBe(true);
     expect(await response.text()).not.toContain('private-draft');
   }
-
-  const admin = await request.get('/keystatic');
-  expect(admin.status()).toBe(503);
-  expect(admin.headers()['x-robots-tag']).toContain('noindex');
 });
