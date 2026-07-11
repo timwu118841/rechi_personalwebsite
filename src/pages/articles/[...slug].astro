@@ -5,8 +5,9 @@ import BaseLayout from '@/layouts/BaseLayout.astro';
 import { formatDate, readingTimeMinutes } from '@/lib/articles';
 import { getContentRepository } from '@/lib/content/repository';
 import { renderMarkdown, renderRichText } from '@/lib/content/markdown';
+import { decodeSlugPathParam } from '@/lib/content/slug';
 
-const slug = Astro.params.slug || '';
+const slug = decodeSlugPathParam(Astro.params.slug || '');
 const repository = getContentRepository();
 const [article, settings] = await Promise.all([
   repository.getPublishedArticle(slug),
