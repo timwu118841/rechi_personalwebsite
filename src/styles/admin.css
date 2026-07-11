@@ -226,6 +226,49 @@ button.secondary,
   font-family: ui-monospace, SFMono-Regular, monospace;
   font-size: 0.9rem;
 }
+.tiptap-editor {
+  display: grid;
+  gap: 0.65rem;
+}
+.tiptap-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.55rem;
+  border: 1px solid #d9dfd8;
+  border-radius: 0.55rem;
+  background: #f7f8f5;
+}
+.tiptap-toolbar button {
+  min-width: 2.2rem;
+  padding: 0.35rem 0.5rem;
+  border-color: #cfd7cf;
+  color: #315f46;
+  background: white;
+  font-size: 0.8rem;
+}
+.tiptap-editor .ProseMirror {
+  min-height: 34rem;
+  padding: 0.85rem;
+  border: 1px solid #cfd7cf;
+  border-radius: 0.55rem;
+  outline: none;
+  background: white;
+  line-height: 1.7;
+}
+.tiptap-editor .ProseMirror:focus {
+  border-color: #315f46;
+  box-shadow: 0 0 0 2px rgb(49 95 70 / 0.12);
+}
+.tiptap-editor .ProseMirror img {
+  max-width: 100%;
+  height: auto;
+}
+.tiptap-editor-loading,
+.markdown-editor-fallback {
+  display: grid;
+  gap: 0.6rem;
+}
 .checkbox {
   display: flex !important;
   grid-template-columns: auto 1fr;
