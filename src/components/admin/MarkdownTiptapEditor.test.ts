@@ -14,6 +14,13 @@ describe('isTiptapDocument', () => {
 });
 
 describe('tiptapToMarkdown', () => {
+  it('serializes a blank document as an empty body without a stray list marker', () => {
+    expect(tiptapToMarkdown({ type: 'doc', content: [] })).toBe('');
+    expect(tiptapToMarkdown({ type: 'doc', content: [{ type: 'paragraph', content: [] }] })).toBe(
+      '',
+    );
+  });
+
   it('serializes the bounded editor nodes and marks to compatible Markdown', () => {
     expect(
       tiptapToMarkdown({
