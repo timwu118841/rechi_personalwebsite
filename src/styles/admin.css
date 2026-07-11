@@ -287,11 +287,11 @@ button.secondary,
 .tiptap-canvas {
   position: relative;
 }
-.tiptap-editor .ProseMirror p:first-child:only-child:empty::before {
-  float: left;
+.tiptap-editor .ProseMirror.is-empty::before {
+  display: block;
   height: 0;
   color: #8a958b;
-  content: attr(data-placeholder);
+  content: '輸入內容，或輸入 / 選擇區塊';
   pointer-events: none;
 }
 .tiptap-slash-menu {

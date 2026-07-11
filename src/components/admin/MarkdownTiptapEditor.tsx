@@ -151,6 +151,9 @@ export default function MarkdownTiptapEditor({
     editorProps: {
       attributes: { 'data-placeholder': '輸入內容，或輸入 / 選擇區塊' },
     },
+    onCreate: ({ editor: nextEditor }) => {
+      nextEditor.view.dom.classList.toggle('is-empty', !nextEditor.state.doc.textContent);
+    },
     onUpdate: ({ editor: nextEditor }) => {
       const document = nextEditor.getJSON();
       const text = nextEditor.state.doc.textContent;
@@ -160,6 +163,7 @@ export default function MarkdownTiptapEditor({
       });
       onChange(tiptapToMarkdown(document));
       onDocumentChange?.(document);
+      nextEditor.view.dom.classList.toggle('is-empty', !text);
       const { $from } = nextEditor.state.selection;
       const blockText = $from.parent.textContent;
       const match = blockText.match(/^\/([\w-]*)$/);
