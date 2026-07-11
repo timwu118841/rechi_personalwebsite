@@ -2,7 +2,6 @@ export interface SupabaseEnvironment {
   url: string;
   publishableKey: string;
   secretKey: string;
-  adminEmails: string[];
   passwordLoginEnabled: boolean;
 }
 
@@ -35,7 +34,6 @@ export function getSupabaseEnvironment(): SupabaseEnvironment | null {
     ...publicConfig,
     secretKey,
     passwordLoginEnabled: isPasswordLoginEnabled(),
-    adminEmails: read('ADMIN_EMAILS').split(',').map(normalizeAdminEmail).filter(Boolean),
   };
 }
 

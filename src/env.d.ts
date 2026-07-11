@@ -9,7 +9,6 @@ interface ImportMetaEnv {
   readonly PUBLIC_SUPABASE_PUBLISHABLE_KEY?: string;
   readonly PUBLIC_ADMIN_PASSWORD_LOGIN?: string;
   readonly SUPABASE_SECRET_KEY?: string;
-  readonly ADMIN_EMAILS?: string;
   readonly ALLOW_FIXTURE_CONTENT?: string;
   readonly PUBLIC_UMAMI_WEBSITE_ID?: string;
   readonly PUBLIC_UMAMI_SCRIPT_URL?: string;
