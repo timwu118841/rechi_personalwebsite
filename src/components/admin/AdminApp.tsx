@@ -520,7 +520,9 @@ function ArticleEditor({
               <MarkdownTiptapEditor
                 value={value.body}
                 bodyJson={value.bodyJson}
-                onChange={(body) => setValue((current) => ({ ...current, body, bodyJson: undefined }))}
+                onChange={(body) =>
+                  setValue((current) => ({ ...current, body, bodyJson: undefined }))
+                }
                 onDocumentChange={(document: JSONContent) => set('bodyJson', document)}
                 onUpload={upload}
               />
