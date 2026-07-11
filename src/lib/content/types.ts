@@ -27,6 +27,10 @@ export interface Article {
   title: string;
   description: string;
   body: string;
+  /** Rich editor document. Legacy articles may omit this value. */
+  bodyJson?: unknown;
+  /** Sanitized HTML generated on the server from bodyJson. */
+  bodyHtml?: string;
   status: ArticleStatus;
   publishedAt: Date;
   updatedAt?: Date;
@@ -96,6 +100,7 @@ export type ArticleInput = Omit<
   Article,
   'id' | 'contentTypeName' | 'categoryName' | 'createdAt' | 'updatedAt'
 > & {
+  bodyJson?: unknown;
   updatedAt?: Date;
 };
 

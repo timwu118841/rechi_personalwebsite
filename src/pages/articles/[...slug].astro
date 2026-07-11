@@ -4,7 +4,7 @@ import TagList from '@/components/TagList.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { formatDate, readingTimeMinutes } from '@/lib/articles';
 import { getContentRepository } from '@/lib/content/repository';
-import { renderMarkdown } from '@/lib/content/markdown';
+import { renderMarkdown, renderRichText } from '@/lib/content/markdown';
 
 const slug = Astro.params.slug || '';
 const repository = getContentRepository();
@@ -24,7 +24,7 @@ const canonical =
 const articleUrl = new URL(`/articles/${article.slug}/`, Astro.site).toString();
 const image = article.cover || settings.defaultSocialImage;
 const minutes = readingTimeMinutes(article.body);
-const bodyHtml = renderMarkdown(article.body);
+const bodyHtml = article.bodyHtml || (article.bodyJson ? renderRichText(article.bodyJson) : renderMarkdown(article.body));
 const jsonLd = [
   {
     '@context': 'https://schema.org',

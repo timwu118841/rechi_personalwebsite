@@ -12,6 +12,7 @@ import type {
   SiteSettings,
   SiteSettingsInput,
 } from './types';
+import { renderRichText } from './markdown';
 
 type RecordRow = Record<string, any>;
 
@@ -46,6 +47,8 @@ function articleFromRow(
     title: String(row.title),
     description: String(row.description),
     body: String(row.body_markdown || ''),
+    bodyJson: row.body_json || undefined,
+    bodyHtml: row.body_html || undefined,
     status: row.status,
     publishedAt: date(row.published_at),
     updatedAt: optionalDate(row.updated_at),
@@ -148,7 +151,7 @@ export class SupabaseContentRepository implements ContentRepository {
         .select('*')
         .eq('status', 'published')
         .lte('published_at', new Date().toISOString())
-        .or(`title.ilike.%${term}%,description.ilike.%${term}%,body_markdown.ilike.%${term}%`)
+        .or(`title.ilike.%${term}%,description.ilike.%${term}%,body_markdown.ilike.%${term}%,body_html.ilike.%${term}%`)
         .order('published_at', { ascending: false })
         .limit(Math.min(50, limit)),
       this.taxonomyMaps(),
@@ -223,7 +226,9 @@ export class SupabaseContentRepository implements ContentRepository {
       slug: input.slug,
       title: input.title,
       description: input.description,
-      body_markdown: input.body,
+      body_markdown: input.body || null,
+      body_json: input.bodyJson || null,
+      body_html: input.bodyJson ? renderRichText(input.bodyJson) : null,
       status: input.status,
       published_at: input.publishedAt.toISOString(),
       content_type_slug: input.contentType,
