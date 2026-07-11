@@ -19,7 +19,8 @@ export const articleInputSchema = z
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, '網址代稱只能使用小寫英文、數字與連字號。'),
     title: z.string().min(1).max(120),
     description: z.string().min(20).max(180),
-    body: z.string().min(1),
+    body: z.string().default(''),
+    bodyJson: z.unknown().optional(),
     status: z.enum(['draft', 'published', 'unpublished']),
     publishedAt: z.coerce.date(),
     contentType: z.string().min(1).max(100),
@@ -34,6 +35,9 @@ export const articleInputSchema = z
     legalReviewed: z.boolean().default(false),
   })
   .superRefine((article, context) => {
+    if (!article.body.trim() && (!article.bodyJson || typeof article.bodyJson !== 'object')) {
+      context.addIssue({ code: 'custom', path: ['body'], message: '文章內容不可為空。' });
+    }
     if (article.status === 'published' && (!article.privacyReviewed || !article.legalReviewed)) {
       context.addIssue({
         code: 'custom',
