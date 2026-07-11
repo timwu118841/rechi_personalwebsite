@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { tiptapToMarkdown } from './MarkdownTiptapEditor';
+import { isTiptapDocument, tiptapToMarkdown } from './MarkdownTiptapEditor';
+
+describe('isTiptapDocument', () => {
+  it('accepts a persisted Tiptap document', () => {
+    expect(isTiptapDocument({ type: 'doc', content: [] })).toBe(true);
+  });
+
+  it('rejects malformed persisted JSON so the editor can remain in Markdown mode', () => {
+    expect(isTiptapDocument({ type: 'paragraph', content: [] })).toBe(false);
+    expect(isTiptapDocument({ type: 'doc', content: 'invalid' })).toBe(false);
+    expect(isTiptapDocument(null)).toBe(false);
+  });
+});
 
 describe('tiptapToMarkdown', () => {
   it('serializes the bounded editor nodes and marks to compatible Markdown', () => {
