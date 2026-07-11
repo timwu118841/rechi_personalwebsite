@@ -100,6 +100,10 @@ export class FixtureContentRepository implements ContentRepository {
     );
   }
 
+  async getArticleSlugRedirect() {
+    return null;
+  }
+
   async searchPublishedArticles(query: string, limit = 20) {
     const normalized = query.trim().toLocaleLowerCase('zh-Hant-TW');
     if (!normalized) return [];
