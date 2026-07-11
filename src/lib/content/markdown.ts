@@ -53,10 +53,13 @@ function richNodeHtml(node: RichNode): string {
   if (node.type === 'orderedList') return `<ol>${children}</ol>`;
   if (node.type === 'listItem') return children;
   if (node.type === 'heading') {
-    const level = Math.min(4, Math.max(2, Number(attrs.level) || 2));
+    const level = Math.min(3, Math.max(1, Number(attrs.level) || 2));
     return `<h${level}>${children}</h${level}>`;
   }
-  if (node.type === 'paragraph' || node.type === 'doc') return `<p>${children}</p>`;
+  if (node.type === 'paragraph') return `<p>${children}</p>`;
+  // A document is a container for block nodes; wrapping all children in a
+  // paragraph would create invalid nested markup such as <p><h2>…</h2></p>.
+  if (node.type === 'doc') return children;
   return children;
 }
 
@@ -80,6 +83,7 @@ const richHtmlOptions = {
     'a',
     'hr',
     'img',
+    'h1',
   ],
   allowedAttributes: {
     a: ['href', 'title', 'rel'],

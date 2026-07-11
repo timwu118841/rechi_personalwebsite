@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isTiptapDocument, tiptapToMarkdown } from './MarkdownTiptapEditor';
+import { isTiptapDocument, normalizeTiptapDocument, tiptapToMarkdown } from './MarkdownTiptapEditor';
 
 describe('isTiptapDocument', () => {
   it('accepts a persisted Tiptap document', () => {
@@ -14,6 +14,13 @@ describe('isTiptapDocument', () => {
 });
 
 describe('tiptapToMarkdown', () => {
+  it('serializes a blank document as an empty body without a stray list marker', () => {
+    expect(tiptapToMarkdown({ type: 'doc', content: [] })).toBe('');
+    expect(tiptapToMarkdown({ type: 'doc', content: [{ type: 'paragraph', content: [] }] })).toBe(
+      '',
+    );
+  });
+
   it('serializes the bounded editor nodes and marks to compatible Markdown', () => {
     expect(
       tiptapToMarkdown({
@@ -61,5 +68,48 @@ describe('tiptapToMarkdown', () => {
         ],
       }),
     ).toBe('```\nconst answer = 42;\n```\n\n![答案圖](/uploads/answer.png)');
+  });
+
+  it('does not serialize an empty ordered list as a stray list marker', () => {
+    expect(
+      tiptapToMarkdown({
+        type: 'doc',
+        content: [
+          {
+            type: 'orderedList',
+            content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [] }] }],
+          },
+        ],
+      }),
+    ).toBe('');
+  });
+});
+
+describe('normalizeTiptapDocument', () => {
+  it('drops unsupported nodes and marks while preserving supported descendants', () => {
+    expect(
+      normalizeTiptapDocument({
+        type: 'doc',
+        content: [
+          { type: 'customWidget', content: [{ type: 'paragraph', content: [{ type: 'text', text: '保留' }] }] },
+          { type: 'paragraph', content: [{ type: 'text', text: '格式', marks: [{ type: 'highlight' }, { type: 'bold' }] }] },
+        ],
+      }),
+    ).toEqual({
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: '保留' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: '格式', marks: [{ type: 'bold' }] }] },
+      ],
+    });
+  });
+
+  it('turns empty list artifacts into blank paragraphs', () => {
+    expect(
+      normalizeTiptapDocument({
+        type: 'doc',
+        content: [{ type: 'orderedList', content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [] }] }] }],
+      }),
+    ).toEqual({ type: 'doc', content: [{ type: 'paragraph', content: [] }] });
   });
 });
