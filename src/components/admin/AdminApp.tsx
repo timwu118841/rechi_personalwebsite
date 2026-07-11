@@ -38,8 +38,41 @@ type Tab = 'articles' | 'site' | 'taxonomies';
 
 function localDateTime(value?: string) {
   const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return localDateTime();
   const offset = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+/** Keep legacy/partially migrated rows from crashing the editor render. */
+export function normalizeAdminArticle(article: Partial<AdminArticle>): AdminArticle {
+  const bodyJson = article.bodyJson as { type?: unknown; content?: unknown } | undefined;
+  return {
+    id: typeof article.id === 'string' ? article.id : '',
+    slug: typeof article.slug === 'string' ? article.slug : '',
+    title: typeof article.title === 'string' ? article.title : '',
+    description: typeof article.description === 'string' ? article.description : '',
+    body: typeof article.body === 'string' ? article.body : '',
+    bodyJson:
+      bodyJson?.type === 'doc' && Array.isArray(bodyJson.content) ? article.bodyJson : undefined,
+    status:
+      article.status === 'published' || article.status === 'unpublished' ? article.status : 'draft',
+    publishedAt: localDateTime(article.publishedAt),
+    contentType: typeof article.contentType === 'string' ? article.contentType : '',
+    category: typeof article.category === 'string' ? article.category : '',
+    tags: Array.isArray(article.tags)
+      ? article.tags.filter((tag): tag is string => typeof tag === 'string')
+      : [],
+    featured: Boolean(article.featured),
+    cover:
+      article.cover && typeof article.cover === 'object' && typeof article.cover.url === 'string'
+        ? article.cover
+        : undefined,
+    seoTitle: typeof article.seoTitle === 'string' ? article.seoTitle : undefined,
+    seoDescription: typeof article.seoDescription === 'string' ? article.seoDescription : undefined,
+    canonicalUrl: typeof article.canonicalUrl === 'string' ? article.canonicalUrl : undefined,
+    privacyReviewed: Boolean(article.privacyReviewed),
+    legalReviewed: Boolean(article.legalReviewed),
+  };
 }
 
 async function imageDimensions(file: File) {
@@ -414,9 +447,7 @@ function ArticlesPanel({
           <button
             className="admin-list-item"
             key={article.id}
-            onClick={() =>
-              setEditing({ ...article, publishedAt: localDateTime(article.publishedAt) })
-            }
+            onClick={() => setEditing(normalizeAdminArticle(article))}
           >
             <span>
               <strong>{article.title}</strong>
