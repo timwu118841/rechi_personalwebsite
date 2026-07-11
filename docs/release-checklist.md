@@ -3,7 +3,11 @@
 ## Supabase 與 Vercel
 
 - [ ] 已套用 `supabase/migrations/202607100001_realtime_content.sql`
+- [ ] 已依序套用 `supabase/migrations/202607110001_rich_article_body.sql`
+- [ ] 已依序套用 `supabase/migrations/202607110002_unicode_article_slugs.sql`
+- [ ] 已依序套用 `supabase/migrations/202607110003_atomic_article_save.sql`
 - [ ] 已套用 `supabase/migrations/202607110004_admin_users.sql`，且 `public.admin_users` 只有核准、已驗證的 Auth 使用者
+- [ ] 已依序套用 `supabase/migrations/202607110005_admin_users_status.sql`，並確認管理員狀態欄位與索引已建立
 - [ ] Supabase 已啟用 Google provider、callback URI 與 `/admin` Redirect URL；`PUBLIC_ADMIN_PASSWORD_LOGIN` 已依相容期策略設定
 - [ ] Vercel 已設定 `SITE_URL`、Supabase 三個 key；未設定 `ALLOW_FIXTURE_CONTENT=true`
 - [ ] `npm run deploy:validate`、`npm run quality`、`npm run test:e2e:ci` 全部成功

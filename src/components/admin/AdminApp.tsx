@@ -134,7 +134,7 @@ export default function AdminApp({
     return (
       <AdminNotice
         title="管理後台尚未連接資料庫"
-        message="請先設定 PUBLIC_SUPABASE_URL、PUBLIC_SUPABASE_PUBLISHABLE_KEY、SUPABASE_SECRET_KEY 與 ADMIN_EMAILS。公開網站目前仍可使用本機示範內容。"
+        message="請先設定 PUBLIC_SUPABASE_URL 與 PUBLIC_SUPABASE_PUBLISHABLE_KEY。管理員權限由 Supabase 的 admin_users 資料表判定；敏感金鑰只應設定在伺服器環境。公開網站目前仍可使用本機示範內容。"
       />
     );
   }
