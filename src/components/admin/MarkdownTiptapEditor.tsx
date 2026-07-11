@@ -137,6 +137,7 @@ export default function MarkdownTiptapEditor({
   const [richMode, setRichMode] = useState(Boolean(richDocument) || !value);
   const [linkUrl, setLinkUrl] = useState('');
   const [documentStats, setDocumentStats] = useState({ characters: 0, words: 0 });
+  const [uploadError, setUploadError] = useState('');
   const [slashMenu, setSlashMenu] = useState<{ query: string; from: number; index: number } | null>(
     null,
   );
