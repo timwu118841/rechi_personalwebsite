@@ -29,8 +29,10 @@ declare
   v_article public.articles%rowtype;
   v_old_slug text;
   v_redirect_owner uuid;
+  v_lock_a text;
+  v_lock_b text;
 begin
-  if p_slug is null or btrim(p_slug) = '' then
+  if not public.is_valid_article_slug(p_slug) then
     raise exception '網址代稱不可為空。' using errcode = '22023', detail = 'slug';
   end if;
 
@@ -47,6 +49,18 @@ begin
     if not found then
       raise exception '找不到文章。' using errcode = 'P0002';
     end if;
+  end if;
+
+  v_lock_a := lower(p_slug);
+  v_lock_b := case when v_old_slug is not null and v_old_slug <> p_slug then lower(v_old_slug) else null end;
+  if v_lock_b is null or v_lock_a = v_lock_b then
+    perform pg_advisory_xact_lock(hashtext(v_lock_a), 0);
+  elsif v_lock_a < v_lock_b then
+    perform pg_advisory_xact_lock(hashtext(v_lock_a), 0);
+    perform pg_advisory_xact_lock(hashtext(v_lock_b), 0);
+  else
+    perform pg_advisory_xact_lock(hashtext(v_lock_b), 0);
+    perform pg_advisory_xact_lock(hashtext(v_lock_a), 0);
   end if;
 
   if exists (
@@ -174,3 +188,25 @@ grant execute on function public.save_article(
   boolean,
   boolean
 ) to service_role;
+
+revoke execute on function public.save_article(
+  uuid,
+  text,
+  text,
+  text,
+  text,
+  jsonb,
+  text,
+  text,
+  timestamptz,
+  text,
+  text,
+  text[],
+  boolean,
+  jsonb,
+  text,
+  text,
+  text,
+  boolean,
+  boolean
+) from public, anon, authenticated;

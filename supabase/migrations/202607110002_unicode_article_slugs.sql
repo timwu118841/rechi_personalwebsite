@@ -1,8 +1,24 @@
 -- Unicode article slugs and one-hop SEO redirects.
+create or replace function public.is_valid_article_slug(value text)
+returns boolean
+language sql
+immutable
+set search_path = public
+as $$
+  select
+    value is not null
+    and value = btrim(value)
+    and char_length(value) between 1 and 120
+    and value !~ '[[:space:][:cntrl:]/?#%]'
+    and value !~ '(^-|-$)'
+    and value !~ '_'
+    and value ~ '^[[:word:]-]+$'
+    and translate(value, U&'\200B\200C\200D\2060\FEFF', '') = value
+$$;
+
 alter table public.articles drop constraint if exists articles_slug_check;
 alter table public.articles add constraint articles_slug_unicode_check check (
-  char_length(slug) between 1 and 120 and slug !~ '[[:space:][:cntrl:]/?#%]' and
-  slug !~ '(^-|-$)' and translate(slug, U&'\200B\200C\200D\2060\FEFF', '') = slug
+  public.is_valid_article_slug(slug)
 );
 create unique index if not exists articles_slug_lower_unique on public.articles (lower(slug));
 
@@ -11,9 +27,7 @@ create table if not exists public.article_slug_redirects (
   article_id uuid not null references public.articles(id) on delete cascade,
   created_at timestamptz not null default now(),
   constraint article_slug_redirects_old_slug_check check (
-    char_length(old_slug) between 1 and 120 and
-    old_slug !~ '[[:space:][:cntrl:]/?#%]' and
-    old_slug !~ '(^-|-$)' and translate(old_slug, U&'\200B\200C\200D\2060\FEFF', '') = old_slug
+    public.is_valid_article_slug(old_slug)
   )
 );
 alter table public.article_slug_redirects enable row level security;
