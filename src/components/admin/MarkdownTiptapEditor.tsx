@@ -8,9 +8,17 @@ import type { MediaAsset } from '@/lib/content/types';
 
 type Props = {
   value: string;
+  bodyJson?: unknown;
   onChange: (value: string) => void;
+  onDocumentChange?: (document: JSONContent) => void;
   onUpload?: (file: File, alt: string) => Promise<MediaAsset>;
 };
+
+function isTiptapDocument(value: unknown): value is JSONContent {
+  if (!value || typeof value !== 'object') return false;
+  const document = value as { type?: unknown; content?: unknown };
+  return document.type === 'doc' && Array.isArray(document.content);
+}
 
 function escapeHtml(value: string) {
   return value.replace(
@@ -63,8 +71,15 @@ export function tiptapToMarkdown(document: JSONContent) {
     .trim();
 }
 
-export default function MarkdownTiptapEditor({ value, onChange, onUpload }: Props) {
-  const [richMode, setRichMode] = useState(!value);
+export default function MarkdownTiptapEditor({
+  value,
+  bodyJson,
+  onChange,
+  onDocumentChange,
+  onUpload,
+}: Props) {
+  const richDocument = isTiptapDocument(bodyJson) ? bodyJson : undefined;
+  const [richMode, setRichMode] = useState(Boolean(richDocument) || !value);
   const [linkUrl, setLinkUrl] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
   const editor = useEditor({
@@ -75,8 +90,12 @@ export default function MarkdownTiptapEditor({ value, onChange, onUpload }: Prop
       Link.configure({ openOnClick: false, protocols: ['http', 'https', 'mailto'] }),
       Image.configure({ inline: false, allowBase64: false }),
     ],
-    content: value ? `<p>${escapeHtml(value)}</p>` : '<p></p>',
-    onUpdate: ({ editor: nextEditor }) => onChange(tiptapToMarkdown(nextEditor.getJSON())),
+    content: richDocument || (value ? `<p>${escapeHtml(value)}</p>` : '<p></p>'),
+    onUpdate: ({ editor: nextEditor }) => {
+      const document = nextEditor.getJSON();
+      onChange(tiptapToMarkdown(document));
+      onDocumentChange?.(document);
+    },
   });
 
   if (!richMode) {

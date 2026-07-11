@@ -1,6 +1,7 @@
 import { createClient, type Session } from '@supabase/supabase-js';
 import { lazy, Suspense, type SyntheticEvent, useEffect, useMemo, useState } from 'react';
 import type { Category, ContentType, MediaAsset, SiteSettings } from '@/lib/content/types';
+import type { JSONContent } from '@tiptap/react';
 import '@/styles/admin.css';
 
 const MarkdownTiptapEditor = lazy(() => import('./MarkdownTiptapEditor'));
@@ -17,6 +18,7 @@ interface AdminArticle {
   title: string;
   description: string;
   body: string;
+  bodyJson?: unknown;
   status: 'draft' | 'published' | 'unpublished';
   publishedAt: string;
   contentType: string;
@@ -517,7 +519,9 @@ function ArticleEditor({
             <Suspense fallback={<div className="tiptap-editor-loading">正在載入編輯器…</div>}>
               <MarkdownTiptapEditor
                 value={value.body}
-                onChange={(body) => set('body', body)}
+                bodyJson={value.bodyJson}
+                onChange={(body) => setValue((current) => ({ ...current, body, bodyJson: undefined }))}
+                onDocumentChange={(document: JSONContent) => set('bodyJson', document)}
                 onUpload={upload}
               />
             </Suspense>
