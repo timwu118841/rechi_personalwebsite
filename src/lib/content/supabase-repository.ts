@@ -25,6 +25,41 @@ function optionalDate(value: unknown): Date | undefined {
   return value ? date(value) : undefined;
 }
 
+function slugConflictError(field: 'slug' | 'old_slug' = 'slug') {
+  const error = new Error('網址代稱已被使用，請更換後再儲存。') as Error & {
+    code: string;
+    field: string;
+    constraint: string;
+    detail: string;
+  };
+  error.code = '23505';
+  error.field = field;
+  error.constraint = field === 'slug' ? 'articles_slug_lower_unique' : 'article_slug_redirects_old_slug_key';
+  error.detail = field;
+  return error;
+}
+
+function slugConflictKind(error: unknown): 'slug' | 'old_slug' | null {
+  const value = error as {
+    code?: string;
+    field?: string;
+    constraint?: string;
+    detail?: string;
+  };
+  if (value?.code !== '23505') return null;
+  if (
+    value.field === 'old_slug' ||
+    value.constraint?.includes('old_slug') ||
+    value.detail === 'old_slug'
+  ) {
+    return 'old_slug';
+  }
+  if (value.field === 'slug' || value.constraint?.includes('slug') || value.detail === 'slug') {
+    return 'slug';
+  }
+  return null;
+}
+
 function media(value: unknown): MediaAsset | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const item = value as RecordRow;
@@ -248,49 +283,73 @@ export class SupabaseContentRepository implements ContentRepository {
       ? await this.client.from('articles').select('slug').eq('id', id).maybeSingle()
       : { data: null, error: null };
     if (previous.error) throw previous.error;
-    const oldSlug = previous.data?.slug ? String(previous.data.slug) : undefined;
-    const baseSlug = input.slug || slugFromTitle(input.title, 'article');
-    let slug = baseSlug;
-    const { data: existing, error: slugError } = await this.client
-      .from('articles').select('id,slug').ilike('slug', `${baseSlug}%`);
-    if (slugError) throw slugError;
-    const taken = new Set((existing || []).filter((row) => !id || String(row.id) !== id).map((row) => String(row.slug).toLocaleLowerCase()));
-    if (!id && taken.has(slug.toLocaleLowerCase())) {
-      let index = 2;
-      while (taken.has(withCollisionSuffix(baseSlug, index).toLocaleLowerCase())) index += 1;
-      slug = withCollisionSuffix(baseSlug, index);
+    const manualSlug = input.slug;
+    const generatedSlug = slugFromTitle(input.title, 'article');
+    const isManualSlug = Boolean(manualSlug);
+    let slug = isManualSlug ? manualSlug : generatedSlug;
+    let collisionIndex = 2;
+    if (isManualSlug) {
+      const { data: existing, error: slugError } = await this.client
+        .from('articles')
+        .select('id,slug')
+        .ilike('slug', slug);
+      if (slugError) throw slugError;
+      const conflict = (existing || []).find((row) => !id || String(row.id) !== id);
+      if (conflict) throw slugConflictError('slug');
+    } else {
+      const { data: existing, error: slugError } = await this.client
+        .from('articles')
+        .select('id,slug')
+        .ilike('slug', `${generatedSlug}%`);
+      if (slugError) throw slugError;
+      const taken = new Set(
+        (existing || [])
+          .filter((row) => !id || String(row.id) !== id)
+          .map((row) => String(row.slug).toLocaleLowerCase()),
+      );
+      if (taken.has(slug.toLocaleLowerCase())) {
+        while (taken.has(withCollisionSuffix(generatedSlug, collisionIndex).toLocaleLowerCase())) {
+          collisionIndex += 1;
+        }
+        slug = withCollisionSuffix(generatedSlug, collisionIndex);
+      }
     }
-    const values = {
-      slug,
-      title: input.title,
-      description: input.description,
-      body_markdown: input.body || null,
-      body_json: input.bodyJson || null,
-      body_html: input.bodyJson ? renderRichText(input.bodyJson) : null,
-      status: input.status,
-      published_at: input.publishedAt.toISOString(),
-      content_type_slug: input.contentType,
-      category_slug: input.category,
-      tags: input.tags,
-      featured: input.featured,
-      cover: input.cover || null,
-      seo_title: input.seoTitle || null,
-      seo_description: input.seoDescription || null,
-      canonical_url: input.canonicalUrl || null,
-      privacy_reviewed: input.privacyReviewed,
-      legal_reviewed: input.legalReviewed,
-      updated_at: new Date().toISOString(),
-    };
-    const request = id
-      ? this.client.from('articles').update(values).eq('id', id).select('*').single()
-      : this.client.from('articles').insert(values).select('*').single();
-    const [{ data, error }, maps] = await Promise.all([request, this.taxonomyMaps()]);
-    if (error) throw error;
-    if (id && oldSlug && oldSlug !== slug) {
-      const redirect = await this.client.from('article_slug_redirects').upsert({ old_slug: oldSlug, article_id: id }, { onConflict: 'old_slug' });
-      if (redirect.error) throw redirect.error;
+    const mapsPromise = this.taxonomyMaps();
+    for (;;) {
+      const request = this.client.rpc('save_article', {
+        p_article_id: id || null,
+        p_slug: slug,
+        p_title: input.title,
+        p_description: input.description,
+        p_body_markdown: input.body || null,
+        p_body_json: input.bodyJson || null,
+        p_body_html: input.bodyJson ? renderRichText(input.bodyJson) : null,
+        p_status: input.status,
+        p_published_at: input.publishedAt.toISOString(),
+        p_content_type_slug: input.contentType,
+        p_category_slug: input.category,
+        p_tags: input.tags,
+        p_featured: input.featured,
+        p_cover: input.cover || null,
+        p_seo_title: input.seoTitle || null,
+        p_seo_description: input.seoDescription || null,
+        p_canonical_url: input.canonicalUrl || null,
+        p_privacy_reviewed: input.privacyReviewed,
+        p_legal_reviewed: input.legalReviewed,
+      });
+      const [{ data, error }, maps] = await Promise.all([request, mapsPromise]);
+      if (error) {
+        const conflictKind = slugConflictKind(error);
+        if (generatedSlug && conflictKind === 'slug' && !isManualSlug) {
+          collisionIndex += 1;
+          slug = withCollisionSuffix(generatedSlug, collisionIndex);
+          continue;
+        }
+        if (conflictKind) throw slugConflictError(conflictKind);
+        throw error;
+      }
+      return articleFromRow(data, maps.categories, maps.contentTypes);
     }
-    return articleFromRow(data, maps.categories, maps.contentTypes);
   }
 
   async saveSiteSettings(input: SiteSettingsInput) {

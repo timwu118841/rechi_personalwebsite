@@ -9,6 +9,7 @@ export default [
       'dist/**',
       '.astro/**',
       '.vercel/**',
+      '.omx/**',
       'node_modules/**',
       'playwright-report/**',
       'test-results/**',

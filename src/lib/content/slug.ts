@@ -1,14 +1,17 @@
 const ZERO_WIDTH = /[\u200B-\u200D\u2060\uFEFF]/u;
-// eslint-disable-next-line no-control-regex
-const INVALID = `[\\u0000-\\u001F\\u007F\\u2028\\u2029/?#%]`;
+const ALLOWED = /^[\p{L}\p{N}-]$/u;
 
 export function normalizeSlug(value: string): string {
   const normalized = value.normalize('NFC').trim();
-  if (!normalized || /\s/u.test(normalized) || new RegExp(INVALID, 'u').test(normalized) || ZERO_WIDTH.test(normalized)) {
+  if (!normalized || ZERO_WIDTH.test(normalized)) {
     throw new Error('網址代稱含有不支援的字元。');
   }
   const slug = Array.from(normalized)
-    .map((character) => (/^[\p{L}\p{N}-]$/u.test(character) ? character : /\s/u.test(character) ? '-' : ''))
+    .map((character) => {
+      if (/\s/u.test(character)) return '-';
+      if (ALLOWED.test(character)) return character;
+      throw new Error('網址代稱必須只包含文字、數字、空白與連字號。');
+    })
     .join('')
     .replace(/-+/g, '-');
   if (!slug || slug.startsWith('-') || slug.endsWith('-') || Array.from(slug).length > 120) {
@@ -20,7 +23,7 @@ export function normalizeSlug(value: string): string {
 export function slugFromTitle(title: string, fallback = 'article'): string {
   const normalized = title.normalize('NFC').trim();
   const generated = Array.from(normalized)
-    .map((character) => (/^[\p{L}\p{N}]$/u.test(character) ? character : /\s/u.test(character) ? '-' : ''))
+    .map((character) => (/[\s]/u.test(character) ? '-' : ALLOWED.test(character) ? character : ''))
     .join('')
     .replace(/-+/g, '-');
   const value = generated.replace(/^-|-$/g, '').slice(0, 120).replace(/-$/, '');
