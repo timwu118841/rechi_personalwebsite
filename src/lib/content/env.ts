@@ -7,7 +7,7 @@ export interface SupabaseEnvironment {
 }
 
 export function normalizeAdminEmail(email: string): string {
-  return email.trim().toLowerCase();
+  return email.normalize('NFKC').trim().toLowerCase();
 }
 
 function read(name: string): string {
@@ -18,7 +18,9 @@ function read(name: string): string {
 export function getPublicSupabaseConfig() {
   const url = read('PUBLIC_SUPABASE_URL');
   const publishableKey = read('PUBLIC_SUPABASE_PUBLISHABLE_KEY');
-  return url && publishableKey ? { url, publishableKey } : null;
+  return url && publishableKey
+    ? { url, publishableKey, passwordLoginEnabled: isPasswordLoginEnabled() }
+    : null;
 }
 
 export function isPasswordLoginEnabled(): boolean {

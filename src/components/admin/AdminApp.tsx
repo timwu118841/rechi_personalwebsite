@@ -70,7 +70,9 @@ export default function AdminApp({
   const client = useMemo(
     () =>
       supabaseUrl && supabasePublishableKey
-        ? createClient(supabaseUrl, supabasePublishableKey)
+        ? createClient(supabaseUrl, supabasePublishableKey, {
+            auth: { flowType: 'pkce', detectSessionInUrl: true },
+          })
         : null,
     [supabaseUrl, supabasePublishableKey],
   );
