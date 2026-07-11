@@ -101,10 +101,16 @@ function serializeNode(node: JSONContent, depth = 0): string {
   if (node.type === 'blockquote')
     return children.map((child) => `> ${serializeNode(child, depth)}`).join('\n');
   if (node.type === 'bulletList')
-    return children.map((child) => `- ${serializeNode(child, depth + 1)}`).join('\n');
+    return children
+      .map((child) => serializeNode(child, depth + 1))
+      .filter(Boolean)
+      .map((content) => `- ${content}`)
+      .join('\n');
   if (node.type === 'orderedList')
     return children
-      .map((child, index) => `${index + 1}. ${serializeNode(child, depth + 1)}`)
+      .map((child) => serializeNode(child, depth + 1))
+      .filter(Boolean)
+      .map((content, index) => `${index + 1}. ${content}`)
       .join('\n');
   if (node.type === 'listItem')
     return children.map((child) => serializeNode(child, depth)).join('\n');
@@ -139,6 +145,13 @@ export default function MarkdownTiptapEditor({
   );
   const editorShell = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const mounted = useRef(true);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    [],
+  );
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -364,6 +377,7 @@ export default function MarkdownTiptapEditor({
                   setUploadError('');
                   try {
                     const asset = await onUpload(file, alt);
+                    if (!mounted.current) return;
                     editor
                       .chain()
                       .focus()

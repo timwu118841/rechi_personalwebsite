@@ -69,4 +69,18 @@ describe('tiptapToMarkdown', () => {
       }),
     ).toBe('```\nconst answer = 42;\n```\n\n![答案圖](/uploads/answer.png)');
   });
+
+  it('does not serialize an empty ordered list as a stray list marker', () => {
+    expect(
+      tiptapToMarkdown({
+        type: 'doc',
+        content: [
+          {
+            type: 'orderedList',
+            content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [] }] }],
+          },
+        ],
+      }),
+    ).toBe('');
+  });
 });

@@ -830,6 +830,7 @@ function MediaUpload({
 }) {
   const [alt, setAlt] = useState(value?.alt || '');
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
   return (
     <fieldset>
       <legend>{label}</legend>
@@ -847,15 +848,22 @@ function MediaUpload({
             const file = event.target.files?.[0];
             if (!file || !alt.trim()) return;
             setBusy(true);
+            setError('');
             try {
               onChange(await upload(file, alt.trim()));
+            } catch (uploadError) {
+              setError(
+                uploadError instanceof Error ? uploadError.message : '圖片上傳失敗，請再試一次。',
+              );
             } finally {
+              event.target.value = '';
               setBusy(false);
             }
           }}
         />
       </label>
       {busy && <small>圖片上傳中…</small>}
+      {error && <small role="alert">{error}</small>}
     </fieldset>
   );
 }
