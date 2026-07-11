@@ -657,7 +657,9 @@ function ArticleEditor({
                   try {
                     set('cover', await upload(file, altInput.value.trim()));
                   } catch (error) {
-                    setUploadError(error instanceof Error ? error.message : '圖片上傳失敗，請再試一次。');
+                    setUploadError(
+                      error instanceof Error ? error.message : '圖片上傳失敗，請再試一次。',
+                    );
                   } finally {
                     event.target.value = '';
                     setUploading(false);
