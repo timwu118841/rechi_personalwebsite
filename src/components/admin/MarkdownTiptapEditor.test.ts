@@ -83,6 +83,24 @@ describe('tiptapToMarkdown', () => {
       }),
     ).toBe('');
   });
+
+  it('preserves hard breaks created by Shift+Enter', () => {
+    expect(
+      tiptapToMarkdown({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'text', text: '第一行' },
+              { type: 'hardBreak' },
+              { type: 'text', text: '第二行' },
+            ],
+          },
+        ],
+      }),
+    ).toBe('第一行\n第二行');
+  });
 });
 
 describe('normalizeTiptapDocument', () => {

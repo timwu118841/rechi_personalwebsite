@@ -335,6 +335,14 @@ export default function MarkdownTiptapEditor({
       className="tiptap-editor"
       ref={editorShell}
       onKeyDown={(event) => {
+        // Handle hard breaks before the slash-command Enter handler. Without
+        // this, Shift+Enter is treated as selecting the active command.
+        if (event.key === 'Enter' && event.shiftKey) {
+          event.preventDefault();
+          editor.chain().focus().setHardBreak().run();
+          setSlashMenu(null);
+          return;
+        }
         if (!slashMenu || !slashMatches.length) return;
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
           event.preventDefault();
