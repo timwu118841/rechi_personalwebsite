@@ -100,8 +100,9 @@ export function normalizeTiptapDocument(value: unknown): JSONContent | undefined
     if (!supportedNodes.has(String(node.type))) return children;
     if (node.type === 'doc') return children;
     if (node.type === 'text') {
+      const marks = (node.marks || []).filter((mark) => supportedMarks.has(String(mark.type)));
       return typeof node.text === 'string' && node.text
-        ? [{ type: 'text', text: node.text, marks: (node.marks || []).filter((mark) => supportedMarks.has(String(mark.type))) }]
+        ? [{ type: 'text', text: node.text, ...(marks.length ? { marks } : {}) }]
         : [];
     }
     if (node.type === 'image') {

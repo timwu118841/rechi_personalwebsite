@@ -98,7 +98,7 @@ describe('normalizeTiptapDocument', () => {
     ).toEqual({
       type: 'doc',
       content: [
-        { type: 'paragraph', content: [{ type: 'text', text: '保留', marks: [] }] },
+        { type: 'paragraph', content: [{ type: 'text', text: '保留' }] },
         { type: 'paragraph', content: [{ type: 'text', text: '格式', marks: [{ type: 'bold' }] }] },
       ],
     });
