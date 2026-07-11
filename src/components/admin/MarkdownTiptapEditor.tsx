@@ -14,7 +14,7 @@ type Props = {
   onUpload?: (file: File, alt: string) => Promise<MediaAsset>;
 };
 
-function isTiptapDocument(value: unknown): value is JSONContent {
+export function isTiptapDocument(value: unknown): value is JSONContent {
   if (!value || typeof value !== 'object') return false;
   const document = value as { type?: unknown; content?: unknown };
   return document.type === 'doc' && Array.isArray(document.content);
