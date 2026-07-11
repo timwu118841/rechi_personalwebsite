@@ -30,13 +30,21 @@ export async function requireAdmin(request: Request): Promise<AdminIdentity> {
   });
   const { data: admin, error: adminError } = await adminClient
     .from('admin_users')
-    .select('user_id')
-    .eq('user_id', user.id)
+    .select('user_id, auth_user_id, is_active')
+    .eq('email', email)
+    .eq('is_active', true)
     .maybeSingle();
   if (adminError) {
     throw new Response('管理權限資料庫尚未完成設定。', { status: 503 });
   }
   if (!admin) {
+    throw new Response('這個帳號沒有管理權限。', { status: 403 });
+  }
+  // Email is the stable, normalized identity key. When a row has an explicit
+  // Auth identity (or the legacy user_id), require it to match as well so a
+  // reused/changed email can never inherit another account's access.
+  const linkedUserId = admin.auth_user_id ?? admin.user_id;
+  if (linkedUserId && linkedUserId !== user.id) {
     throw new Response('這個帳號沒有管理權限。', { status: 403 });
   }
   return { id: user.id, email };
