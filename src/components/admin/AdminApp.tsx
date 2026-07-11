@@ -515,7 +515,11 @@ function ArticleEditor({
           <label>
             文章內容
             <Suspense fallback={<div className="tiptap-editor-loading">正在載入編輯器…</div>}>
-              <MarkdownTiptapEditor value={value.body} onChange={(body) => set('body', body)} onUpload={upload} />
+              <MarkdownTiptapEditor
+                value={value.body}
+                onChange={(body) => set('body', body)}
+                onUpload={upload}
+              />
             </Suspense>
           </label>
         </div>
