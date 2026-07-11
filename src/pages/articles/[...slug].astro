@@ -28,7 +28,9 @@ const canonical =
 const articleUrl = new URL(`/articles/${article.slug}/`, Astro.site).toString();
 const image = article.cover || settings.defaultSocialImage;
 const minutes = readingTimeMinutes(article.body);
-const bodyHtml = article.bodyHtml || (article.bodyJson ? renderRichText(article.bodyJson) : renderMarkdown(article.body));
+const bodyHtml =
+  article.bodyHtml ||
+  (article.bodyJson ? renderRichText(article.bodyJson) : renderMarkdown(article.body));
 const jsonLd = [
   {
     '@context': 'https://schema.org',

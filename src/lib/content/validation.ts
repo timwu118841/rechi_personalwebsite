@@ -18,7 +18,10 @@ export const articleInputSchema = z
       try {
         return normalizeSlug(value);
       } catch (error) {
-        context.addIssue({ code: 'custom', message: error instanceof Error ? error.message : '網址代稱格式錯誤。' });
+        context.addIssue({
+          code: 'custom',
+          message: error instanceof Error ? error.message : '網址代稱格式錯誤。',
+        });
         return z.NEVER;
       }
     }),

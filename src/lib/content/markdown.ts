@@ -12,9 +12,17 @@ type RichNode = {
 };
 
 function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  })[character] || character);
+  return value.replace(
+    /[&<>"']/g,
+    (character) =>
+      ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      })[character] || character,
+  );
 }
 
 function richNodeHtml(node: RichNode): string {
@@ -54,14 +62,43 @@ function richNodeHtml(node: RichNode): string {
 
 const richHtmlOptions = {
   allowedTags: [
-    'p', 'br', 'strong', 'em', 'u', 'del', 'blockquote', 'ul', 'ol', 'li', 'h2', 'h3', 'h4',
-    'pre', 'code', 'a', 'hr', 'img',
+    'p',
+    'br',
+    'strong',
+    'em',
+    'u',
+    'del',
+    'blockquote',
+    'ul',
+    'ol',
+    'li',
+    'h2',
+    'h3',
+    'h4',
+    'pre',
+    'code',
+    'a',
+    'hr',
+    'img',
   ],
-  allowedAttributes: { a: ['href', 'title', 'rel'], img: ['src', 'alt', 'title', 'width', 'height', 'loading'], code: ['class'] },
+  allowedAttributes: {
+    a: ['href', 'title', 'rel'],
+    img: ['src', 'alt', 'title', 'width', 'height', 'loading'],
+    code: ['class'],
+  },
   allowedSchemes: ['http', 'https', 'mailto'],
   transformTags: {
-    a: (_tagName: string, attribs: Record<string, string>) => ({ tagName: 'a', attribs: { ...attribs, ...(attribs.href?.startsWith('http') ? { rel: 'noopener noreferrer' } : {}) } }),
-    img: (_tagName: string, attribs: Record<string, string>) => ({ tagName: 'img', attribs: { ...attribs, loading: 'lazy' } }),
+    a: (_tagName: string, attribs: Record<string, string>) => ({
+      tagName: 'a',
+      attribs: {
+        ...attribs,
+        ...(attribs.href?.startsWith('http') ? { rel: 'noopener noreferrer' } : {}),
+      },
+    }),
+    img: (_tagName: string, attribs: Record<string, string>) => ({
+      tagName: 'img',
+      attribs: { ...attribs, loading: 'lazy' },
+    }),
   },
 };
 

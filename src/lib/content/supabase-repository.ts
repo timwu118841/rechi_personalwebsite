@@ -34,7 +34,8 @@ function slugConflictError(field: 'slug' | 'old_slug' = 'slug') {
   };
   error.code = '23505';
   error.field = field;
-  error.constraint = field === 'slug' ? 'articles_slug_lower_unique' : 'article_slug_redirects_old_slug_key';
+  error.constraint =
+    field === 'slug' ? 'articles_slug_lower_unique' : 'article_slug_redirects_old_slug_key';
   error.detail = field;
   return error;
 }
@@ -192,7 +193,13 @@ export class SupabaseContentRepository implements ContentRepository {
 
   private async getPublishedArticleById(id: string) {
     const [{ data, error }, maps] = await Promise.all([
-      this.client.from('articles').select('*').eq('id', id).eq('status', 'published').lte('published_at', new Date().toISOString()).maybeSingle(),
+      this.client
+        .from('articles')
+        .select('*')
+        .eq('id', id)
+        .eq('status', 'published')
+        .lte('published_at', new Date().toISOString())
+        .maybeSingle(),
       this.taxonomyMaps(),
     ]);
     if (error) throw error;
@@ -208,7 +215,9 @@ export class SupabaseContentRepository implements ContentRepository {
         .select('*')
         .eq('status', 'published')
         .lte('published_at', new Date().toISOString())
-        .or(`title.ilike.%${term}%,description.ilike.%${term}%,body_markdown.ilike.%${term}%,body_html.ilike.%${term}%`)
+        .or(
+          `title.ilike.%${term}%,description.ilike.%${term}%,body_markdown.ilike.%${term}%,body_html.ilike.%${term}%`,
+        )
         .order('published_at', { ascending: false })
         .limit(Math.min(50, limit)),
       this.taxonomyMaps(),

@@ -491,15 +491,14 @@ function ArticleEditor({
             網址代稱
             <input
               value={value.slug}
-              onChange={(event) =>
-                set(
-                  'slug',
-                  event.target.value.normalize('NFC'),
-                )
-              }
+              onChange={(event) => set('slug', event.target.value.normalize('NFC'))}
               maxLength={120}
             />
-            <button type="button" className="secondary" onClick={() => set('slug', slugFromTitle(value.title))}>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => set('slug', slugFromTitle(value.title))}
+            >
               {value.slug ? '重新產生網址代稱' : '依標題產生網址代稱'}
             </button>
           </label>
