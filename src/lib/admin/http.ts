@@ -31,6 +31,7 @@ export function errorResponse(error: unknown) {
     field?: string;
     constraint?: string;
     detail?: string;
+    details?: string;
   };
   if (value?.code === '23505') {
     const message = '網址代稱已被使用，請更換後再儲存。';
@@ -40,7 +41,9 @@ export function errorResponse(error: unknown) {
     if (
       value.constraint?.includes('slug') ||
       value.detail?.includes('slug') ||
-      value.detail?.includes('old_slug')
+      value.detail?.includes('old_slug') ||
+      value.details?.includes('slug') ||
+      value.details?.includes('old_slug')
     ) {
       return json({ message, fields: { slug: message } }, { status: 409 });
     }

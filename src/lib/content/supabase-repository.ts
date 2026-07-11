@@ -43,19 +43,26 @@ function slugConflictError(field: 'slug' | 'old_slug' = 'slug') {
 function slugConflictKind(error: unknown): 'slug' | 'old_slug' | null {
   const value = error as {
     code?: string;
-    field?: string;
-    constraint?: string;
-    detail?: string;
-  };
+  field?: string;
+  constraint?: string;
+  detail?: string;
+  details?: string;
+};
   if (value?.code !== '23505') return null;
   if (
     value.field === 'old_slug' ||
     value.constraint?.includes('old_slug') ||
-    value.detail === 'old_slug'
+    value.detail === 'old_slug' ||
+    value.details?.includes('old_slug')
   ) {
     return 'old_slug';
   }
-  if (value.field === 'slug' || value.constraint?.includes('slug') || value.detail === 'slug') {
+  if (
+    value.field === 'slug' ||
+    value.constraint?.includes('slug') ||
+    value.detail === 'slug' ||
+    value.details?.includes('slug')
+  ) {
     return 'slug';
   }
   return null;
