@@ -78,6 +78,7 @@ export interface ArticleQuery {
 export interface ContentRepository {
   listPublishedArticles(query?: ArticleQuery): Promise<PageResult<Article>>;
   getPublishedArticle(slug: string): Promise<Article | null>;
+  getArticleSlugRedirect(slug: string): Promise<string | null>;
   searchPublishedArticles(query: string, limit?: number): Promise<Article[]>;
   listCategories(options?: { includeHidden?: boolean }): Promise<Category[]>;
   listContentTypes(): Promise<ContentType[]>;

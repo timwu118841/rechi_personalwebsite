@@ -13,6 +13,7 @@ import type {
   SiteSettingsInput,
 } from './types';
 import { renderRichText } from './markdown';
+import { slugFromTitle, withCollisionSuffix } from './slug';
 
 type RecordRow = Record<string, any>;
 
@@ -142,6 +143,27 @@ export class SupabaseContentRepository implements ContentRepository {
     return data ? articleFromRow(data, maps.categories, maps.contentTypes) : null;
   }
 
+  async getArticleSlugRedirect(slug: string) {
+    const { data, error } = await this.client
+      .from('article_slug_redirects')
+      .select('article_id')
+      .eq('old_slug', slug)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    const article = await this.getPublishedArticleById(String(data.article_id));
+    return article?.slug || null;
+  }
+
+  private async getPublishedArticleById(id: string) {
+    const [{ data, error }, maps] = await Promise.all([
+      this.client.from('articles').select('*').eq('id', id).eq('status', 'published').lte('published_at', new Date().toISOString()).maybeSingle(),
+      this.taxonomyMaps(),
+    ]);
+    if (error) throw error;
+    return data ? articleFromRow(data, maps.categories, maps.contentTypes) : null;
+  }
+
   async searchPublishedArticles(query: string, limit = 20) {
     const term = query.trim().replace(/[,%()]/g, ' ');
     if (!term) return [];
@@ -222,8 +244,19 @@ export class SupabaseContentRepository implements ContentRepository {
   }
 
   async saveArticle(input: ArticleInput, id?: string) {
+    const baseSlug = input.slug || slugFromTitle(input.title, 'article');
+    let slug = baseSlug;
+    const { data: existing, error: slugError } = await this.client
+      .from('articles').select('slug').ilike('slug', `${baseSlug}%`);
+    if (slugError) throw slugError;
+    const taken = new Set((existing || []).filter((row) => !id || String(row.id) !== id).map((row) => String(row.slug).toLocaleLowerCase()));
+    if (!id && taken.has(slug.toLocaleLowerCase())) {
+      let index = 2;
+      while (taken.has(withCollisionSuffix(baseSlug, index).toLocaleLowerCase())) index += 1;
+      slug = withCollisionSuffix(baseSlug, index);
+    }
     const values = {
-      slug: input.slug,
+      slug,
       title: input.title,
       description: input.description,
       body_markdown: input.body || null,
@@ -248,6 +281,9 @@ export class SupabaseContentRepository implements ContentRepository {
       : this.client.from('articles').insert(values).select('*').single();
     const [{ data, error }, maps] = await Promise.all([request, this.taxonomyMaps()]);
     if (error) throw error;
+    if (id && String(data.slug) !== String((existing || []).find((row) => String(row.id) === id)?.slug || input.slug)) {
+      await this.client.from('article_slug_redirects').upsert({ old_slug: String((existing || []).find((row) => String(row.id) === id)?.slug || input.slug), article_id: id }, { onConflict: 'old_slug' });
+    }
     return articleFromRow(data, maps.categories, maps.contentTypes);
   }
 
