@@ -82,6 +82,7 @@ export default function MarkdownTiptapEditor({
   const [richMode, setRichMode] = useState(Boolean(richDocument) || !value);
   const [linkUrl, setLinkUrl] = useState('');
   const [documentStats, setDocumentStats] = useState({ characters: 0, words: 0 });
+  const [uploadError, setUploadError] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
   const editor = useEditor({
     immediatelyRender: false,
@@ -227,23 +228,32 @@ export default function MarkdownTiptapEditor({
                   if (!file) return;
                   const alt = window.prompt('圖片替代文字', file.name);
                   if (!alt) return;
-                  const asset = await onUpload(file, alt);
-                  editor
-                    .chain()
-                    .focus()
-                    .setImage({
-                      src: asset.url,
-                      alt: asset.alt,
-                      width: asset.width,
-                      height: asset.height,
-                    })
-                    .run();
-                  event.target.value = '';
+                  setUploadError('');
+                  try {
+                    const asset = await onUpload(file, alt);
+                    editor
+                      .chain()
+                      .focus()
+                      .setImage({
+                        src: asset.url,
+                        alt: asset.alt,
+                        width: asset.width,
+                        height: asset.height,
+                      })
+                      .run();
+                  } catch (error) {
+                    setUploadError(
+                      error instanceof Error ? error.message : '圖片上傳失敗，請再試一次。',
+                    );
+                  } finally {
+                    event.target.value = '';
+                  }
                 }}
               />
             </>
           )}
         </div>
+        {uploadError && <p role="alert">{uploadError}</p>}
         <div className="tiptap-toolbar-group" role="group" aria-label="編輯歷程">
           <button
             type="button"
