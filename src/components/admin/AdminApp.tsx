@@ -6,6 +6,7 @@ import '@/styles/admin.css';
 interface Props {
   supabaseUrl?: string;
   supabasePublishableKey?: string;
+  passwordLoginEnabled?: boolean;
 }
 
 interface AdminArticle {
@@ -61,7 +62,11 @@ function emptyArticle(categories: Category[], contentTypes: ContentType[]): Admi
   };
 }
 
-export default function AdminApp({ supabaseUrl, supabasePublishableKey }: Props) {
+export default function AdminApp({
+  supabaseUrl,
+  supabasePublishableKey,
+  passwordLoginEnabled = true,
+}: Props) {
   const client = useMemo(
     () =>
       supabaseUrl && supabasePublishableKey
@@ -94,7 +99,7 @@ export default function AdminApp({ supabaseUrl, supabasePublishableKey }: Props)
     );
   }
   if (checking) return <AdminNotice title="正在確認登入狀態…" message="請稍候。" />;
-  if (!session) return <Login client={client} />;
+  if (!session) return <Login client={client} passwordLoginEnabled={passwordLoginEnabled} />;
   return <Dashboard session={session} onSignOut={() => client.auth.signOut()} />;
 }
 
@@ -109,11 +114,35 @@ function AdminNotice({ title, message }: { title: string; message: string }) {
   );
 }
 
-function Login({ client }: { client: any }) {
+function Login({ client, passwordLoginEnabled }: { client: any; passwordLoginEnabled: boolean }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [oauthError, setOauthError] = useState('');
+  useEffect(() => {
+    const search = new URLSearchParams(window.location.search);
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const error =
+      search.get('error_description') ||
+      search.get('error') ||
+      hash.get('error_description') ||
+      hash.get('error');
+    if (error) {
+      setOauthError(error);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+  async function signInWithGoogle() {
+    setBusy(true);
+    setOauthError('');
+    const { error } = await client.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/admin` },
+    });
+    if (error) setOauthError('Google 登入失敗，請稍後再試。');
+    setBusy(false);
+  }
   async function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -130,26 +159,34 @@ function Login({ client }: { client: any }) {
         <p>只有列入管理者名單的帳號可以編輯或發布內容。</p>
       </div>
       <form onSubmit={submit}>
-        <label>
-          電子郵件
-          <input
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-          />
-        </label>
-        <label>
-          密碼
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-          />
-        </label>
-        <button disabled={busy}>{busy ? '登入中…' : '登入'}</button>
-        {message && <p role="status">{message}</p>}
+        <button type="button" onClick={signInWithGoogle} disabled={busy}>
+          {busy ? '登入中…' : '使用 Google 登入'}
+        </button>
+        {oauthError && <p role="alert">{oauthError}</p>}
+        {passwordLoginEnabled && (
+          <>
+            <label>
+              電子郵件
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              密碼
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+              />
+            </label>
+            <button disabled={busy}>{busy ? '登入中…' : '登入'}</button>
+            {message && <p role="status">{message}</p>}
+          </>
+        )}
       </form>
     </section>
   );

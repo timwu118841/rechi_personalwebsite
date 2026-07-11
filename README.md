@@ -21,9 +21,10 @@ npm run dev
 
 1. 建立 Supabase project。
 2. 在 SQL Editor 執行 `supabase/migrations/202607100001_realtime_content.sql`。
-3. 在 Supabase Authentication 建立管理者帳號。
-4. 將 `.env.example` 的 Supabase 變數與 `ADMIN_EMAILS` 填入 `.env`；正式站也要在 Vercel 設定相同環境變數。
-5. 如需匯入目前的示範文章，執行 `npm run content:import`。
+3. 在 Supabase Authentication 啟用 Google provider，並將 Google Cloud OAuth redirect URI 設為 `https://<project-ref>.supabase.co/auth/v1/callback`；Supabase Redirect URLs 加入本機與正式站的 `/admin` URL。
+4. 將 `.env.example` 的 Supabase 變數與 `ADMIN_EMAILS` 填入 `.env`；正式站也要在 Vercel 設定相同環境變數。`ADMIN_EMAILS` 會 trim、轉小寫並要求 Supabase 回報已驗證 email。
+5. Google 是預設登入方式；相容期可用 `PUBLIC_ADMIN_PASSWORD_LOGIN=true` 保留密碼登入，設為 `false` 即停用。
+6. 如需匯入目前的示範文章，執行 `npm run content:import`。
 
 `SUPABASE_SECRET_KEY` 只能放在本機或 Vercel server environment，不可加上 `PUBLIC_`，也不可放進瀏覽器程式。
 
