@@ -81,6 +81,7 @@ export default function MarkdownTiptapEditor({
   const richDocument = isTiptapDocument(bodyJson) ? bodyJson : undefined;
   const [richMode, setRichMode] = useState(Boolean(richDocument) || !value);
   const [linkUrl, setLinkUrl] = useState('');
+  const [documentStats, setDocumentStats] = useState({ characters: 0, words: 0 });
   const fileInput = useRef<HTMLInputElement>(null);
   const editor = useEditor({
     immediatelyRender: false,
@@ -93,6 +94,11 @@ export default function MarkdownTiptapEditor({
     content: richDocument || (value ? `<p>${escapeHtml(value)}</p>` : '<p></p>'),
     onUpdate: ({ editor: nextEditor }) => {
       const document = nextEditor.getJSON();
+      const text = nextEditor.state.doc.textContent;
+      setDocumentStats({
+        characters: text.length,
+        words: text.trim() ? text.trim().split(/\s+/).length : 0,
+      });
       onChange(tiptapToMarkdown(document));
       onDocumentChange?.(document);
     },
@@ -119,105 +125,146 @@ export default function MarkdownTiptapEditor({
   }
   if (!editor) return <div className="tiptap-editor-loading">正在載入編輯器…</div>;
   const toggle = (name: string) => editor.chain().focus()[name as 'toggleBold']().run();
+  const canUndo = editor.can().chain().focus().undo().run();
+  const canRedo = editor.can().chain().focus().redo().run();
   return (
     <div className="tiptap-editor">
-      <div className="tiptap-toolbar" aria-label="文章格式工具列">
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-        >
-          H1
-        </button>
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        >
-          H2
-        </button>
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-        >
-          H3
-        </button>
-        <button type="button" onClick={() => toggle('toggleBold')} aria-label="粗體">
-          <strong>B</strong>
-        </button>
-        <button type="button" onClick={() => toggle('toggleItalic')} aria-label="斜體">
-          <em>I</em>
-        </button>
-        <button type="button" onClick={() => toggle('toggleStrike')} aria-label="刪除線">
-          <s>S</s>
-        </button>
-        <button type="button" onClick={() => toggle('toggleUnderline')} aria-label="底線">
-          <u>U</u>
-        </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleBulletList().run()}>
-          • 清單
-        </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleOrderedList().run()}>
-          1. 清單
-        </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleBlockquote().run()}>
-          引用
-        </button>
-        <button type="button" onClick={() => editor.chain().focus().toggleCodeBlock().run()}>
-          {'{ }'} 程式碼
-        </button>
-        <button type="button" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-          分隔線
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            const url = window.prompt('連結網址', linkUrl);
-            if (url) {
-              setLinkUrl(url);
-              editor.chain().focus().setLink({ href: url }).run();
-            }
-          }}
-        >
-          連結
-        </button>
-        {onUpload && (
-          <>
-            <button type="button" onClick={() => fileInput.current?.click()}>
-              圖片
-            </button>
-            <input
-              ref={fileInput}
-              hidden
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/avif"
-              onChange={async (event) => {
-                const file = event.target.files?.[0];
-                if (!file) return;
-                const alt = window.prompt('圖片替代文字', file.name);
-                if (!alt) return;
-                const asset = await onUpload(file, alt);
+      <div className="tiptap-toolbar" role="toolbar" aria-label="文章格式工具列">
+        <div className="tiptap-toolbar-group" role="group" aria-label="標題">
+          {[1, 2, 3].map((level) => (
+            <button
+              key={level}
+              type="button"
+              aria-pressed={editor.isActive('heading', { level })}
+              onClick={() =>
                 editor
                   .chain()
                   .focus()
-                  .setImage({
-                    src: asset.url,
-                    alt: asset.alt,
-                    width: asset.width,
-                    height: asset.height,
-                  })
-                  .run();
-                event.target.value = '';
-              }}
-            />
-          </>
-        )}
-        <button type="button" onClick={() => editor.chain().focus().undo().run()}>
-          復原
-        </button>
-        <button type="button" onClick={() => editor.chain().focus().redo().run()}>
-          重做
-        </button>
+                  .toggleHeading({ level: level as 1 | 2 | 3 })
+                  .run()
+              }
+            >
+              H{level}
+            </button>
+          ))}
+        </div>
+        <div className="tiptap-toolbar-group" role="group" aria-label="文字格式">
+          <button
+            type="button"
+            onClick={() => toggle('toggleBold')}
+            aria-label="粗體"
+            aria-pressed={editor.isActive('bold')}
+          >
+            <strong>B</strong>
+          </button>
+          <button
+            type="button"
+            onClick={() => toggle('toggleItalic')}
+            aria-label="斜體"
+            aria-pressed={editor.isActive('italic')}
+          >
+            <em>I</em>
+          </button>
+          <button
+            type="button"
+            onClick={() => toggle('toggleStrike')}
+            aria-label="刪除線"
+            aria-pressed={editor.isActive('strike')}
+          >
+            <s>S</s>
+          </button>
+          <button
+            type="button"
+            onClick={() => toggle('toggleUnderline')}
+            aria-label="底線"
+            aria-pressed={editor.isActive('underline')}
+          >
+            <u>U</u>
+          </button>
+        </div>
+        <div className="tiptap-toolbar-group" role="group" aria-label="區塊格式">
+          <button type="button" onClick={() => editor.chain().focus().toggleBulletList().run()}>
+            • 清單
+          </button>
+          <button type="button" onClick={() => editor.chain().focus().toggleOrderedList().run()}>
+            1. 清單
+          </button>
+          <button type="button" onClick={() => editor.chain().focus().toggleBlockquote().run()}>
+            引用
+          </button>
+          <button type="button" onClick={() => editor.chain().focus().toggleCodeBlock().run()}>
+            {'{ }'} 程式碼
+          </button>
+          <button type="button" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
+            分隔線
+          </button>
+        </div>
+        <div className="tiptap-toolbar-group" role="group" aria-label="插入">
+          <button
+            type="button"
+            onClick={() => {
+              const url = window.prompt('連結網址', linkUrl);
+              if (url) {
+                setLinkUrl(url);
+                editor.chain().focus().setLink({ href: url }).run();
+              }
+            }}
+          >
+            連結
+          </button>
+          {onUpload && (
+            <>
+              <button type="button" onClick={() => fileInput.current?.click()}>
+                圖片
+              </button>
+              <input
+                ref={fileInput}
+                hidden
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/avif"
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  const alt = window.prompt('圖片替代文字', file.name);
+                  if (!alt) return;
+                  const asset = await onUpload(file, alt);
+                  editor
+                    .chain()
+                    .focus()
+                    .setImage({
+                      src: asset.url,
+                      alt: asset.alt,
+                      width: asset.width,
+                      height: asset.height,
+                    })
+                    .run();
+                  event.target.value = '';
+                }}
+              />
+            </>
+          )}
+        </div>
+        <div className="tiptap-toolbar-group" role="group" aria-label="編輯歷程">
+          <button
+            type="button"
+            disabled={!canUndo}
+            onClick={() => editor.chain().focus().undo().run()}
+          >
+            復原
+          </button>
+          <button
+            type="button"
+            disabled={!canRedo}
+            onClick={() => editor.chain().focus().redo().run()}
+          >
+            重做
+          </button>
+        </div>
       </div>
       <EditorContent editor={editor} />
+      <div className="tiptap-editor-status" role="status" aria-live="polite">
+        {documentStats.words} 字詞 · {documentStats.characters} 字元
+      </div>
       <button type="button" className="secondary" onClick={() => setRichMode(false)}>
         回到 Markdown 模式
       </button>

@@ -233,11 +233,22 @@ button.secondary,
 .tiptap-toolbar {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.35rem;
   padding: 0.55rem;
   border: 1px solid #d9dfd8;
   border-radius: 0.55rem;
   background: #f7f8f5;
+}
+.tiptap-toolbar-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding-right: 0.35rem;
+  border-right: 1px solid #d9dfd8;
+}
+.tiptap-toolbar-group:last-child {
+  border-right: 0;
 }
 .tiptap-toolbar button {
   min-width: 2.2rem;
@@ -246,6 +257,19 @@ button.secondary,
   color: #315f46;
   background: white;
   font-size: 0.8rem;
+}
+.tiptap-toolbar button[aria-pressed='true'] {
+  color: white;
+  background: #315f46;
+}
+.tiptap-toolbar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.tiptap-editor-status {
+  color: #657068;
+  font-size: 0.78rem;
+  text-align: right;
 }
 .tiptap-editor .ProseMirror {
   min-height: 34rem;
@@ -324,6 +348,13 @@ legend {
   .admin-workspace,
   .admin-two-columns {
     grid-template-columns: 1fr;
+  }
+  .tiptap-toolbar {
+    align-items: stretch;
+  }
+  .tiptap-toolbar-group {
+    flex: 1 1 auto;
+    border-right: 0;
   }
   .admin-login {
     gap: 2rem;
