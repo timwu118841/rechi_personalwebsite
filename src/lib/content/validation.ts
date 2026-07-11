@@ -1,4 +1,5 @@
 import { z } from 'astro/zod';
+import { normalizeSlug } from './slug';
 
 const optionalUrl = z.union([z.literal(''), z.url()]).optional();
 const mediaSchema = z
@@ -12,11 +13,15 @@ const mediaSchema = z
 
 export const articleInputSchema = z
   .object({
-    slug: z
-      .string()
-      .min(1)
-      .max(120)
-      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, '網址代稱只能使用小寫英文、數字與連字號。'),
+    slug: z.string().transform((value, context) => {
+      if (!value.trim()) return '';
+      try {
+        return normalizeSlug(value);
+      } catch (error) {
+        context.addIssue({ code: 'custom', message: error instanceof Error ? error.message : '網址代稱格式錯誤。' });
+        return z.NEVER;
+      }
+    }),
     title: z.string().min(1).max(120),
     description: z.string().min(20).max(180),
     body: z.string().default(''),
