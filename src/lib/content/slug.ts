@@ -1,6 +1,19 @@
 const ZERO_WIDTH = /[\u200B-\u200D\u2060\uFEFF]/u;
 const ALLOWED = /^[\p{L}\p{N}-]$/u;
 
+/**
+ * Astro may expose rest-route params in either encoded or decoded form,
+ * depending on the adapter/request path. Decode exactly once so Unicode
+ * slugs are looked up consistently without turning malformed URLs into 500s.
+ */
+export function decodeSlugPathParam(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export function normalizeSlug(value: string): string {
   const normalized = value.normalize('NFC').trim();
   if (!normalized || ZERO_WIDTH.test(normalized)) {
