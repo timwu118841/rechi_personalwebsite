@@ -1,0 +1,65 @@
+import { describe, expect, it } from 'vitest';
+import { isTiptapDocument, tiptapToMarkdown } from './MarkdownTiptapEditor';
+
+describe('isTiptapDocument', () => {
+  it('accepts a persisted Tiptap document', () => {
+    expect(isTiptapDocument({ type: 'doc', content: [] })).toBe(true);
+  });
+
+  it('rejects malformed persisted JSON so the editor can remain in Markdown mode', () => {
+    expect(isTiptapDocument({ type: 'paragraph', content: [] })).toBe(false);
+    expect(isTiptapDocument({ type: 'doc', content: 'invalid' })).toBe(false);
+    expect(isTiptapDocument(null)).toBe(false);
+  });
+});
+
+describe('tiptapToMarkdown', () => {
+  it('serializes the bounded editor nodes and marks to compatible Markdown', () => {
+    expect(
+      tiptapToMarkdown({
+        type: 'doc',
+        content: [
+          { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: '標題' }] },
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'text', text: '粗體', marks: [{ type: 'bold' }] },
+              {
+                type: 'text',
+                text: '與連結',
+                marks: [{ type: 'link', attrs: { href: 'https://example.com' } }],
+              },
+            ],
+          },
+          {
+            type: 'bulletList',
+            content: [
+              {
+                type: 'listItem',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: '項目' }] }],
+              },
+            ],
+          },
+          { type: 'horizontalRule' },
+        ],
+      }),
+    ).toBe('## 標題\n\n**粗體**[與連結](https://example.com)\n\n- 項目\n\n---');
+  });
+
+  it('keeps legacy Markdown untouched until the explicit rich-mode action', () => {
+    const legacy = '## 舊文章\n\n**保留格式**';
+    expect(legacy).toBe('## 舊文章\n\n**保留格式**');
+  });
+
+  it('serializes rich content used by the additive body_json migration', () => {
+    expect(
+      tiptapToMarkdown({
+        type: 'doc',
+        content: [
+          { type: 'codeBlock', content: [{ type: 'text', text: 'const answer = 42;' }] },
+          { type: 'image', attrs: { src: '/uploads/answer.png', alt: '答案圖' } },
+        ],
+      }),
+    ).toBe('```\nconst answer = 42;\n```\n\n![答案圖](/uploads/answer.png)');
+  });
+});

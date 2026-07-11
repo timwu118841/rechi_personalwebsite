@@ -1,11 +1,16 @@
 import { createClient, type Session } from '@supabase/supabase-js';
-import { type SyntheticEvent, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, type SyntheticEvent, useEffect, useMemo, useState } from 'react';
 import type { Category, ContentType, MediaAsset, SiteSettings } from '@/lib/content/types';
+import type { JSONContent } from '@tiptap/react';
 import '@/styles/admin.css';
+import { slugFromTitle } from '@/lib/content/slug';
+
+const MarkdownTiptapEditor = lazy(() => import('./MarkdownTiptapEditor'));
 
 interface Props {
   supabaseUrl?: string;
   supabasePublishableKey?: string;
+  passwordLoginEnabled?: boolean;
 }
 
 interface AdminArticle {
@@ -14,6 +19,7 @@ interface AdminArticle {
   title: string;
   description: string;
   body: string;
+  bodyJson?: unknown;
   status: 'draft' | 'published' | 'unpublished';
   publishedAt: string;
   contentType: string;
@@ -32,8 +38,41 @@ type Tab = 'articles' | 'site' | 'taxonomies';
 
 function localDateTime(value?: string) {
   const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return localDateTime();
   const offset = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+/** Keep legacy/partially migrated rows from crashing the editor render. */
+export function normalizeAdminArticle(article: Partial<AdminArticle>): AdminArticle {
+  const bodyJson = article.bodyJson as { type?: unknown; content?: unknown } | undefined;
+  return {
+    id: typeof article.id === 'string' ? article.id : '',
+    slug: typeof article.slug === 'string' ? article.slug : '',
+    title: typeof article.title === 'string' ? article.title : '',
+    description: typeof article.description === 'string' ? article.description : '',
+    body: typeof article.body === 'string' ? article.body : '',
+    bodyJson:
+      bodyJson?.type === 'doc' && Array.isArray(bodyJson.content) ? article.bodyJson : undefined,
+    status:
+      article.status === 'published' || article.status === 'unpublished' ? article.status : 'draft',
+    publishedAt: localDateTime(article.publishedAt),
+    contentType: typeof article.contentType === 'string' ? article.contentType : '',
+    category: typeof article.category === 'string' ? article.category : '',
+    tags: Array.isArray(article.tags)
+      ? article.tags.filter((tag): tag is string => typeof tag === 'string')
+      : [],
+    featured: Boolean(article.featured),
+    cover:
+      article.cover && typeof article.cover === 'object' && typeof article.cover.url === 'string'
+        ? article.cover
+        : undefined,
+    seoTitle: typeof article.seoTitle === 'string' ? article.seoTitle : undefined,
+    seoDescription: typeof article.seoDescription === 'string' ? article.seoDescription : undefined,
+    canonicalUrl: typeof article.canonicalUrl === 'string' ? article.canonicalUrl : undefined,
+    privacyReviewed: Boolean(article.privacyReviewed),
+    legalReviewed: Boolean(article.legalReviewed),
+  };
 }
 
 async function imageDimensions(file: File) {
@@ -61,11 +100,17 @@ function emptyArticle(categories: Category[], contentTypes: ContentType[]): Admi
   };
 }
 
-export default function AdminApp({ supabaseUrl, supabasePublishableKey }: Props) {
+export default function AdminApp({
+  supabaseUrl,
+  supabasePublishableKey,
+  passwordLoginEnabled = true,
+}: Props) {
   const client = useMemo(
     () =>
       supabaseUrl && supabasePublishableKey
-        ? createClient(supabaseUrl, supabasePublishableKey)
+        ? createClient(supabaseUrl, supabasePublishableKey, {
+            auth: { flowType: 'pkce', detectSessionInUrl: true },
+          })
         : null,
     [supabaseUrl, supabasePublishableKey],
   );
@@ -89,12 +134,12 @@ export default function AdminApp({ supabaseUrl, supabasePublishableKey }: Props)
     return (
       <AdminNotice
         title="管理後台尚未連接資料庫"
-        message="請先設定 PUBLIC_SUPABASE_URL、PUBLIC_SUPABASE_PUBLISHABLE_KEY、SUPABASE_SECRET_KEY 與 ADMIN_EMAILS。公開網站目前仍可使用本機示範內容。"
+        message="請先設定 PUBLIC_SUPABASE_URL 與 PUBLIC_SUPABASE_PUBLISHABLE_KEY。管理員權限由 Supabase 的 admin_users 資料表判定；敏感金鑰只應設定在伺服器環境。公開網站目前仍可使用本機示範內容。"
       />
     );
   }
   if (checking) return <AdminNotice title="正在確認登入狀態…" message="請稍候。" />;
-  if (!session) return <Login client={client} />;
+  if (!session) return <Login client={client} passwordLoginEnabled={passwordLoginEnabled} />;
   return <Dashboard session={session} onSignOut={() => client.auth.signOut()} />;
 }
 
@@ -109,11 +154,35 @@ function AdminNotice({ title, message }: { title: string; message: string }) {
   );
 }
 
-function Login({ client }: { client: any }) {
+function Login({ client, passwordLoginEnabled }: { client: any; passwordLoginEnabled: boolean }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [oauthError, setOauthError] = useState('');
+  useEffect(() => {
+    const search = new URLSearchParams(window.location.search);
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const error =
+      search.get('error_description') ||
+      search.get('error') ||
+      hash.get('error_description') ||
+      hash.get('error');
+    if (error) {
+      setOauthError(error);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+  async function signInWithGoogle() {
+    setBusy(true);
+    setOauthError('');
+    const { error } = await client.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/admin` },
+    });
+    if (error) setOauthError('Google 登入失敗，請稍後再試。');
+    setBusy(false);
+  }
   async function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -130,26 +199,34 @@ function Login({ client }: { client: any }) {
         <p>只有列入管理者名單的帳號可以編輯或發布內容。</p>
       </div>
       <form onSubmit={submit}>
-        <label>
-          電子郵件
-          <input
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-          />
-        </label>
-        <label>
-          密碼
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-          />
-        </label>
-        <button disabled={busy}>{busy ? '登入中…' : '登入'}</button>
-        {message && <p role="status">{message}</p>}
+        <button type="button" onClick={signInWithGoogle} disabled={busy}>
+          {busy ? '登入中…' : '使用 Google 登入'}
+        </button>
+        {oauthError && <p role="alert">{oauthError}</p>}
+        {passwordLoginEnabled && (
+          <>
+            <label>
+              電子郵件
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              密碼
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+              />
+            </label>
+            <button disabled={busy}>{busy ? '登入中…' : '登入'}</button>
+            {message && <p role="status">{message}</p>}
+          </>
+        )}
       </form>
     </section>
   );
@@ -370,9 +447,7 @@ function ArticlesPanel({
           <button
             className="admin-list-item"
             key={article.id}
-            onClick={() =>
-              setEditing({ ...article, publishedAt: localDateTime(article.publishedAt) })
-            }
+            onClick={() => setEditing(normalizeAdminArticle(article))}
           >
             <span>
               <strong>{article.title}</strong>
@@ -447,18 +522,16 @@ function ArticleEditor({
             網址代稱
             <input
               value={value.slug}
-              onChange={(event) =>
-                set(
-                  'slug',
-                  event.target.value
-                    .toLowerCase()
-                    .replace(/[^a-z0-9-]/g, '-')
-                    .replace(/-+/g, '-'),
-                )
-              }
-              required
-              pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+              onChange={(event) => set('slug', event.target.value.normalize('NFC'))}
+              maxLength={120}
             />
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => set('slug', slugFromTitle(value.title))}
+            >
+              {value.slug ? '重新產生網址代稱' : '依標題產生網址代稱'}
+            </button>
           </label>
           <label>
             文章摘要
@@ -472,22 +545,19 @@ function ArticleEditor({
             />
           </label>
           <label>
-            文章內容（Markdown）
-            <textarea
-              className="article-body-input"
-              rows={24}
-              value={value.body}
-              onChange={(event) => set('body', event.target.value)}
-              required
-            />
+            文章內容
+            <Suspense fallback={<div className="tiptap-editor-loading">正在載入編輯器…</div>}>
+              <MarkdownTiptapEditor
+                value={value.body}
+                bodyJson={value.bodyJson}
+                onChange={(body) =>
+                  setValue((current) => ({ ...current, body, bodyJson: undefined }))
+                }
+                onDocumentChange={(document: JSONContent) => set('bodyJson', document)}
+                onUpload={upload}
+              />
+            </Suspense>
           </label>
-          <details className="markdown-help">
-            <summary>Markdown 快速說明</summary>
-            <p>
-              <code>## 標題</code>、<code>**粗體**</code>、<code>- 清單</code>、
-              <code>&gt; 引用</code>、<code>[連結](https://...)</code>
-            </p>
-          </details>
         </div>
         <aside className="admin-form-card admin-form-side">
           <label>

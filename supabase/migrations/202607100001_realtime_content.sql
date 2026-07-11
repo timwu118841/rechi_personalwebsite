@@ -66,6 +66,16 @@ alter table public.categories enable row level security;
 alter table public.content_types enable row level security;
 alter table public.site_settings enable row level security;
 
+-- Tables created by a migration executed as `postgres` do not automatically
+-- grant table privileges to the roles used by the Supabase API.  Keep these
+-- grants explicit so both the public reader and the server-side service role
+-- can access the content tables.
+grant usage on schema public to anon, authenticated, service_role;
+grant select on public.articles, public.categories, public.content_types, public.site_settings
+  to anon, authenticated, service_role;
+grant insert, update, delete on public.articles, public.categories, public.content_types, public.site_settings
+  to service_role;
+
 drop policy if exists "public reads eligible articles" on public.articles;
 create policy "public reads eligible articles" on public.articles for select
   using (status = 'published' and published_at <= now());

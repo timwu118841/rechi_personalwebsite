@@ -2,7 +2,11 @@ export interface SupabaseEnvironment {
   url: string;
   publishableKey: string;
   secretKey: string;
-  adminEmails: string[];
+  passwordLoginEnabled: boolean;
+}
+
+export function normalizeAdminEmail(email: string): string {
+  return email.normalize('NFKC').trim().toLowerCase();
 }
 
 function read(name: string): string {
@@ -13,7 +17,13 @@ function read(name: string): string {
 export function getPublicSupabaseConfig() {
   const url = read('PUBLIC_SUPABASE_URL');
   const publishableKey = read('PUBLIC_SUPABASE_PUBLISHABLE_KEY');
-  return url && publishableKey ? { url, publishableKey } : null;
+  return url && publishableKey
+    ? { url, publishableKey, passwordLoginEnabled: isPasswordLoginEnabled() }
+    : null;
+}
+
+export function isPasswordLoginEnabled(): boolean {
+  return read('PUBLIC_ADMIN_PASSWORD_LOGIN') !== 'false';
 }
 
 export function getSupabaseEnvironment(): SupabaseEnvironment | null {
@@ -23,10 +33,7 @@ export function getSupabaseEnvironment(): SupabaseEnvironment | null {
   return {
     ...publicConfig,
     secretKey,
-    adminEmails: read('ADMIN_EMAILS')
-      .split(',')
-      .map((email) => email.trim().toLocaleLowerCase())
-      .filter(Boolean),
+    passwordLoginEnabled: isPasswordLoginEnabled(),
   };
 }
 
