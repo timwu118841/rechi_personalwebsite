@@ -244,10 +244,15 @@ export class SupabaseContentRepository implements ContentRepository {
   }
 
   async saveArticle(input: ArticleInput, id?: string) {
+    const previous = id
+      ? await this.client.from('articles').select('slug').eq('id', id).maybeSingle()
+      : { data: null, error: null };
+    if (previous.error) throw previous.error;
+    const oldSlug = previous.data?.slug ? String(previous.data.slug) : undefined;
     const baseSlug = input.slug || slugFromTitle(input.title, 'article');
     let slug = baseSlug;
     const { data: existing, error: slugError } = await this.client
-      .from('articles').select('slug').ilike('slug', `${baseSlug}%`);
+      .from('articles').select('id,slug').ilike('slug', `${baseSlug}%`);
     if (slugError) throw slugError;
     const taken = new Set((existing || []).filter((row) => !id || String(row.id) !== id).map((row) => String(row.slug).toLocaleLowerCase()));
     if (!id && taken.has(slug.toLocaleLowerCase())) {
@@ -281,8 +286,9 @@ export class SupabaseContentRepository implements ContentRepository {
       : this.client.from('articles').insert(values).select('*').single();
     const [{ data, error }, maps] = await Promise.all([request, this.taxonomyMaps()]);
     if (error) throw error;
-    if (id && String(data.slug) !== String((existing || []).find((row) => String(row.id) === id)?.slug || input.slug)) {
-      await this.client.from('article_slug_redirects').upsert({ old_slug: String((existing || []).find((row) => String(row.id) === id)?.slug || input.slug), article_id: id }, { onConflict: 'old_slug' });
+    if (id && oldSlug && oldSlug !== slug) {
+      const redirect = await this.client.from('article_slug_redirects').upsert({ old_slug: oldSlug, article_id: id }, { onConflict: 'old_slug' });
+      if (redirect.error) throw redirect.error;
     }
     return articleFromRow(data, maps.categories, maps.contentTypes);
   }

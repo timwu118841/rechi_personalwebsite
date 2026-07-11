@@ -12,7 +12,11 @@ const [article, settings] = await Promise.all([
   repository.getPublishedArticle(slug),
   repository.getSiteSettings(),
 ]);
-if (!article) return Astro.rewrite('/404');
+if (!article) {
+  const redirect = await repository.getArticleSlugRedirect(slug);
+  if (redirect) return Astro.redirect(`/articles/${encodeURIComponent(redirect)}/`, 301);
+  return Astro.rewrite('/404');
+}
 if (Astro.cache.enabled)
   Astro.cache.set({
     maxAge: 86400,

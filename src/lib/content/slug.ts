@@ -1,9 +1,10 @@
 const ZERO_WIDTH = /[\u200B-\u200D\u2060\uFEFF]/u;
-const INVALID = /[\u0000-\u001F\u007F\u2028\u2029\/?#%]/u;
+// eslint-disable-next-line no-control-regex
+const INVALID = `[\\u0000-\\u001F\\u007F\\u2028\\u2029/?#%]`;
 
 export function normalizeSlug(value: string): string {
   const normalized = value.normalize('NFC').trim();
-  if (!normalized || INVALID.test(normalized) || ZERO_WIDTH.test(normalized)) {
+  if (!normalized || /\s/u.test(normalized) || new RegExp(INVALID, 'u').test(normalized) || ZERO_WIDTH.test(normalized)) {
     throw new Error('網址代稱含有不支援的字元。');
   }
   const slug = Array.from(normalized)
