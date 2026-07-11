@@ -3,7 +3,6 @@ const required = [
   'PUBLIC_SUPABASE_URL',
   'PUBLIC_SUPABASE_PUBLISHABLE_KEY',
   'SUPABASE_SECRET_KEY',
-  'ADMIN_EMAILS',
 ];
 const missing = required.filter((name) => !process.env[name]?.trim());
 

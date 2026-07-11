@@ -25,7 +25,18 @@ export async function requireAdmin(request: Request): Promise<AdminIdentity> {
   if (!environment.passwordLoginEnabled && user.app_metadata?.provider === 'email') {
     throw new Response('密碼登入已停用，請使用 Google 登入。', { status: 403 });
   }
-  if (!environment.adminEmails.includes(email)) {
+  const adminClient = createClient(environment.url, environment.secretKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data: admin, error: adminError } = await adminClient
+    .from('admin_users')
+    .select('user_id')
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (adminError) {
+    throw new Response('管理權限資料庫尚未完成設定。', { status: 503 });
+  }
+  if (!admin) {
     throw new Response('這個帳號沒有管理權限。', { status: 403 });
   }
   return { id: user.id, email };
