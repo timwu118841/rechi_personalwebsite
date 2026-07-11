@@ -1,7 +1,9 @@
 import { createClient, type Session } from '@supabase/supabase-js';
-import { type SyntheticEvent, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, type SyntheticEvent, useEffect, useMemo, useState } from 'react';
 import type { Category, ContentType, MediaAsset, SiteSettings } from '@/lib/content/types';
 import '@/styles/admin.css';
+
+const MarkdownTiptapEditor = lazy(() => import('./MarkdownTiptapEditor'));
 
 interface Props {
   supabaseUrl?: string;
@@ -511,22 +513,11 @@ function ArticleEditor({
             />
           </label>
           <label>
-            文章內容（Markdown）
-            <textarea
-              className="article-body-input"
-              rows={24}
-              value={value.body}
-              onChange={(event) => set('body', event.target.value)}
-              required
-            />
+            文章內容
+            <Suspense fallback={<div className="tiptap-editor-loading">正在載入編輯器…</div>}>
+              <MarkdownTiptapEditor value={value.body} onChange={(body) => set('body', body)} onUpload={upload} />
+            </Suspense>
           </label>
-          <details className="markdown-help">
-            <summary>Markdown 快速說明</summary>
-            <p>
-              <code>## 標題</code>、<code>**粗體**</code>、<code>- 清單</code>、
-              <code>&gt; 引用</code>、<code>[連結](https://...)</code>
-            </p>
-          </details>
         </div>
         <aside className="admin-form-card admin-form-side">
           <label>
