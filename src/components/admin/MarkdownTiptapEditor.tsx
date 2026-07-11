@@ -15,13 +15,52 @@ type Props = {
 };
 
 const slashCommands = [
-  { label: '標題 1', hint: '大標題', query: 'h1', run: (editor: ReturnType<typeof useEditor>) => editor?.chain().focus().toggleHeading({ level: 1 }).run() },
-  { label: '標題 2', hint: '中標題', query: 'h2', run: (editor: ReturnType<typeof useEditor>) => editor?.chain().focus().toggleHeading({ level: 2 }).run() },
-  { label: '標題 3', hint: '小標題', query: 'h3', run: (editor: ReturnType<typeof useEditor>) => editor?.chain().focus().toggleHeading({ level: 3 }).run() },
-  { label: '項目清單', hint: '建立項目清單', query: 'bullet', run: (editor: ReturnType<typeof useEditor>) => editor?.chain().focus().toggleBulletList().run() },
-  { label: '編號清單', hint: '建立編號清單', query: 'number', run: (editor: ReturnType<typeof useEditor>) => editor?.chain().focus().toggleOrderedList().run() },
-  { label: '引用', hint: '突顯一段引文', query: 'quote', run: (editor: ReturnType<typeof useEditor>) => editor?.chain().focus().toggleBlockquote().run() },
-  { label: '程式碼', hint: '等寬程式碼區塊', query: 'code', run: (editor: ReturnType<typeof useEditor>) => editor?.chain().focus().toggleCodeBlock().run() },
+  {
+    label: '標題 1',
+    hint: '大標題',
+    query: 'h1',
+    run: (editor: ReturnType<typeof useEditor>) =>
+      editor?.chain().focus().toggleHeading({ level: 1 }).run(),
+  },
+  {
+    label: '標題 2',
+    hint: '中標題',
+    query: 'h2',
+    run: (editor: ReturnType<typeof useEditor>) =>
+      editor?.chain().focus().toggleHeading({ level: 2 }).run(),
+  },
+  {
+    label: '標題 3',
+    hint: '小標題',
+    query: 'h3',
+    run: (editor: ReturnType<typeof useEditor>) =>
+      editor?.chain().focus().toggleHeading({ level: 3 }).run(),
+  },
+  {
+    label: '項目清單',
+    hint: '建立項目清單',
+    query: 'bullet',
+    run: (editor: ReturnType<typeof useEditor>) => editor?.chain().focus().toggleBulletList().run(),
+  },
+  {
+    label: '編號清單',
+    hint: '建立編號清單',
+    query: 'number',
+    run: (editor: ReturnType<typeof useEditor>) =>
+      editor?.chain().focus().toggleOrderedList().run(),
+  },
+  {
+    label: '引用',
+    hint: '突顯一段引文',
+    query: 'quote',
+    run: (editor: ReturnType<typeof useEditor>) => editor?.chain().focus().toggleBlockquote().run(),
+  },
+  {
+    label: '程式碼',
+    hint: '等寬程式碼區塊',
+    query: 'code',
+    run: (editor: ReturnType<typeof useEditor>) => editor?.chain().focus().toggleCodeBlock().run(),
+  },
 ];
 
 export function isTiptapDocument(value: unknown): value is JSONContent {
@@ -92,8 +131,12 @@ export default function MarkdownTiptapEditor({
   const [richMode, setRichMode] = useState(Boolean(richDocument) || !value);
   const [linkUrl, setLinkUrl] = useState('');
   const [documentStats, setDocumentStats] = useState({ characters: 0, words: 0 });
-  const [slashMenu, setSlashMenu] = useState<{ query: string; from: number; index: number } | null>(null);
-  const [selectionToolbar, setSelectionToolbar] = useState<{ top: number; left: number } | null>(null);
+  const [slashMenu, setSlashMenu] = useState<{ query: string; from: number; index: number } | null>(
+    null,
+  );
+  const [selectionToolbar, setSelectionToolbar] = useState<{ top: number; left: number } | null>(
+    null,
+  );
   const editorShell = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const editor = useEditor({
@@ -141,12 +184,17 @@ export default function MarkdownTiptapEditor({
       const bounds = editorShell.current.getBoundingClientRect();
       setSelectionToolbar({
         top: Math.max(8, Math.min(start.top, end.top) - bounds.top - 44),
-        left: Math.max(8, Math.min(bounds.width - 180, (start.left + end.left) / 2 - bounds.left - 90)),
+        left: Math.max(
+          8,
+          Math.min(bounds.width - 180, (start.left + end.left) / 2 - bounds.left - 90),
+        ),
       });
     };
     editor.on('selectionUpdate', updateSelectionToolbar);
     editor.on('blur', () => window.setTimeout(() => setSelectionToolbar(null), 120));
-    return () => editor.off('selectionUpdate', updateSelectionToolbar);
+    return () => {
+      editor.off('selectionUpdate', updateSelectionToolbar);
+    };
   }, [editor]);
 
   if (!richMode) {
@@ -173,12 +221,18 @@ export default function MarkdownTiptapEditor({
   const canUndo = editor.can().chain().focus().undo().run();
   const canRedo = editor.can().chain().focus().redo().run();
   const slashMatches = slashCommands.filter(
-    (command) => !slashMenu?.query || `${command.query} ${command.label}`.toLowerCase().includes(slashMenu.query),
+    (command) =>
+      !slashMenu?.query ||
+      `${command.query} ${command.label}`.toLowerCase().includes(slashMenu.query),
   );
   const runSlashCommand = (index: number) => {
     if (!slashMenu || !slashMatches[index]) return;
     const command = slashMatches[index];
-    editor.chain().focus().deleteRange({ from: slashMenu.from, to: editor.state.selection.from }).run();
+    editor
+      .chain()
+      .focus()
+      .deleteRange({ from: slashMenu.from, to: editor.state.selection.from })
+      .run();
     command.run(editor);
     setSlashMenu(null);
   };
@@ -190,7 +244,12 @@ export default function MarkdownTiptapEditor({
         if (!slashMenu || !slashMatches.length) return;
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
           event.preventDefault();
-          setSlashMenu({ ...slashMenu, index: (slashMenu.index + (event.key === 'ArrowDown' ? 1 : slashMatches.length - 1)) % slashMatches.length });
+          setSlashMenu({
+            ...slashMenu,
+            index:
+              (slashMenu.index + (event.key === 'ArrowDown' ? 1 : slashMatches.length - 1)) %
+              slashMatches.length,
+          });
         } else if (event.key === 'Enter') {
           event.preventDefault();
           runSlashCommand(slashMenu.index);
@@ -355,17 +414,57 @@ export default function MarkdownTiptapEditor({
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => runSlashCommand(index)}
               >
-                <strong>{command.label}</strong><small>{command.hint}</small>
+                <strong>{command.label}</strong>
+                <small>{command.hint}</small>
               </button>
             ))}
           </div>
         )}
         {selectionToolbar && (
-          <div className="tiptap-selection-toolbar" style={{ top: selectionToolbar.top, left: selectionToolbar.left }} role="toolbar" aria-label="選取文字格式">
-            <button type="button" aria-label="粗體" aria-pressed={editor.isActive('bold')} onMouseDown={(event) => event.preventDefault()} onClick={() => editor.chain().focus().toggleBold().run()}><strong>B</strong></button>
-            <button type="button" aria-label="斜體" aria-pressed={editor.isActive('italic')} onMouseDown={(event) => event.preventDefault()} onClick={() => editor.chain().focus().toggleItalic().run()}><em>I</em></button>
-            <button type="button" aria-label="刪除線" aria-pressed={editor.isActive('strike')} onMouseDown={(event) => event.preventDefault()} onClick={() => editor.chain().focus().toggleStrike().run()}><s>S</s></button>
-            <button type="button" aria-label="連結" onMouseDown={(event) => event.preventDefault()} onClick={() => { const url = window.prompt('連結網址', 'https://'); if (url) editor.chain().focus().setLink({ href: url }).run(); }}>↗</button>
+          <div
+            className="tiptap-selection-toolbar"
+            style={{ top: selectionToolbar.top, left: selectionToolbar.left }}
+            role="toolbar"
+            aria-label="選取文字格式"
+          >
+            <button
+              type="button"
+              aria-label="粗體"
+              aria-pressed={editor.isActive('bold')}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => editor.chain().focus().toggleBold().run()}
+            >
+              <strong>B</strong>
+            </button>
+            <button
+              type="button"
+              aria-label="斜體"
+              aria-pressed={editor.isActive('italic')}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => editor.chain().focus().toggleItalic().run()}
+            >
+              <em>I</em>
+            </button>
+            <button
+              type="button"
+              aria-label="刪除線"
+              aria-pressed={editor.isActive('strike')}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => editor.chain().focus().toggleStrike().run()}
+            >
+              <s>S</s>
+            </button>
+            <button
+              type="button"
+              aria-label="連結"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                const url = window.prompt('連結網址', 'https://');
+                if (url) editor.chain().focus().setLink({ href: url }).run();
+              }}
+            >
+              ↗
+            </button>
           </div>
         )}
       </div>

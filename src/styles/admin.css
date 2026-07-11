@@ -284,6 +284,80 @@ button.secondary,
   border-color: #315f46;
   box-shadow: 0 0 0 2px rgb(49 95 70 / 0.12);
 }
+.tiptap-canvas {
+  position: relative;
+}
+.tiptap-editor .ProseMirror p:first-child:only-child:empty::before {
+  float: left;
+  height: 0;
+  color: #8a958b;
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+.tiptap-slash-menu {
+  position: absolute;
+  z-index: 5;
+  top: 3.6rem;
+  left: 0.85rem;
+  display: grid;
+  width: min(19rem, calc(100% - 1.7rem));
+  gap: 0.15rem;
+  padding: 0.45rem;
+  border: 1px solid #d9dfd8;
+  border-radius: 0.6rem;
+  background: white;
+  box-shadow: 0 10px 28px rgb(35 58 42 / 0.16);
+}
+.tiptap-slash-menu p {
+  margin: 0.2rem 0.45rem;
+  color: #728075;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.tiptap-slash-menu button {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.55rem 0.65rem;
+  border: 0;
+  border-radius: 0.35rem;
+  color: #354038;
+  background: transparent;
+  text-align: left;
+}
+.tiptap-slash-menu button:hover,
+.tiptap-slash-menu button[aria-selected='true'] {
+  color: #244e34;
+  background: #e4eee5;
+}
+.tiptap-slash-menu small {
+  color: #728075;
+  font-size: 0.72rem;
+}
+.tiptap-selection-toolbar {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  gap: 0.2rem;
+  padding: 0.25rem;
+  border: 1px solid #d9dfd8;
+  border-radius: 0.45rem;
+  background: #243e2d;
+  box-shadow: 0 5px 16px rgb(35 58 42 / 0.2);
+}
+.tiptap-selection-toolbar button {
+  min-width: 2rem;
+  padding: 0.3rem 0.45rem;
+  border: 0;
+  border-radius: 0.25rem;
+  color: white;
+  background: transparent;
+}
+.tiptap-selection-toolbar button:hover,
+.tiptap-selection-toolbar button[aria-pressed='true'] {
+  background: #47775a;
+}
 .tiptap-editor .ProseMirror img {
   max-width: 100%;
   height: auto;
@@ -355,6 +429,13 @@ legend {
   .tiptap-toolbar-group {
     flex: 1 1 auto;
     border-right: 0;
+  }
+  .tiptap-selection-toolbar {
+    position: fixed;
+    top: auto !important;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    left: auto !important;
   }
   .admin-login {
     gap: 2rem;
