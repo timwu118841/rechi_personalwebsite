@@ -69,6 +69,61 @@ export function isTiptapDocument(value: unknown): value is JSONContent {
   return document.type === 'doc' && Array.isArray(document.content);
 }
 
+const supportedNodes = new Set([
+  'doc',
+  'paragraph',
+  'text',
+  'heading',
+  'bulletList',
+  'orderedList',
+  'listItem',
+  'blockquote',
+  'codeBlock',
+  'horizontalRule',
+  'hardBreak',
+  'image',
+]);
+const supportedMarks = new Set(['bold', 'italic', 'strike', 'code', 'link', 'underline']);
+
+/**
+ * Keep persisted rich content within the node/mark allowlist understood by
+ * this editor. Unknown wrappers are flattened instead of being silently
+ * passed to Tiptap, and empty list artifacts become plain paragraphs.
+ */
+export function normalizeTiptapDocument(value: unknown): JSONContent | undefined {
+  if (!isTiptapDocument(value)) return undefined;
+
+  const normalizeNode = (input: unknown): JSONContent[] => {
+    if (!input || typeof input !== 'object') return [];
+    const node = input as JSONContent;
+    const children = Array.isArray(node.content) ? node.content.flatMap(normalizeNode) : [];
+    if (!supportedNodes.has(String(node.type))) return children;
+    if (node.type === 'doc') return children;
+    if (node.type === 'text') {
+      return typeof node.text === 'string' && node.text
+        ? [{ type: 'text', text: node.text, marks: (node.marks || []).filter((mark) => supportedMarks.has(String(mark.type))) }]
+        : [];
+    }
+    if (node.type === 'image') {
+      const src = typeof node.attrs?.src === 'string' ? node.attrs.src : '';
+      return src ? [{ type: 'image', attrs: { ...node.attrs, src } }] : [];
+    }
+    if (node.type === 'bulletList' || node.type === 'orderedList') {
+      const listItems = children.filter((child) => {
+        if (child.type !== 'listItem') return true;
+        return (child.content || []).some((item) =>
+          item.type !== 'paragraph' || Boolean((item.content || []).length),
+        );
+      });
+      if (listItems.length === 0) return [{ type: 'paragraph', content: [] }];
+      return [{ type: node.type, ...(node.attrs ? { attrs: node.attrs } : {}), content: listItems }];
+    }
+    return [{ type: node.type, ...(node.attrs ? { attrs: node.attrs } : {}), ...(children.length ? { content: children } : {}) }];
+  };
+
+  return { type: 'doc', content: normalizeNode(value) };
+}
+
 function escapeHtml(value: string) {
   return value.replace(
     /[&<>"']/g,
@@ -133,7 +188,7 @@ export default function MarkdownTiptapEditor({
   onDocumentChange,
   onUpload,
 }: Props) {
-  const richDocument = isTiptapDocument(bodyJson) ? bodyJson : undefined;
+  const richDocument = normalizeTiptapDocument(bodyJson);
   const [richMode, setRichMode] = useState(Boolean(richDocument) || !value);
   const [linkUrl, setLinkUrl] = useState('');
   const [documentStats, setDocumentStats] = useState({ characters: 0, words: 0 });
@@ -147,6 +202,14 @@ export default function MarkdownTiptapEditor({
   const editorShell = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const mounted = useRef(true);
+  const updateStats = (nextEditor: NonNullable<typeof editor>) => {
+    const text = nextEditor.state.doc.textContent;
+    setDocumentStats({
+      characters: text.length,
+      words: text.trim() ? text.trim().split(/\s+/).length : 0,
+    });
+    nextEditor.view.dom.classList.toggle('is-empty', !text);
+  };
   useEffect(
     () => () => {
       mounted.current = false;
@@ -166,15 +229,12 @@ export default function MarkdownTiptapEditor({
       attributes: { 'data-placeholder': '輸入內容，或輸入 / 選擇區塊' },
     },
     onCreate: ({ editor: nextEditor }) => {
-      nextEditor.view.dom.classList.toggle('is-empty', !nextEditor.state.doc.textContent);
+      updateStats(nextEditor);
     },
     onUpdate: ({ editor: nextEditor }) => {
       const document = nextEditor.getJSON();
       const text = nextEditor.state.doc.textContent;
-      setDocumentStats({
-        characters: text.length,
-        words: text.trim() ? text.trim().split(/\s+/).length : 0,
-      });
+      updateStats(nextEditor);
       onChange(tiptapToMarkdown(document));
       onDocumentChange?.(document);
       nextEditor.view.dom.classList.toggle('is-empty', !text);
@@ -188,6 +248,21 @@ export default function MarkdownTiptapEditor({
       }
     },
   });
+
+  // Parent records can change while this component stays mounted. Reconcile
+  // only when the incoming document differs from the current editor state, so
+  // normal onUpdate parent re-renders never overwrite in-progress edits.
+  useEffect(() => {
+    if (!editor || !richMode) return;
+    const incoming = richDocument || (value ? `<p>${escapeHtml(value)}</p>` : '<p></p>');
+    const current = JSON.stringify(editor.getJSON());
+    const next = typeof incoming === 'string' ? incoming : JSON.stringify(incoming);
+    if (typeof incoming !== 'string' && current === next) return;
+    if (typeof incoming === 'string' && tiptapToMarkdown(editor.getJSON()) === value) return;
+    editor.commands.setContent(incoming, { emitUpdate: false });
+    updateStats(editor);
+    setSlashMenu(null);
+  }, [editor, richDocument, value, richMode]);
 
   useEffect(() => {
     if (!editor) return;
@@ -422,7 +497,12 @@ export default function MarkdownTiptapEditor({
       <div className="tiptap-canvas">
         <EditorContent editor={editor} />
         {slashMenu && slashMatches.length > 0 && (
-          <div className="tiptap-slash-menu" role="listbox" aria-label="插入區塊">
+          <div
+            className="tiptap-slash-menu"
+            role="listbox"
+            aria-label="插入區塊"
+            aria-activedescendant={`tiptap-slash-option-${slashMatches[slashMenu.index]?.query || slashMatches[0].query}`}
+          >
             <p>插入區塊</p>
             {slashMatches.map((command, index) => (
               <button
@@ -430,6 +510,7 @@ export default function MarkdownTiptapEditor({
                 type="button"
                 role="option"
                 aria-selected={index === slashMenu.index}
+                id={`tiptap-slash-option-${command.query}`}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => runSlashCommand(index)}
               >

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isTiptapDocument, tiptapToMarkdown } from './MarkdownTiptapEditor';
+import { isTiptapDocument, normalizeTiptapDocument, tiptapToMarkdown } from './MarkdownTiptapEditor';
 
 describe('isTiptapDocument', () => {
   it('accepts a persisted Tiptap document', () => {
@@ -82,5 +82,34 @@ describe('tiptapToMarkdown', () => {
         ],
       }),
     ).toBe('');
+  });
+});
+
+describe('normalizeTiptapDocument', () => {
+  it('drops unsupported nodes and marks while preserving supported descendants', () => {
+    expect(
+      normalizeTiptapDocument({
+        type: 'doc',
+        content: [
+          { type: 'customWidget', content: [{ type: 'paragraph', content: [{ type: 'text', text: '保留' }] }] },
+          { type: 'paragraph', content: [{ type: 'text', text: '格式', marks: [{ type: 'highlight' }, { type: 'bold' }] }] },
+        ],
+      }),
+    ).toEqual({
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: '保留', marks: [] }] },
+        { type: 'paragraph', content: [{ type: 'text', text: '格式', marks: [{ type: 'bold' }] }] },
+      ],
+    });
+  });
+
+  it('turns empty list artifacts into blank paragraphs', () => {
+    expect(
+      normalizeTiptapDocument({
+        type: 'doc',
+        content: [{ type: 'orderedList', content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [] }] }] }],
+      }),
+    ).toEqual({ type: 'doc', content: [{ type: 'paragraph', content: [] }] });
   });
 });
