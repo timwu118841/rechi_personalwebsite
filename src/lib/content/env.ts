@@ -3,6 +3,11 @@ export interface SupabaseEnvironment {
   publishableKey: string;
   secretKey: string;
   adminEmails: string[];
+  passwordLoginEnabled: boolean;
+}
+
+export function normalizeAdminEmail(email: string): string {
+  return email.trim().toLowerCase();
 }
 
 function read(name: string): string {
@@ -16,6 +21,10 @@ export function getPublicSupabaseConfig() {
   return url && publishableKey ? { url, publishableKey } : null;
 }
 
+export function isPasswordLoginEnabled(): boolean {
+  return read('PUBLIC_ADMIN_PASSWORD_LOGIN') !== 'false';
+}
+
 export function getSupabaseEnvironment(): SupabaseEnvironment | null {
   const publicConfig = getPublicSupabaseConfig();
   const secretKey = read('SUPABASE_SECRET_KEY');
@@ -23,10 +32,8 @@ export function getSupabaseEnvironment(): SupabaseEnvironment | null {
   return {
     ...publicConfig,
     secretKey,
-    adminEmails: read('ADMIN_EMAILS')
-      .split(',')
-      .map((email) => email.trim().toLocaleLowerCase())
-      .filter(Boolean),
+    passwordLoginEnabled: isPasswordLoginEnabled(),
+    adminEmails: read('ADMIN_EMAILS').split(',').map(normalizeAdminEmail).filter(Boolean),
   };
 }
 
