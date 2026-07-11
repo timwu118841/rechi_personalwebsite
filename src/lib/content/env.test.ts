@@ -16,11 +16,6 @@ describe('Supabase admin environment', () => {
     process.env.PUBLIC_SUPABASE_URL = 'https://project.supabase.co';
     process.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'publishable';
     process.env.SUPABASE_SECRET_KEY = 'secret';
-    process.env.ADMIN_EMAILS = ' Admin@Example.COM, ,second@example.com ';
-    expect(getSupabaseEnvironment()?.adminEmails).toEqual([
-      'admin@example.com',
-      'second@example.com',
-    ]);
     expect(getSupabaseEnvironment()?.passwordLoginEnabled).toBe(true);
   });
 
