@@ -424,6 +424,7 @@ function ArticlesPanel({
   if (editing) {
     return (
       <ArticleEditor
+        key={editing.id || 'new-article'}
         article={editing}
         categories={categories}
         contentTypes={contentTypes}
@@ -485,6 +486,7 @@ function ArticleEditor({
 }) {
   const [value, setValue] = useState(article);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
   const set = <K extends keyof AdminArticle>(key: K, next: AdminArticle[K]) =>
     setValue((current) => ({ ...current, [key]: next }));
   return (
@@ -651,15 +653,20 @@ function ArticleEditor({
                   const altInput = document.querySelector<HTMLInputElement>('#cover-alt');
                   if (!file || !altInput?.value.trim()) return;
                   setUploading(true);
+                  setUploadError('');
                   try {
                     set('cover', await upload(file, altInput.value.trim()));
+                  } catch (error) {
+                    setUploadError(error instanceof Error ? error.message : '圖片上傳失敗，請再試一次。');
                   } finally {
+                    event.target.value = '';
                     setUploading(false);
                   }
                 }}
               />
             </label>
             {uploading && <small>圖片上傳中…</small>}
+            {uploadError && <small role="alert">{uploadError}</small>}
           </fieldset>
           <label>
             SEO 標題
