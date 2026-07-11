@@ -37,4 +37,19 @@ describe('runtime article validation', () => {
       }),
     ).toThrow();
   });
+
+  it('accepts a rich body_json document when legacy Markdown is empty', () => {
+    const result = articleInputSchema.parse({
+      ...input,
+      body: '',
+      bodyJson: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
+    });
+    expect(result.body).toBe('');
+  });
+
+  it('rejects articles with neither legacy Markdown nor rich content', () => {
+    expect(() => articleInputSchema.parse({ ...input, body: '', bodyJson: undefined })).toThrow(
+      /文章內容不可為空/,
+    );
+  });
 });

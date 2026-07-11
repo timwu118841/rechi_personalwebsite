@@ -50,4 +50,16 @@ describe('tiptapToMarkdown', () => {
     const legacy = '## 舊文章\n\n**保留格式**';
     expect(legacy).toBe('## 舊文章\n\n**保留格式**');
   });
+
+  it('serializes rich content used by the additive body_json migration', () => {
+    expect(
+      tiptapToMarkdown({
+        type: 'doc',
+        content: [
+          { type: 'codeBlock', content: [{ type: 'text', text: 'const answer = 42;' }] },
+          { type: 'image', attrs: { src: '/uploads/answer.png', alt: '答案圖' } },
+        ],
+      }),
+    ).toBe('```\nconst answer = 42;\n```\n\n![答案圖](/uploads/answer.png)');
+  });
 });
