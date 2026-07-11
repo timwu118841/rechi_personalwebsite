@@ -3,6 +3,7 @@ import { lazy, Suspense, type SyntheticEvent, useEffect, useMemo, useState } fro
 import type { Category, ContentType, MediaAsset, SiteSettings } from '@/lib/content/types';
 import type { JSONContent } from '@tiptap/react';
 import '@/styles/admin.css';
+import { slugFromTitle } from '@/lib/content/slug';
 
 const MarkdownTiptapEditor = lazy(() => import('./MarkdownTiptapEditor'));
 
@@ -493,15 +494,14 @@ function ArticleEditor({
               onChange={(event) =>
                 set(
                   'slug',
-                  event.target.value
-                    .toLowerCase()
-                    .replace(/[^a-z0-9-]/g, '-')
-                    .replace(/-+/g, '-'),
+                  event.target.value.normalize('NFC'),
                 )
               }
-              required
-              pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+              maxLength={120}
             />
+            <button type="button" className="secondary" onClick={() => set('slug', slugFromTitle(value.title))}>
+              {value.slug ? '重新產生網址代稱' : '依標題產生網址代稱'}
+            </button>
           </label>
           <label>
             文章摘要
