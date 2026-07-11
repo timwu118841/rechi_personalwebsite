@@ -3,9 +3,9 @@
 ## Supabase 與 Vercel
 
 - [ ] 已套用 `supabase/migrations/202607100001_realtime_content.sql`
-- [ ] Auth 只有核准管理者帳號，`ADMIN_EMAILS` 與實際 email 相符
+- [ ] 已套用 `supabase/migrations/202607110004_admin_users.sql`，且 `public.admin_users` 只有核准、已驗證的 Auth 使用者
 - [ ] Supabase 已啟用 Google provider、callback URI 與 `/admin` Redirect URL；`PUBLIC_ADMIN_PASSWORD_LOGIN` 已依相容期策略設定
-- [ ] Vercel 已設定 `SITE_URL`、Supabase 三個 key、`ADMIN_EMAILS`；未設定 `ALLOW_FIXTURE_CONTENT=true`
+- [ ] Vercel 已設定 `SITE_URL`、Supabase 三個 key；未設定 `ALLOW_FIXTURE_CONTENT=true`
 - [ ] `npm run deploy:validate`、`npm run quality`、`npm run test:e2e:ci` 全部成功
 - [ ] preview 回應含 `X-Robots-Tag: noindex, nofollow`
 
@@ -14,7 +14,7 @@
 - [ ] `/admin` 可登入、建立草稿、發布、下架與重新編輯，不產生 Git commit 或 deployment
 - [ ] 新文章立即出現在文章頁、列表、搜尋、RSS 與 sitemap
 - [ ] 封面、作者圖片、網站標題與作者簡介更新後能出現在前台
-- [ ] 未登入／非 allowlist 帳號無法讀取草稿或呼叫管理 API
+- [ ] 未登入／不在 `public.admin_users` 的帳號無法讀取草稿或呼叫管理 API
 - [ ] 圖片格式與 5 MB 上限正常，Storage bucket 不含敏感案件資料
 - [ ] Dark Mode、文章分頁、分類、標籤、404 與無 JavaScript 閱讀正常
 - [ ] Umami 未設定／被阻擋時網站無錯；設定後不傳送搜尋字詞或敏感資料
