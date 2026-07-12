@@ -1,6 +1,11 @@
 ---
 export const prerender = false;
-if (process.env.ALLOW_FIXTURE_CONTENT !== 'true') {
+const runtimeProcess = (
+  globalThis as typeof globalThis & {
+    process?: { env?: Record<string, string | undefined> };
+  }
+).process;
+if (runtimeProcess?.env?.ALLOW_FIXTURE_CONTENT !== 'true') {
   return new Response(null, { status: 404 });
 }
 import EditorFixtureApp from '@/components/admin/EditorFixtureApp';
