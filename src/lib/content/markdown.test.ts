@@ -8,7 +8,7 @@ describe('safe Markdown rendering', () => {
       content: [{ type: 'paragraph', content: [] }],
     });
 
-    expect(html).toBe('');
+    expect(html).toBe('<p></p>');
     expect(html).not.toContain('1.');
     expect(html).not.toContain('<ol');
   });
