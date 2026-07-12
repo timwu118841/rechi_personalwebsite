@@ -527,6 +527,28 @@ select {
   font-size: clamp(1.08rem, 1.5vw, 1.18rem);
   line-height: 1.95;
 }
+.prose span[data-editor-size='small'] {
+  font-size: 0.88em;
+}
+.prose span[data-editor-size='large'] {
+  font-size: 1.18em;
+}
+.prose span[data-editor-color='ink'] {
+  color: var(--color-ink);
+}
+.prose span[data-editor-color='muted'] {
+  color: var(--color-muted);
+}
+.prose span[data-editor-color='accent'] {
+  color: var(--color-accent);
+}
+.prose span[data-editor-color='danger'] {
+  color: #a33d3d;
+}
+html[data-theme='dark'] .prose span[data-editor-color='danger'],
+html:not([data-theme]) .prose span[data-editor-color='danger'] {
+  color: #f08b8b;
+}
 .prose > * + * {
   margin-top: 1.45em;
 }
