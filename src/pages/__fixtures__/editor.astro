@@ -1,0 +1,17 @@
+---
+export const prerender = false;
+if (process.env.ALLOW_FIXTURE_CONTENT !== 'true') {
+  return new Response(null, { status: 404 });
+}
+import EditorFixtureApp from '@/components/admin/EditorFixtureApp';
+---
+
+<!doctype html>
+<html lang="zh-Hant-TW">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Editor fixture</title>
+  </head>
+  <body><EditorFixtureApp client:load /></body>
+</html>
