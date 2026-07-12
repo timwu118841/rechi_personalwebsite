@@ -11,7 +11,7 @@ import {
   normalizeTextMarks,
   TEXT_APPEARANCE_COLORS,
   TEXT_APPEARANCE_SIZES,
-} from '@/lib/content/text-appearance';
+} from '../../lib/content/text-appearance';
 
 type Props = {
   value: string;
