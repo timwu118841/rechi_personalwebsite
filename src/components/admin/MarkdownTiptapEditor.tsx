@@ -3,8 +3,15 @@ import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import Underline from '@tiptap/extension-underline';
+import { Mark, mergeAttributes } from '@tiptap/core';
 import { useEffect, useRef, useState } from 'react';
 import type { MediaAsset } from '@/lib/content/types';
+import {
+  normalizeTextAppearanceAttrs,
+  normalizeTextMarks,
+  TEXT_APPEARANCE_COLORS,
+  TEXT_APPEARANCE_SIZES,
+} from '@/lib/content/text-appearance';
 
 type Props = {
   value: string;
@@ -83,7 +90,50 @@ const supportedNodes = new Set([
   'hardBreak',
   'image',
 ]);
-const supportedMarks = new Set(['bold', 'italic', 'strike', 'code', 'link', 'underline']);
+const supportedMarks = new Set([
+  'bold',
+  'italic',
+  'strike',
+  'code',
+  'link',
+  'underline',
+  'textAppearance',
+]);
+
+const TextAppearance = Mark.create({
+  name: 'textAppearance',
+  inclusive: false,
+  addAttributes() {
+    return {
+      size: { default: null },
+      color: { default: null },
+    };
+  },
+  parseHTML() {
+    return [
+      {
+        tag: 'span[data-editor-size], span[data-editor-color]',
+        getAttrs: (element) =>
+          normalizeTextAppearanceAttrs({
+            size: (element as HTMLElement).dataset.editorSize,
+            color: (element as HTMLElement).dataset.editorColor,
+          }) || false,
+      },
+    ];
+  },
+  renderHTML({ HTMLAttributes }) {
+    const attrs = normalizeTextAppearanceAttrs(HTMLAttributes);
+    if (!attrs) return ['span', {}, 0];
+    return [
+      'span',
+      mergeAttributes(
+        attrs.size ? { 'data-editor-size': attrs.size } : {},
+        attrs.color ? { 'data-editor-color': attrs.color } : {},
+      ),
+      0,
+    ];
+  },
+});
 
 /**
  * Keep persisted rich content within the node/mark allowlist understood by
@@ -100,7 +150,9 @@ export function normalizeTiptapDocument(value: unknown): JSONContent | undefined
     if (!supportedNodes.has(String(node.type))) return children;
     if (node.type === 'doc') return children;
     if (node.type === 'text') {
-      const marks = (node.marks || []).filter((mark) => supportedMarks.has(String(mark.type)));
+      const marks = normalizeTextMarks(
+        (node.marks || []).filter((mark) => supportedMarks.has(String(mark.type))),
+      );
       return typeof node.text === 'string' && node.text
         ? [{ type: 'text', text: node.text, ...(marks.length ? { marks } : {}) }]
         : [];
@@ -222,6 +274,7 @@ export default function MarkdownTiptapEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
       Underline,
+      TextAppearance,
       Link.configure({ openOnClick: false, protocols: ['http', 'https', 'mailto'] }),
       Image.configure({ inline: false, allowBase64: false }),
     ],
