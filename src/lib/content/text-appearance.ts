@@ -1,3 +1,5 @@
+import type { JSONContent } from '@tiptap/core';
+
 export const TEXT_APPEARANCE_SIZES = ['small', 'large'] as const;
 export const TEXT_APPEARANCE_COLORS = ['ink', 'muted', 'accent', 'danger'] as const;
 
@@ -28,22 +30,34 @@ export function normalizeTextAppearanceAttrs(value: unknown): TextAppearanceAttr
 /** Merge duplicate appearance marks in source order while retaining other marks. */
 export function normalizeTextMarks(
   marks: Array<{ type?: string; attrs?: Record<string, unknown> }> | undefined,
-) {
-  const otherMarks: Array<{ type?: string; attrs?: Record<string, unknown> }> = [];
+): JSONContent['marks'] {
+  const normalizedMarks: NonNullable<JSONContent['marks']> = [];
   const appearance: TextAppearanceAttrs = {};
+  let appearanceIndex = -1;
   for (const mark of marks || []) {
     if (mark.type !== 'textAppearance') {
-      otherMarks.push(mark);
+      if (mark.type) {
+        normalizedMarks.push({
+          type: mark.type,
+          ...(mark.attrs ? { attrs: mark.attrs } : {}),
+        });
+      }
       continue;
+    }
+    if (appearanceIndex === -1) {
+      appearanceIndex = normalizedMarks.length;
+      normalizedMarks.push({ type: 'textAppearance', attrs: {} });
     }
     const attrs = normalizeTextAppearanceAttrs(mark.attrs);
     if (attrs?.size) appearance.size = attrs.size;
     if (attrs?.color) appearance.color = attrs.color;
   }
   if (appearance.size || appearance.color) {
-    otherMarks.push({ type: 'textAppearance', attrs: appearance });
+    normalizedMarks[appearanceIndex] = { type: 'textAppearance', attrs: appearance };
+  } else if (appearanceIndex !== -1) {
+    normalizedMarks.splice(appearanceIndex, 1);
   }
-  return otherMarks;
+  return normalizedMarks.length ? normalizedMarks : undefined;
 }
 
 export function appearanceDataAttrs(value: unknown) {

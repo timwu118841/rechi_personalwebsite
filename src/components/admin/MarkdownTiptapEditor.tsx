@@ -11,7 +11,7 @@ import {
   normalizeTextMarks,
   TEXT_APPEARANCE_COLORS,
   TEXT_APPEARANCE_SIZES,
-} from '@/lib/content/text-appearance';
+} from '../../lib/content/text-appearance';
 
 type Props = {
   value: string;
@@ -379,7 +379,11 @@ export default function MarkdownTiptapEditor({
     size?: (typeof TEXT_APPEARANCE_SIZES)[number];
     color?: (typeof TEXT_APPEARANCE_COLORS)[number];
   }) => {
-    const normalized = normalizeTextAppearanceAttrs(attrs);
+    if (!Object.keys(attrs).length) return editor.chain().focus().unsetMark('textAppearance').run();
+    const normalized = normalizeTextAppearanceAttrs({
+      ...editor.getAttributes('textAppearance'),
+      ...attrs,
+    });
     if (!normalized) return editor.chain().focus().unsetMark('textAppearance').run();
     return editor.chain().focus().setMark('textAppearance', normalized).run();
   };

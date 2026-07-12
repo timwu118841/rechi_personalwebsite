@@ -26,8 +26,11 @@ describe('text appearance contract', () => {
   });
 
   it('removes empty appearance marks without changing other marks', () => {
-    expect(normalizeTextMarks([{ type: 'textAppearance', attrs: { color: 'invalid' } }, { type: 'italic' }])).toEqual([
-      { type: 'italic' },
-    ]);
+    expect(
+      normalizeTextMarks([
+        { type: 'textAppearance', attrs: { color: 'invalid' } },
+        { type: 'italic' },
+      ]),
+    ).toEqual([{ type: 'italic' }]);
   });
 });
