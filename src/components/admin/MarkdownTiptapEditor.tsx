@@ -11,7 +11,7 @@ import {
   normalizeTextMarks,
   TEXT_APPEARANCE_COLORS,
   TEXT_APPEARANCE_SIZES,
-} from '@/lib/content/text-appearance';
+} from '../../lib/content/text-appearance';
 
 type Props = {
   value: string;
@@ -367,6 +367,11 @@ export default function MarkdownTiptapEditor({
   const toggle = (name: string) => editor.chain().focus()[name as 'toggleBold']().run();
   const canUndo = editor.can().chain().focus().undo().run();
   const canRedo = editor.can().chain().focus().redo().run();
+  const setAppearance = (attrs: { size?: (typeof TEXT_APPEARANCE_SIZES)[number]; color?: (typeof TEXT_APPEARANCE_COLORS)[number] }) => {
+    const normalized = normalizeTextAppearanceAttrs(attrs);
+    if (!normalized) return editor.chain().focus().unsetMark('textAppearance').run();
+    return editor.chain().focus().setMark('textAppearance', normalized).run();
+  };
   const slashMatches = slashCommands.filter(
     (command) =>
       !slashMenu?.query ||
@@ -626,6 +631,39 @@ export default function MarkdownTiptapEditor({
               }}
             >
               ↗
+            </button>
+            {TEXT_APPEARANCE_SIZES.map((size) => (
+              <button
+                key={size}
+                type="button"
+                aria-label={size === 'small' ? '小字' : '大字'}
+                aria-pressed={editor.isActive('textAppearance', { size })}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => setAppearance({ size })}
+              >
+                {size === 'small' ? 'A−' : 'A+'}
+              </button>
+            ))}
+            {TEXT_APPEARANCE_COLORS.map((color) => (
+              <button
+                key={color}
+                type="button"
+                aria-label={`文字顏色：${color}`}
+                aria-pressed={editor.isActive('textAppearance', { color })}
+                className={`tiptap-appearance-color tiptap-appearance-color-${color}`}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => setAppearance({ color })}
+              >
+                ●
+              </button>
+            ))}
+            <button
+              type="button"
+              aria-label="清除文字外觀"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => setAppearance({})}
+            >
+              清除
             </button>
           </div>
         )}

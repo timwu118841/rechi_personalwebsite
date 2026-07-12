@@ -358,6 +358,10 @@ button.secondary,
 .tiptap-selection-toolbar button[aria-pressed='true'] {
   background: #47775a;
 }
+.tiptap-appearance-color-ink { color: #f4f7f3 !important; }
+.tiptap-appearance-color-muted { color: #aeb8b0 !important; }
+.tiptap-appearance-color-accent { color: #9bd1a7 !important; }
+.tiptap-appearance-color-danger { color: #ff9b9b !important; }
 .tiptap-editor .ProseMirror img {
   max-width: 100%;
   height: auto;
