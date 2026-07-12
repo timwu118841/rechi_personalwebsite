@@ -99,6 +99,12 @@ const supportedMarks = new Set([
   'underline',
   'textAppearance',
 ]);
+const appearanceColorLabels = {
+  ink: '標準',
+  muted: '次要',
+  accent: '強調',
+  danger: '警示',
+} as const;
 
 const TextAppearance = Mark.create({
   name: 'textAppearance',
@@ -206,7 +212,7 @@ function textWithMarks(node: JSONContent): string {
   return value;
 }
 
-function serializeNode(node: JSONContent, depth = 0): string {
+function serializeNode(node: JSONContent): string {
   const children = node.content || [];
   if (node.type === 'text' || node.type === 'hardBreak') return textWithMarks(node);
   if (node.type === 'image') return `![${node.attrs?.alt || ''}](${node.attrs?.src || ''})`;
@@ -215,23 +221,22 @@ function serializeNode(node: JSONContent, depth = 0): string {
   if (node.type === 'heading')
     return `${'#'.repeat(Math.min(3, Number(node.attrs?.level) || 1))} ${children.map(serializeNode).join('')}`;
   if (node.type === 'blockquote')
-    return children.map((child) => `> ${serializeNode(child, depth)}`).join('\n');
+    return children.map((child) => `> ${serializeNode(child)}`).join('\n');
   if (node.type === 'bulletList')
     return children
-      .map((child) => serializeNode(child, depth + 1))
+      .map((child) => serializeNode(child))
       .filter(Boolean)
       .map((content) => `- ${content}`)
       .join('\n');
   if (node.type === 'orderedList')
     return children
-      .map((child) => serializeNode(child, depth + 1))
+      .map((child) => serializeNode(child))
       .filter(Boolean)
       .map((content, index) => `${index + 1}. ${content}`)
       .join('\n');
-  if (node.type === 'listItem')
-    return children.map((child) => serializeNode(child, depth)).join('\n');
+  if (node.type === 'listItem') return children.map((child) => serializeNode(child)).join('\n');
   return children
-    .map((child) => serializeNode(child, depth))
+    .map((child) => serializeNode(child))
     .join(node.type === 'paragraph' ? '' : '\n\n');
 }
 
@@ -295,11 +300,9 @@ export default function MarkdownTiptapEditor({
     },
     onUpdate: ({ editor: nextEditor }) => {
       const document = nextEditor.getJSON();
-      const text = nextEditor.state.doc.textContent;
       updateStats(nextEditor);
       onChange(tiptapToMarkdown(document));
       onDocumentChange?.(document);
-      nextEditor.view.dom.classList.toggle('is-empty', !text);
       const { $from } = nextEditor.state.selection;
       const blockText = $from.parent.textContent;
       const match = blockText.match(/^\/([\w-]*)$/);
@@ -345,10 +348,12 @@ export default function MarkdownTiptapEditor({
         ),
       });
     };
+    const clearSelectionToolbar = () => window.setTimeout(() => setSelectionToolbar(null), 120);
     editor.on('selectionUpdate', updateSelectionToolbar);
-    editor.on('blur', () => window.setTimeout(() => setSelectionToolbar(null), 120));
+    editor.on('blur', clearSelectionToolbar);
     return () => {
       editor.off('selectionUpdate', updateSelectionToolbar);
+      editor.off('blur', clearSelectionToolbar);
     };
   }, [editor]);
 
@@ -663,7 +668,7 @@ export default function MarkdownTiptapEditor({
               <button
                 key={color}
                 type="button"
-                aria-label={`文字顏色：${color}`}
+                aria-label={`文字顏色：${appearanceColorLabels[color]}`}
                 aria-pressed={editor.isActive('textAppearance', { color })}
                 className={`tiptap-appearance-color tiptap-appearance-color-${color}`}
                 onMouseDown={(event) => event.preventDefault()}

@@ -63,7 +63,7 @@ function richNodeHtml(node: RichNode): string {
   if (node.type === 'blockquote') return `<blockquote>${children}</blockquote>`;
   if (node.type === 'bulletList') return `<ul>${children}</ul>`;
   if (node.type === 'orderedList') return `<ol>${children}</ol>`;
-  if (node.type === 'listItem') return children;
+  if (node.type === 'listItem') return `<li>${children}</li>`;
   if (node.type === 'heading') {
     const level = Math.min(3, Math.max(1, Number(attrs.level) || 2));
     return `<h${level}>${children}</h${level}>`;

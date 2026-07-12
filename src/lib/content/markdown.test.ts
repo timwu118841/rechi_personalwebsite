@@ -29,7 +29,9 @@ describe('safe Markdown rendering', () => {
     expect(
       renderRichText({
         type: 'doc',
-        content: [{ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: '主標題' }] }],
+        content: [
+          { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: '主標題' }] },
+        ],
       }),
     ).toBe('<h1>主標題</h1>');
   });
@@ -45,15 +47,32 @@ describe('safe Markdown rendering', () => {
               {
                 type: 'text',
                 text: '安全',
-                marks: [
-                  { type: 'textAppearance', attrs: { size: 'large', color: 'accent' } },
-                ],
+                marks: [{ type: 'textAppearance', attrs: { size: 'large', color: 'accent' } }],
               },
             ],
           },
         ],
       }),
     ).toBe('<p><span data-editor-size="large" data-editor-color="accent">安全</span></p>');
+  });
+
+  it('renders rich list items with semantic list-item wrappers', () => {
+    expect(
+      renderRichText({
+        type: 'doc',
+        content: [
+          {
+            type: 'bulletList',
+            content: [
+              {
+                type: 'listItem',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: '項目' }] }],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBe('<ul><li><p>項目</p></li></ul>');
   });
 
   it('drops invalid appearance values and arbitrary attributes without dropping text', () => {
