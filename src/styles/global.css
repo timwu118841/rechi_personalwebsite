@@ -549,11 +549,11 @@ select {
   color: #a33d3d;
 }
 html[data-theme='dark'] .prose span[data-editor-color='danger'] {
-  color: #f08b8b;
+  color: var(--color-danger);
 }
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) .prose span[data-editor-color='danger'] {
-    color: #f08b8b;
+    color: var(--color-danger);
   }
 }
 .prose > * + * {
