@@ -5,6 +5,7 @@ const baseURL = `http://127.0.0.1:${port}`;
 
 export default defineConfig({
   testDir: './tests/e2e',
+  testMatch: '**/editor-fixture-guard.spec.ts',
   fullyParallel: false,
   projects: [{ name: 'fixture-guard-chromium', use: { ...devices['Desktop Chrome'] } }],
   use: { baseURL },

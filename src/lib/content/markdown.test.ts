@@ -29,7 +29,9 @@ describe('safe Markdown rendering', () => {
     expect(
       renderRichText({
         type: 'doc',
-        content: [{ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: '主標題' }] }],
+        content: [
+          { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: '主標題' }] },
+        ],
       }),
     ).toBe('<h1>主標題</h1>');
   });
@@ -45,15 +47,78 @@ describe('safe Markdown rendering', () => {
               {
                 type: 'text',
                 text: '安全',
-                marks: [
-                  { type: 'textAppearance', attrs: { size: 'large', color: 'accent' } },
-                ],
+                marks: [{ type: 'textAppearance', attrs: { size: 'large', color: 'accent' } }],
               },
             ],
           },
         ],
       }),
     ).toBe('<p><span data-editor-size="large" data-editor-color="accent">安全</span></p>');
+  });
+
+  it('merges duplicate appearance marks with valid dimensions', () => {
+    expect(
+      renderRichText({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: '合併',
+                marks: [
+                  { type: 'textAppearance', attrs: { size: 'small' } },
+                  { type: 'textAppearance', attrs: { color: 'accent' } },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBe('<p><span data-editor-size="small" data-editor-color="accent">合併</span></p>');
+  });
+
+  it('renders rich list items with semantic list-item wrappers', () => {
+    expect(
+      renderRichText({
+        type: 'doc',
+        content: [
+          {
+            type: 'bulletList',
+            content: [
+              {
+                type: 'listItem',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: '項目' }] }],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBe('<ul><li><p>項目</p></li></ul>');
+  });
+
+  it('rejects malformed non-list children inside lists', () => {
+    const html = renderRichText({
+      type: 'doc',
+      content: [
+        {
+          type: 'bulletList',
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: '不應直接出現在清單中' }] },
+            { type: 'listItem', content: [{ type: 'paragraph', content: [] }] },
+          ],
+        },
+        {
+          type: 'listItem',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: '孤立項目' }] }],
+        },
+      ],
+    });
+
+    expect(html).toBe('<ul><li><p></p></li></ul>');
+    expect(html).not.toContain('<ul><p>');
+    expect(html).not.toContain('孤立項目');
   });
 
   it('drops invalid appearance values and arbitrary attributes without dropping text', () => {

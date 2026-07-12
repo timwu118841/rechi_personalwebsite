@@ -294,6 +294,24 @@ button.secondary,
   content: '輸入內容，或輸入 / 選擇區塊';
   pointer-events: none;
 }
+.tiptap-editor .ProseMirror span[data-editor-size='small'] {
+  font-size: 0.88em;
+}
+.tiptap-editor .ProseMirror span[data-editor-size='large'] {
+  font-size: 1.18em;
+}
+.tiptap-editor .ProseMirror span[data-editor-color='ink'] {
+  color: var(--color-ink);
+}
+.tiptap-editor .ProseMirror span[data-editor-color='muted'] {
+  color: var(--color-muted);
+}
+.tiptap-editor .ProseMirror span[data-editor-color='accent'] {
+  color: var(--color-accent);
+}
+.tiptap-editor .ProseMirror span[data-editor-color='danger'] {
+  color: var(--color-danger);
+}
 .tiptap-slash-menu {
   position: absolute;
   z-index: 5;
@@ -339,7 +357,11 @@ button.secondary,
   position: absolute;
   z-index: 6;
   display: flex;
+  min-width: 0;
+  max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 1rem);
+  flex-wrap: wrap;
   gap: 0.2rem;
+  overflow-x: auto;
   padding: 0.25rem;
   border: 1px solid #d9dfd8;
   border-radius: 0.45rem;
@@ -368,7 +390,7 @@ button.secondary,
   color: #9bd1a7 !important;
 }
 .tiptap-appearance-color-danger {
-  color: #ff9b9b !important;
+  color: var(--color-danger) !important;
 }
 .tiptap-editor .ProseMirror img {
   max-width: 100%;
@@ -445,9 +467,13 @@ legend {
   .tiptap-selection-toolbar {
     position: fixed;
     top: auto !important;
+    left: 0.75rem !important;
     right: 0.75rem;
     bottom: 0.75rem;
-    left: auto !important;
+    width: auto;
+    max-width: calc(
+      100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 1.5rem
+    );
   }
   .admin-login {
     gap: 2rem;

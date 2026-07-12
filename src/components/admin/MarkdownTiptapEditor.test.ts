@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { isTiptapDocument, normalizeTiptapDocument, tiptapToMarkdown } from './MarkdownTiptapEditor';
+import {
+  isTiptapDocument,
+  normalizeTiptapDocument,
+  tiptapToMarkdown,
+} from './MarkdownTiptapEditor';
 
 describe('isTiptapDocument', () => {
   it('accepts a persisted Tiptap document', () => {
@@ -109,8 +113,16 @@ describe('normalizeTiptapDocument', () => {
       normalizeTiptapDocument({
         type: 'doc',
         content: [
-          { type: 'customWidget', content: [{ type: 'paragraph', content: [{ type: 'text', text: '保留' }] }] },
-          { type: 'paragraph', content: [{ type: 'text', text: '格式', marks: [{ type: 'highlight' }, { type: 'bold' }] }] },
+          {
+            type: 'customWidget',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: '保留' }] }],
+          },
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'text', text: '格式', marks: [{ type: 'highlight' }, { type: 'bold' }] },
+            ],
+          },
         ],
       }),
     ).toEqual({
@@ -126,8 +138,77 @@ describe('normalizeTiptapDocument', () => {
     expect(
       normalizeTiptapDocument({
         type: 'doc',
-        content: [{ type: 'orderedList', content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [] }] }] }],
+        content: [
+          {
+            type: 'orderedList',
+            content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [] }] }],
+          },
+        ],
       }),
     ).toEqual({ type: 'doc', content: [{ type: 'paragraph', content: [] }] });
+  });
+
+  it('omits null text appearance dimensions and ignores malformed list children', () => {
+    expect(
+      normalizeTiptapDocument({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: '大小',
+                marks: [{ type: 'textAppearance', attrs: { size: 'large', color: null } }],
+              },
+              {
+                type: 'text',
+                text: '顏色',
+                marks: [{ type: 'textAppearance', attrs: { size: null, color: 'accent' } }],
+              },
+            ],
+          },
+          {
+            type: 'bulletList',
+            content: [
+              { type: 'paragraph', content: [{ type: 'text', text: '錯誤子節點' }] },
+              { type: 'listItem', content: [{ type: 'paragraph', content: [] }] },
+              {
+                type: 'listItem',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: '有效' }] }],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toEqual({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: '大小',
+              marks: [{ type: 'textAppearance', attrs: { size: 'large' } }],
+            },
+            {
+              type: 'text',
+              text: '顏色',
+              marks: [{ type: 'textAppearance', attrs: { color: 'accent' } }],
+            },
+          ],
+        },
+        {
+          type: 'bulletList',
+          content: [
+            {
+              type: 'listItem',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: '有效' }] }],
+            },
+          ],
+        },
+      ],
+    });
   });
 });

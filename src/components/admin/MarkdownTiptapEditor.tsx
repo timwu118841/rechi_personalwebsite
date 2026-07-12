@@ -99,14 +99,32 @@ const supportedMarks = new Set([
   'underline',
   'textAppearance',
 ]);
+const appearanceColorLabels = {
+  ink: '標準',
+  muted: '次要',
+  accent: '強調',
+  danger: '警示',
+} as const;
 
 const TextAppearance = Mark.create({
   name: 'textAppearance',
   inclusive: false,
   addAttributes() {
     return {
-      size: { default: null },
-      color: { default: null },
+      size: {
+        default: null,
+        renderHTML: (attrs) =>
+          normalizeTextAppearanceAttrs({ size: attrs.size })?.size
+            ? { 'data-editor-size': attrs.size }
+            : {},
+      },
+      color: {
+        default: null,
+        renderHTML: (attrs) =>
+          normalizeTextAppearanceAttrs({ color: attrs.color })?.color
+            ? { 'data-editor-color': attrs.color }
+            : {},
+      },
     };
   },
   parseHTML() {
@@ -122,16 +140,7 @@ const TextAppearance = Mark.create({
     ];
   },
   renderHTML({ HTMLAttributes }) {
-    const attrs = normalizeTextAppearanceAttrs(HTMLAttributes);
-    if (!attrs) return ['span', {}, 0];
-    return [
-      'span',
-      mergeAttributes(
-        attrs.size ? { 'data-editor-size': attrs.size } : {},
-        attrs.color ? { 'data-editor-color': attrs.color } : {},
-      ),
-      0,
-    ];
+    return ['span', mergeAttributes(HTMLAttributes), 0];
   },
 });
 
@@ -162,12 +171,22 @@ export function normalizeTiptapDocument(value: unknown): JSONContent | undefined
       return src ? [{ type: 'image', attrs: { ...node.attrs, src } }] : [];
     }
     if (node.type === 'bulletList' || node.type === 'orderedList') {
-      const listItems = children.filter((child) => {
-        if (child.type !== 'listItem') return true;
-        return (child.content || []).some(
-          (item) => item.type !== 'paragraph' || Boolean((item.content || []).length),
+      const listItems = children
+        .filter((child) => child.type === 'listItem')
+        .map((child) => ({
+          ...child,
+          content: (child.content || []).filter(
+            (item) =>
+              item.type === 'paragraph' ||
+              item.type === 'bulletList' ||
+              item.type === 'orderedList',
+          ),
+        }))
+        .filter((child) =>
+          (child.content || []).some(
+            (item) => item.type !== 'paragraph' || Boolean((item.content || []).length),
+          ),
         );
-      });
       if (listItems.length === 0) return [{ type: 'paragraph', content: [] }];
       return [
         { type: node.type, ...(node.attrs ? { attrs: node.attrs } : {}), content: listItems },
@@ -206,7 +225,7 @@ function textWithMarks(node: JSONContent): string {
   return value;
 }
 
-function serializeNode(node: JSONContent, depth = 0): string {
+function serializeNode(node: JSONContent): string {
   const children = node.content || [];
   if (node.type === 'text' || node.type === 'hardBreak') return textWithMarks(node);
   if (node.type === 'image') return `![${node.attrs?.alt || ''}](${node.attrs?.src || ''})`;
@@ -215,23 +234,22 @@ function serializeNode(node: JSONContent, depth = 0): string {
   if (node.type === 'heading')
     return `${'#'.repeat(Math.min(3, Number(node.attrs?.level) || 1))} ${children.map(serializeNode).join('')}`;
   if (node.type === 'blockquote')
-    return children.map((child) => `> ${serializeNode(child, depth)}`).join('\n');
+    return children.map((child) => `> ${serializeNode(child)}`).join('\n');
   if (node.type === 'bulletList')
     return children
-      .map((child) => serializeNode(child, depth + 1))
+      .map((child) => serializeNode(child))
       .filter(Boolean)
       .map((content) => `- ${content}`)
       .join('\n');
   if (node.type === 'orderedList')
     return children
-      .map((child) => serializeNode(child, depth + 1))
+      .map((child) => serializeNode(child))
       .filter(Boolean)
       .map((content, index) => `${index + 1}. ${content}`)
       .join('\n');
-  if (node.type === 'listItem')
-    return children.map((child) => serializeNode(child, depth)).join('\n');
+  if (node.type === 'listItem') return children.map((child) => serializeNode(child)).join('\n');
   return children
-    .map((child) => serializeNode(child, depth))
+    .map((child) => serializeNode(child))
     .join(node.type === 'paragraph' ? '' : '\n\n');
 }
 
@@ -261,7 +279,11 @@ export default function MarkdownTiptapEditor({
     null,
   );
   const editorShell = useRef<HTMLDivElement>(null);
+  const selectionToolbarRef = useRef<HTMLDivElement>(null);
+  const updateSelectionToolbarRef = useRef<() => void>(() => {});
   const fileInput = useRef<HTMLInputElement>(null);
+  const selectionRange = useRef<{ from: number; to: number } | null>(null);
+  const lastBodyJson = useRef(bodyJson);
   const mounted = useRef(true);
   const updateStats = (nextEditor: NonNullable<typeof editor>) => {
     const text = nextEditor.state.doc.textContent;
@@ -294,12 +316,13 @@ export default function MarkdownTiptapEditor({
       updateStats(nextEditor);
     },
     onUpdate: ({ editor: nextEditor }) => {
-      const document = nextEditor.getJSON();
-      const text = nextEditor.state.doc.textContent;
+      const document = normalizeTiptapDocument(nextEditor.getJSON()) || {
+        type: 'doc',
+        content: [],
+      };
       updateStats(nextEditor);
       onChange(tiptapToMarkdown(document));
       onDocumentChange?.(document);
-      nextEditor.view.dom.classList.toggle('is-empty', !text);
       const { $from } = nextEditor.state.selection;
       const blockText = $from.parent.textContent;
       const match = blockText.match(/^\/([\w-]*)$/);
@@ -316,41 +339,73 @@ export default function MarkdownTiptapEditor({
   // normal onUpdate parent re-renders never overwrite in-progress edits.
   useEffect(() => {
     if (!editor || !richMode) return;
+    if (richDocument && bodyJson === lastBodyJson.current) return;
+    lastBodyJson.current = bodyJson;
     const incoming = richDocument || (value ? `<p>${escapeHtml(value)}</p>` : '<p></p>');
-    const current = JSON.stringify(editor.getJSON());
+    const current = JSON.stringify(normalizeTiptapDocument(editor.getJSON()));
     const next = typeof incoming === 'string' ? incoming : JSON.stringify(incoming);
     if (typeof incoming !== 'string' && current === next) return;
     if (typeof incoming === 'string' && tiptapToMarkdown(editor.getJSON()) === value) return;
     editor.commands.setContent(incoming, { emitUpdate: false });
     updateStats(editor);
     setSlashMenu(null);
-  }, [editor, richDocument, value, richMode]);
+  }, [editor, richDocument, bodyJson, value, richMode]);
 
   useEffect(() => {
     if (!editor) return;
+    let clearTimer: number | undefined;
     const updateSelectionToolbar = () => {
       if (editor.state.selection.empty || !editorShell.current) {
         setSelectionToolbar(null);
         return;
       }
       const { from, to } = editor.state.selection;
+      selectionRange.current = { from, to };
       const start = editor.view.coordsAtPos(from);
       const end = editor.view.coordsAtPos(to);
       const bounds = editorShell.current.getBoundingClientRect();
-      setSelectionToolbar({
+      const toolbarWidth =
+        selectionToolbarRef.current?.getBoundingClientRect().width || bounds.width;
+      const centeredLeft = (start.left + end.left) / 2 - bounds.left - toolbarWidth / 2;
+      const nextPosition = {
         top: Math.max(8, Math.min(start.top, end.top) - bounds.top - 44),
-        left: Math.max(
-          8,
-          Math.min(bounds.width - 180, (start.left + end.left) / 2 - bounds.left - 90),
-        ),
-      });
+        left: window.matchMedia('(max-width: 800px)').matches
+          ? 12
+          : Math.max(8, Math.min(bounds.width - toolbarWidth - 8, centeredLeft)),
+      };
+      setSelectionToolbar((current) =>
+        current?.top === nextPosition.top && current.left === nextPosition.left
+          ? current
+          : nextPosition,
+      );
     };
+    updateSelectionToolbarRef.current = updateSelectionToolbar;
+    const clearSelectionToolbar = () => {
+      window.clearTimeout(clearTimer);
+      clearTimer = window.setTimeout(() => setSelectionToolbar(null), 120);
+    };
+    const cancelClear = () => window.clearTimeout(clearTimer);
     editor.on('selectionUpdate', updateSelectionToolbar);
-    editor.on('blur', () => window.setTimeout(() => setSelectionToolbar(null), 120));
+    editor.on('blur', clearSelectionToolbar);
+    editor.on('focus', cancelClear);
+    window.addEventListener('scroll', updateSelectionToolbar, true);
+    window.addEventListener('resize', updateSelectionToolbar);
     return () => {
+      window.clearTimeout(clearTimer);
       editor.off('selectionUpdate', updateSelectionToolbar);
+      editor.off('blur', clearSelectionToolbar);
+      editor.off('focus', cancelClear);
+      window.removeEventListener('scroll', updateSelectionToolbar, true);
+      window.removeEventListener('resize', updateSelectionToolbar);
+      updateSelectionToolbarRef.current = () => {};
     };
   }, [editor]);
+
+  useEffect(() => {
+    if (!selectionToolbar) return;
+    const frame = window.requestAnimationFrame(() => updateSelectionToolbarRef.current());
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectionToolbar]);
 
   if (!richMode) {
     return (
@@ -379,13 +434,19 @@ export default function MarkdownTiptapEditor({
     size?: (typeof TEXT_APPEARANCE_SIZES)[number];
     color?: (typeof TEXT_APPEARANCE_COLORS)[number];
   }) => {
-    if (!Object.keys(attrs).length) return editor.chain().focus().unsetMark('textAppearance').run();
-    const normalized = normalizeTextAppearanceAttrs({
-      ...editor.getAttributes('textAppearance'),
-      ...attrs,
-    });
-    if (!normalized) return editor.chain().focus().unsetMark('textAppearance').run();
-    return editor.chain().focus().setMark('textAppearance', normalized).run();
+    const chain = editor.chain().focus();
+    if (selectionRange.current) chain.setTextSelection(selectionRange.current);
+    if (!Object.keys(attrs).length) return chain.unsetMark('textAppearance').run();
+    const normalized = normalizeTextAppearanceAttrs(attrs);
+    if (!normalized) return chain.unsetMark('textAppearance').run();
+    return chain.setMark('textAppearance', normalized).run();
+  };
+  const preserveSelection = (event: React.PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    selectionRange.current = {
+      from: editor.state.selection.from,
+      to: editor.state.selection.to,
+    };
   };
   const slashMatches = slashCommands.filter(
     (command) =>
@@ -593,7 +654,13 @@ export default function MarkdownTiptapEditor({
                 role="option"
                 aria-selected={index === slashMenu.index}
                 id={`tiptap-slash-option-${command.query}`}
-                onMouseDown={(event) => event.preventDefault()}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  selectionRange.current = {
+                    from: editor.state.selection.from,
+                    to: editor.state.selection.to,
+                  };
+                }}
                 onClick={() => runSlashCommand(index)}
               >
                 <strong>{command.label}</strong>
@@ -605,6 +672,7 @@ export default function MarkdownTiptapEditor({
         {selectionToolbar && (
           <div
             className="tiptap-selection-toolbar"
+            ref={selectionToolbarRef}
             style={{ top: selectionToolbar.top, left: selectionToolbar.left }}
             role="toolbar"
             aria-label="選取文字格式"
@@ -613,7 +681,7 @@ export default function MarkdownTiptapEditor({
               type="button"
               aria-label="粗體"
               aria-pressed={editor.isActive('bold')}
-              onMouseDown={(event) => event.preventDefault()}
+              onPointerDown={preserveSelection}
               onClick={() => editor.chain().focus().toggleBold().run()}
             >
               <strong>B</strong>
@@ -622,7 +690,7 @@ export default function MarkdownTiptapEditor({
               type="button"
               aria-label="斜體"
               aria-pressed={editor.isActive('italic')}
-              onMouseDown={(event) => event.preventDefault()}
+              onPointerDown={preserveSelection}
               onClick={() => editor.chain().focus().toggleItalic().run()}
             >
               <em>I</em>
@@ -631,7 +699,7 @@ export default function MarkdownTiptapEditor({
               type="button"
               aria-label="刪除線"
               aria-pressed={editor.isActive('strike')}
-              onMouseDown={(event) => event.preventDefault()}
+              onPointerDown={preserveSelection}
               onClick={() => editor.chain().focus().toggleStrike().run()}
             >
               <s>S</s>
@@ -639,7 +707,7 @@ export default function MarkdownTiptapEditor({
             <button
               type="button"
               aria-label="連結"
-              onMouseDown={(event) => event.preventDefault()}
+              onPointerDown={preserveSelection}
               onClick={() => {
                 const url = window.prompt('連結網址', 'https://');
                 if (url) editor.chain().focus().setLink({ href: url }).run();
@@ -653,7 +721,7 @@ export default function MarkdownTiptapEditor({
                 type="button"
                 aria-label={size === 'small' ? '小字' : '大字'}
                 aria-pressed={editor.isActive('textAppearance', { size })}
-                onMouseDown={(event) => event.preventDefault()}
+                onPointerDown={preserveSelection}
                 onClick={() => setAppearance({ size })}
               >
                 {size === 'small' ? 'A−' : 'A+'}
@@ -663,10 +731,10 @@ export default function MarkdownTiptapEditor({
               <button
                 key={color}
                 type="button"
-                aria-label={`文字顏色：${color}`}
+                aria-label={`文字顏色：${appearanceColorLabels[color]}`}
                 aria-pressed={editor.isActive('textAppearance', { color })}
                 className={`tiptap-appearance-color tiptap-appearance-color-${color}`}
-                onMouseDown={(event) => event.preventDefault()}
+                onPointerDown={preserveSelection}
                 onClick={() => setAppearance({ color })}
               >
                 ●
@@ -675,7 +743,7 @@ export default function MarkdownTiptapEditor({
             <button
               type="button"
               aria-label="清除文字外觀"
-              onMouseDown={(event) => event.preventDefault()}
+              onPointerDown={preserveSelection}
               onClick={() => setAppearance({})}
             >
               清除

@@ -43,11 +43,11 @@ function slugConflictError(field: 'slug' | 'old_slug' = 'slug') {
 function slugConflictKind(error: unknown): 'slug' | 'old_slug' | null {
   const value = error as {
     code?: string;
-  field?: string;
-  constraint?: string;
-  detail?: string;
-  details?: string;
-};
+    field?: string;
+    constraint?: string;
+    detail?: string;
+    details?: string;
+  };
   if (value?.code !== '23505') return null;
   if (
     value.field === 'old_slug' ||

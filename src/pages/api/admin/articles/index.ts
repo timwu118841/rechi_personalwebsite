@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { requireAdmin } from '@/lib/admin/auth';
 import { errorResponse, invalidateContent, json } from '@/lib/admin/http';
 import { getContentRepository } from '@/lib/content/repository';
+import { articleCacheTag } from '@/lib/content/slug';
 import { articleInputSchema } from '@/lib/content/validation';
 
 export const prerender = false;
@@ -20,7 +21,7 @@ export const POST: APIRoute = async (context) => {
     await requireAdmin(context.request);
     const input = articleInputSchema.parse(await context.request.json());
     const article = await getContentRepository().saveArticle(input);
-    await invalidateContent(context, [`article:${article.slug}`]);
+    await invalidateContent(context, [articleCacheTag(article.slug)]);
     return json({ article }, { status: 201 });
   } catch (error) {
     return errorResponse(error);

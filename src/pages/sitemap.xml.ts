@@ -1,12 +1,15 @@
 import type { APIRoute } from 'astro';
 import { getContentRepository } from '@/lib/content/repository';
+import { articlePath } from '@/lib/content/slug';
 
 export const prerender = false;
-const escapeXml = (value: string) =>
-  value.replace(
+
+function escapeXml(value: string): string {
+  return value.replace(
     /[<>&'"]/g,
     (char) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[char]!,
   );
+}
 
 export const GET: APIRoute = async (context) => {
   const repository = getContentRepository();
@@ -22,7 +25,7 @@ export const GET: APIRoute = async (context) => {
     '/categories/',
     '/tags/',
     '/about/',
-    ...articles.map((article) => `/articles/${article.slug}/`),
+    ...articles.map((article) => articlePath(article.slug)),
     ...categories.map((category) => `/categories/${category.slug}/`),
     ...tags.map((tag) => `/tags/${encodeURIComponent(tag.name)}/`),
   ];

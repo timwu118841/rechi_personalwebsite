@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { requireAdmin } from '@/lib/admin/auth';
 import { errorResponse, invalidateContent, json } from '@/lib/admin/http';
 import { getContentRepository } from '@/lib/content/repository';
+import { articleCacheTag } from '@/lib/content/slug';
 import { articleInputSchema } from '@/lib/content/validation';
 
 export const prerender = false;
@@ -24,7 +25,10 @@ export const PUT: APIRoute = async (context) => {
     if (!previous) return json({ message: '找不到文章。' }, { status: 404 });
     const input = articleInputSchema.parse(await context.request.json());
     const article = await repository.saveArticle(input, previous.id);
-    await invalidateContent(context, [`article:${previous.slug}`, `article:${article.slug}`]);
+    await invalidateContent(context, [
+      articleCacheTag(previous.slug),
+      articleCacheTag(article.slug),
+    ]);
     return json({ article });
   } catch (error) {
     return errorResponse(error);

@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import MarkdownTiptapEditor from './MarkdownTiptapEditor';
+import '@/styles/global.css';
+import '@/styles/admin.css';
 
 const initialDocument = {
   type: 'doc',
@@ -17,15 +19,9 @@ export default function EditorFixtureApp() {
         bodyJson={initialDocument}
         onChange={(next) => {
           setMarkdown(next);
-          globalThis.document
-            .querySelector<HTMLElement>('[data-testid="editor-markdown"]')
-            ?.setAttribute('data-value', next);
         }}
         onDocumentChange={(next) => {
           setCapturedDocument(next);
-          globalThis.document
-            .querySelector<HTMLElement>('[data-testid="editor-json"]')
-            ?.setAttribute('data-value', JSON.stringify(next));
         }}
       />
       <output data-testid="editor-markdown" data-value={markdown} />

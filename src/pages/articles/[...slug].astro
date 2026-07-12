@@ -3,9 +3,9 @@ import LegalDisclaimer from '@/components/LegalDisclaimer.astro';
 import TagList from '@/components/TagList.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { formatDate, readingTimeMinutes } from '@/lib/articles';
-import { getContentRepository } from '@/lib/content/repository';
 import { renderMarkdown, renderRichText } from '@/lib/content/markdown';
-import { decodeSlugPathParam } from '@/lib/content/slug';
+import { getContentRepository } from '@/lib/content/repository';
+import { articleCacheTag, articlePath, decodeSlugPathParam } from '@/lib/content/slug';
 
 const slug = decodeSlugPathParam(Astro.params.slug || '');
 const repository = getContentRepository();
@@ -15,18 +15,17 @@ const [article, settings] = await Promise.all([
 ]);
 if (!article) {
   const redirect = await repository.getArticleSlugRedirect(slug);
-  if (redirect) return Astro.redirect(`/articles/${encodeURIComponent(redirect)}/`, 301);
+  if (redirect) return Astro.redirect(articlePath(redirect), 301);
   return Astro.rewrite('/404');
 }
 if (Astro.cache.enabled)
   Astro.cache.set({
     maxAge: 86400,
     swr: 604800,
-    tags: ['content', 'site-settings', `article:${article.slug}`],
+    tags: ['content', 'site-settings', articleCacheTag(article.slug)],
   });
-const canonical =
-  article.canonicalUrl || new URL(`/articles/${article.slug}/`, Astro.site).toString();
-const articleUrl = new URL(`/articles/${article.slug}/`, Astro.site).toString();
+const articleUrl = new URL(articlePath(article.slug), Astro.site).toString();
+const canonical = article.canonicalUrl || articleUrl;
 const image = article.cover || settings.defaultSocialImage;
 const minutes = readingTimeMinutes(article.body);
 const bodyHtml =

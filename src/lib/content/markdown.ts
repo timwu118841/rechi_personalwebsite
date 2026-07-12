@@ -1,6 +1,10 @@
 import { marked } from 'marked';
 import sanitizeHtml from 'sanitize-html';
-import { appearanceDataAttrs, normalizeTextAppearanceAttrs } from './text-appearance';
+import {
+  appearanceDataAttrs,
+  normalizeTextAppearanceAttrs,
+  normalizeTextMarks,
+} from './text-appearance';
 
 marked.setOptions({ async: false, gfm: true, breaks: false });
 
@@ -26,13 +30,11 @@ function escapeHtml(value: string): string {
   );
 }
 
-function richNodeHtml(node: RichNode): string {
+function richNodeHtml(node: RichNode, parentType?: string): string {
   if (node.type === 'text') {
     let value = escapeHtml(node.text || '');
-    const appearance = node.marks?.reduce<Record<string, unknown>>((merged, mark) => {
-      if (mark.type === 'textAppearance') return { ...merged, ...mark.attrs };
-      return merged;
-    }, {});
+    const marks = normalizeTextMarks(node.marks);
+    const appearance = marks?.find((mark) => mark.type === 'textAppearance')?.attrs;
     const dataAttrs = appearanceDataAttrs(appearance);
     if (Object.keys(dataAttrs).length) {
       const attrs = Object.entries(dataAttrs)
@@ -40,7 +42,7 @@ function richNodeHtml(node: RichNode): string {
         .join(' ');
       value = `<span ${attrs}>${value}</span>`;
     }
-    for (const mark of node.marks || []) {
+    for (const mark of marks || []) {
       if (mark.type === 'bold') value = `<strong>${value}</strong>`;
       if (mark.type === 'italic') value = `<em>${value}</em>`;
       if (mark.type === 'strike') value = `<del>${value}</del>`;
@@ -53,8 +55,17 @@ function richNodeHtml(node: RichNode): string {
     return value;
   }
   if (node.type === 'hardBreak') return '<br />';
-  const children = (node.content || []).map(richNodeHtml).join('');
+  if (node.type === 'listItem' && parentType !== 'bulletList' && parentType !== 'orderedList') {
+    return '';
+  }
   const attrs = node.attrs || {};
+  const children = (node.content || [])
+    .filter(
+      (child) =>
+        (node.type !== 'bulletList' && node.type !== 'orderedList') || child.type === 'listItem',
+    )
+    .map((child) => richNodeHtml(child, node.type))
+    .join('');
   if (node.type === 'image' && typeof attrs.src === 'string') {
     return `<img src="${escapeHtml(attrs.src)}" alt="${escapeHtml(String(attrs.alt || ''))}" />`;
   }
@@ -63,7 +74,7 @@ function richNodeHtml(node: RichNode): string {
   if (node.type === 'blockquote') return `<blockquote>${children}</blockquote>`;
   if (node.type === 'bulletList') return `<ul>${children}</ul>`;
   if (node.type === 'orderedList') return `<ol>${children}</ol>`;
-  if (node.type === 'listItem') return children;
+  if (node.type === 'listItem') return `<li>${children}</li>`;
   if (node.type === 'heading') {
     const level = Math.min(3, Math.max(1, Number(attrs.level) || 2));
     return `<h${level}>${children}</h${level}>`;
