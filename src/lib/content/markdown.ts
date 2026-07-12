@@ -1,5 +1,6 @@
 import { marked } from 'marked';
 import sanitizeHtml from 'sanitize-html';
+import { appearanceDataAttrs, normalizeTextAppearanceAttrs } from './text-appearance';
 
 marked.setOptions({ async: false, gfm: true, breaks: false });
 
@@ -28,6 +29,17 @@ function escapeHtml(value: string): string {
 function richNodeHtml(node: RichNode): string {
   if (node.type === 'text') {
     let value = escapeHtml(node.text || '');
+    const appearance = node.marks?.reduce<Record<string, unknown>>((merged, mark) => {
+      if (mark.type === 'textAppearance') return { ...merged, ...mark.attrs };
+      return merged;
+    }, {});
+    const dataAttrs = appearanceDataAttrs(appearance);
+    if (Object.keys(dataAttrs).length) {
+      const attrs = Object.entries(dataAttrs)
+        .map(([name, attrValue]) => `${name}="${escapeHtml(attrValue)}"`)
+        .join(' ');
+      value = `<span ${attrs}>${value}</span>`;
+    }
     for (const mark of node.marks || []) {
       if (mark.type === 'bold') value = `<strong>${value}</strong>`;
       if (mark.type === 'italic') value = `<em>${value}</em>`;
@@ -84,11 +96,13 @@ const richHtmlOptions = {
     'hr',
     'img',
     'h1',
+    'span',
   ],
   allowedAttributes: {
     a: ['href', 'title', 'rel'],
     img: ['src', 'alt', 'title', 'width', 'height', 'loading'],
     code: ['class'],
+    span: ['data-editor-size', 'data-editor-color'],
   },
   allowedSchemes: ['http', 'https', 'mailto'],
   transformTags: {
@@ -103,6 +117,13 @@ const richHtmlOptions = {
       tagName: 'img',
       attribs: { ...attribs, loading: 'lazy' },
     }),
+    span: (_tagName: string, attribs: Record<string, string>) => {
+      const canonical = normalizeTextAppearanceAttrs({
+        size: attribs['data-editor-size'],
+        color: attribs['data-editor-color'],
+      });
+      return { tagName: 'span', attribs: appearanceDataAttrs(canonical) };
+    },
   },
 };
 
