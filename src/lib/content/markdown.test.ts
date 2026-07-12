@@ -2,6 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { markdownToPlainText, renderMarkdown, renderRichText } from './markdown';
 
 describe('safe Markdown rendering', () => {
+  it('renders a blank canonical rich document without an ordered-list marker', () => {
+    const html = renderRichText({
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [] }],
+    });
+
+    expect(html).toBe('');
+    expect(html).not.toContain('1.');
+    expect(html).not.toContain('<ol');
+  });
+
   it('renders rich document blocks without an invalid paragraph wrapper', () => {
     const html = renderRichText({
       type: 'doc',
