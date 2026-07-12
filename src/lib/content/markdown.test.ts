@@ -98,6 +98,29 @@ describe('safe Markdown rendering', () => {
     ).toBe('<ul><li><p>項目</p></li></ul>');
   });
 
+  it('rejects malformed non-list children inside lists', () => {
+    const html = renderRichText({
+      type: 'doc',
+      content: [
+        {
+          type: 'bulletList',
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: '不應直接出現在清單中' }] },
+            { type: 'listItem', content: [{ type: 'paragraph', content: [] }] },
+          ],
+        },
+        {
+          type: 'listItem',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: '孤立項目' }] }],
+        },
+      ],
+    });
+
+    expect(html).toBe('<ul><li><p></p></li></ul>');
+    expect(html).not.toContain('<ul><p>');
+    expect(html).not.toContain('孤立項目');
+  });
+
   it('drops invalid appearance values and arbitrary attributes without dropping text', () => {
     const html = renderRichText({
       type: 'doc',

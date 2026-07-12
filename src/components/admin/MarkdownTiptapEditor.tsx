@@ -279,6 +279,8 @@ export default function MarkdownTiptapEditor({
     null,
   );
   const editorShell = useRef<HTMLDivElement>(null);
+  const selectionToolbarRef = useRef<HTMLDivElement>(null);
+  const updateSelectionToolbarRef = useRef<() => void>(() => {});
   const fileInput = useRef<HTMLInputElement>(null);
   const selectionRange = useRef<{ from: number; to: number } | null>(null);
   const lastBodyJson = useRef(bodyJson);
@@ -362,14 +364,22 @@ export default function MarkdownTiptapEditor({
       const start = editor.view.coordsAtPos(from);
       const end = editor.view.coordsAtPos(to);
       const bounds = editorShell.current.getBoundingClientRect();
-      setSelectionToolbar({
+      const toolbarWidth =
+        selectionToolbarRef.current?.getBoundingClientRect().width || bounds.width;
+      const centeredLeft = (start.left + end.left) / 2 - bounds.left - toolbarWidth / 2;
+      const nextPosition = {
         top: Math.max(8, Math.min(start.top, end.top) - bounds.top - 44),
-        left: Math.max(
-          8,
-          Math.min(bounds.width - 180, (start.left + end.left) / 2 - bounds.left - 90),
-        ),
-      });
+        left: window.matchMedia('(max-width: 800px)').matches
+          ? 12
+          : Math.max(8, Math.min(bounds.width - toolbarWidth - 8, centeredLeft)),
+      };
+      setSelectionToolbar((current) =>
+        current?.top === nextPosition.top && current.left === nextPosition.left
+          ? current
+          : nextPosition,
+      );
     };
+    updateSelectionToolbarRef.current = updateSelectionToolbar;
     const clearSelectionToolbar = () => {
       window.clearTimeout(clearTimer);
       clearTimer = window.setTimeout(() => setSelectionToolbar(null), 120);
@@ -387,8 +397,15 @@ export default function MarkdownTiptapEditor({
       editor.off('focus', cancelClear);
       window.removeEventListener('scroll', updateSelectionToolbar, true);
       window.removeEventListener('resize', updateSelectionToolbar);
+      updateSelectionToolbarRef.current = () => {};
     };
   }, [editor]);
+
+  useEffect(() => {
+    if (!selectionToolbar) return;
+    const frame = window.requestAnimationFrame(() => updateSelectionToolbarRef.current());
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectionToolbar]);
 
   if (!richMode) {
     return (
@@ -655,6 +672,7 @@ export default function MarkdownTiptapEditor({
         {selectionToolbar && (
           <div
             className="tiptap-selection-toolbar"
+            ref={selectionToolbarRef}
             style={{ top: selectionToolbar.top, left: selectionToolbar.left }}
             role="toolbar"
             aria-label="選取文字格式"

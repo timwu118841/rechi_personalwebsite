@@ -357,7 +357,11 @@ button.secondary,
   position: absolute;
   z-index: 6;
   display: flex;
+  min-width: 0;
+  max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 1rem);
+  flex-wrap: wrap;
   gap: 0.2rem;
+  overflow-x: auto;
   padding: 0.25rem;
   border: 1px solid #d9dfd8;
   border-radius: 0.45rem;
@@ -463,9 +467,13 @@ legend {
   .tiptap-selection-toolbar {
     position: fixed;
     top: auto !important;
+    left: 0.75rem !important;
     right: 0.75rem;
     bottom: 0.75rem;
-    left: auto !important;
+    width: auto;
+    max-width: calc(
+      100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 1.5rem
+    );
   }
   .admin-login {
     gap: 2rem;

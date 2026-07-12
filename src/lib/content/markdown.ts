@@ -30,7 +30,7 @@ function escapeHtml(value: string): string {
   );
 }
 
-function richNodeHtml(node: RichNode): string {
+function richNodeHtml(node: RichNode, parentType?: string): string {
   if (node.type === 'text') {
     let value = escapeHtml(node.text || '');
     const marks = normalizeTextMarks(node.marks);
@@ -55,8 +55,17 @@ function richNodeHtml(node: RichNode): string {
     return value;
   }
   if (node.type === 'hardBreak') return '<br />';
-  const children = (node.content || []).map(richNodeHtml).join('');
+  if (node.type === 'listItem' && parentType !== 'bulletList' && parentType !== 'orderedList') {
+    return '';
+  }
   const attrs = node.attrs || {};
+  const children = (node.content || [])
+    .filter(
+      (child) =>
+        (node.type !== 'bulletList' && node.type !== 'orderedList') || child.type === 'listItem',
+    )
+    .map((child) => richNodeHtml(child, node.type))
+    .join('');
   if (node.type === 'image' && typeof attrs.src === 'string') {
     return `<img src="${escapeHtml(attrs.src)}" alt="${escapeHtml(String(attrs.alt || ''))}" />`;
   }
