@@ -154,7 +154,7 @@ export function normalizeTiptapDocument(value: unknown): JSONContent | undefined
         (node.marks || []).filter((mark) => supportedMarks.has(String(mark.type))),
       ) as JSONContent['marks'];
       return typeof node.text === 'string' && node.text
-        ? [{ type: 'text', text: node.text, ...(marks.length ? { marks } : {}) }]
+        ? [{ type: 'text', text: node.text, ...(marks?.length ? { marks } : {}) }]
         : [];
     }
     if (node.type === 'image') {
