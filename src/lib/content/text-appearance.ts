@@ -30,7 +30,7 @@ export function normalizeTextMarks(
   marks: Array<{ type?: string; attrs?: Record<string, unknown> }> | undefined,
 ) {
   const otherMarks: Array<{ type?: string; attrs?: Record<string, unknown> }> = [];
-  let appearance: TextAppearanceAttrs = {};
+  const appearance: TextAppearanceAttrs = {};
   for (const mark of marks || []) {
     if (mark.type !== 'textAppearance') {
       otherMarks.push(mark);

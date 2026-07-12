@@ -545,9 +545,13 @@ select {
 .prose span[data-editor-color='danger'] {
   color: #a33d3d;
 }
-html[data-theme='dark'] .prose span[data-editor-color='danger'],
-html:not([data-theme]) .prose span[data-editor-color='danger'] {
+html[data-theme='dark'] .prose span[data-editor-color='danger'] {
   color: #f08b8b;
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .prose span[data-editor-color='danger'] {
+    color: #f08b8b;
+  }
 }
 .prose > * + * {
   margin-top: 1.45em;
