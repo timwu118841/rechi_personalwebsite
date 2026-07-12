@@ -1,7 +1,12 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
+import { articlePath as buildArticlePath } from '@/lib/content/slug';
 
-const articlePath = '/articles/welcome/';
+const welcomeArticlePath = '/articles/welcome/';
+const unicodeArticleSlug = '中文網址代稱測試';
+const unicodeArticleTitle = '中文網址代稱測試文章';
+const encodedUnicodeArticlePath = buildArticlePath(unicodeArticleSlug);
+const rawUnicodeArticlePath = `/articles/${unicodeArticleSlug}/`;
 
 test.describe('公開即時閱讀體驗', () => {
   test('首頁、文章、封面與主要探索路徑可使用', async ({ page }) => {
@@ -14,7 +19,7 @@ test.describe('公開即時閱讀體驗', () => {
     await expect(page.locator('.article-card').first().locator('img')).toBeVisible();
     await expect(page.locator('.card-pattern')).toHaveCount(0);
 
-    await page.goto(articlePath);
+    await page.goto(welcomeArticlePath);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await expect(page.locator('.article-header .eyebrow')).toHaveText('法律文章 · 法律實務');
     await expect(page.getByText(/不構成針對任何個案的法律意見/)).toBeVisible();
@@ -75,7 +80,7 @@ test.describe('公開即時閱讀體驗', () => {
   });
 
   test('核心頁面沒有嚴重自動化無障礙問題', async ({ page }) => {
-    for (const path of ['/', articlePath, '/search/']) {
+    for (const path of ['/', welcomeArticlePath, '/search/']) {
       await page.goto(path);
       const result = await new AxeBuilder({ page }).analyze();
       expect(result.violations, `${path} 的 axe violations`).toEqual([]);
@@ -108,7 +113,7 @@ test.describe('公開即時閱讀體驗', () => {
         umami: { track: (...args: unknown[]) => calls.push(args) },
       });
     });
-    await page.goto(articlePath);
+    await page.goto(welcomeArticlePath);
     await page.evaluate(() => {
       const analyticsWindow = window as typeof window & {
         blogAnalytics?: { track: (name: string, data: Record<string, unknown>) => void };
@@ -125,6 +130,23 @@ test.describe('公開即時閱讀體驗', () => {
     expect(JSON.stringify(calls)).not.toContain('不應送出');
     expect(JSON.stringify(calls)).not.toContain('reader@example.com');
   });
+});
+
+test('encoded 中文 article URL returns 200 and renders the title', async ({ page, request }) => {
+  const response = await request.get(encodedUnicodeArticlePath);
+  expect(response.status()).toBe(200);
+  const cacheTag = response.headers()['vercel-cache-tag'];
+  expect(cacheTag).toContain(`article:${encodeURIComponent(unicodeArticleSlug)}`);
+  expect(cacheTag).not.toContain(unicodeArticleSlug);
+  expect([...cacheTag].every((character) => character.codePointAt(0)! <= 0x7f)).toBe(true);
+
+  await page.goto(encodedUnicodeArticlePath);
+  await expect(page.getByRole('heading', { level: 1, name: unicodeArticleTitle })).toBeVisible();
+});
+
+test('直接 Unicode 中文 article URL 也可正常開啟', async ({ page }) => {
+  await page.goto(rawUnicodeArticlePath);
+  await expect(page.getByRole('heading', { level: 1, name: unicodeArticleTitle })).toBeVisible();
 });
 
 test('停用 JavaScript 時仍能導覽、搜尋與閱讀全文', async ({ browser }, testInfo) => {

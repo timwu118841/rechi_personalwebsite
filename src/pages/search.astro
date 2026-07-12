@@ -1,6 +1,8 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { getContentRepository } from '@/lib/content/repository';
+import { articlePath } from '@/lib/content/slug';
+
 const query = (Astro.url.searchParams.get('q') || '').trim().slice(0, 100);
 const results = query ? await getContentRepository().searchPublishedArticles(query, 20) : [];
 Astro.cache.set(false);
@@ -35,12 +37,10 @@ Astro.cache.set(false);
         {
           results.map((article) => (
             <article class="search-result">
-              <>
-                <h2>
-                  <a href={`/articles/${article.slug}/`}>{article.title}</a>
-                </h2>
-                <p>{article.description}</p>
-              </>
+              <h2>
+                <a href={articlePath(article.slug)}>{article.title}</a>
+              </h2>
+              <p>{article.description}</p>
             </article>
           ))
         }

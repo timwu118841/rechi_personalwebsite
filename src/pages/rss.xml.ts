@@ -1,6 +1,7 @@
 import rss from '@astrojs/rss';
 import type { APIRoute } from 'astro';
 import { getContentRepository } from '@/lib/content/repository';
+import { articlePath } from '@/lib/content/slug';
 
 export const prerender = false;
 
@@ -20,7 +21,7 @@ export const GET: APIRoute = async (context) => {
       title: article.title,
       description: article.description,
       pubDate: article.publishedAt,
-      link: `/articles/${article.slug}/`,
+      link: articlePath(article.slug),
       categories: [article.contentTypeName, article.categoryName, ...article.tags],
     })),
     customData: '<language>zh-TW</language>',

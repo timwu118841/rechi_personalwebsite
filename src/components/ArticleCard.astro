@@ -1,6 +1,7 @@
 ---
 import type { Article, MediaAsset } from '@/lib/content/repository';
 import { formatDate, readingTimeMinutes } from '@/lib/articles';
+import { articlePath } from '@/lib/content/slug';
 import TagList from './TagList.astro';
 
 interface Props {
@@ -10,10 +11,11 @@ interface Props {
 const { article, fallbackImage } = Astro.props;
 const image = article.cover || fallbackImage;
 const minutes = readingTimeMinutes(article.body);
+const articleUrl = articlePath(article.slug);
 ---
 
 <article class="article-card">
-  <a class="card-image" href={`/articles/${article.slug}/`} tabindex="-1" aria-hidden="true">
+  <a class="card-image" href={articleUrl} tabindex="-1" aria-hidden="true">
     {
       image ? (
         <img
@@ -36,15 +38,11 @@ const minutes = readingTimeMinutes(article.body);
       <span>{article.contentTypeName} · {article.categoryName}</span>
       <span>{formatDate(article.publishedAt)}</span><span>{minutes} 分鐘閱讀</span>
     </div>
-    <h3><a href={`/articles/${article.slug}/`}>{article.title}</a></h3>
+    <h3><a href={articleUrl}>{article.title}</a></h3>
     <p>{article.description}</p>
     <div class="card-footer">
       <TagList tags={article.tags.slice(0, 2)} />
-      <a
-        class="read-more"
-        href={`/articles/${article.slug}/`}
-        aria-label={`閱讀「${article.title}」`}>閱讀 →</a
-      >
+      <a class="read-more" href={articleUrl} aria-label={`閱讀「${article.title}」`}>閱讀 →</a>
     </div>
   </div>
 </article>

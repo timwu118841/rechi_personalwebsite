@@ -7,12 +7,16 @@ let repository: ContentRepository | undefined;
 
 export function getContentRepository(): ContentRepository {
   if (repository) return repository;
+  if (process.env.ALLOW_FIXTURE_CONTENT === 'true') {
+    repository = new FixtureContentRepository();
+    return repository;
+  }
   const environment = getSupabaseEnvironment();
   if (environment) {
     repository = new SupabaseContentRepository(environment);
     return repository;
   }
-  if (isProductionRuntime() && process.env.ALLOW_FIXTURE_CONTENT !== 'true') {
+  if (isProductionRuntime()) {
     throw new Error(
       '正式環境缺少 PUBLIC_SUPABASE_URL、PUBLIC_SUPABASE_PUBLISHABLE_KEY 或 SUPABASE_SECRET_KEY。',
     );
