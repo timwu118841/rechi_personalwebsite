@@ -14,7 +14,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "npm run build && playwright test",
+    "test:e2e": "npm run build && playwright test && playwright test -c playwright.fixture-guard.config.ts",
     "test:e2e:ci": "npm run test:e2e",
     "content:validate": "node scripts/validate-content.mjs",
     "deploy:validate": "node scripts/validate-deploy-env.mjs",
