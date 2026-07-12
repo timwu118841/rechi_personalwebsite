@@ -152,7 +152,7 @@ export function normalizeTiptapDocument(value: unknown): JSONContent | undefined
     if (node.type === 'text') {
       const marks = normalizeTextMarks(
         (node.marks || []).filter((mark) => supportedMarks.has(String(mark.type))),
-      );
+      ) as JSONContent['marks'];
       return typeof node.text === 'string' && node.text
         ? [{ type: 'text', text: node.text, ...(marks.length ? { marks } : {}) }]
         : [];
@@ -164,14 +164,22 @@ export function normalizeTiptapDocument(value: unknown): JSONContent | undefined
     if (node.type === 'bulletList' || node.type === 'orderedList') {
       const listItems = children.filter((child) => {
         if (child.type !== 'listItem') return true;
-        return (child.content || []).some((item) =>
-          item.type !== 'paragraph' || Boolean((item.content || []).length),
+        return (child.content || []).some(
+          (item) => item.type !== 'paragraph' || Boolean((item.content || []).length),
         );
       });
       if (listItems.length === 0) return [{ type: 'paragraph', content: [] }];
-      return [{ type: node.type, ...(node.attrs ? { attrs: node.attrs } : {}), content: listItems }];
+      return [
+        { type: node.type, ...(node.attrs ? { attrs: node.attrs } : {}), content: listItems },
+      ];
     }
-    return [{ type: node.type, ...(node.attrs ? { attrs: node.attrs } : {}), ...(children.length ? { content: children } : {}) }];
+    return [
+      {
+        type: node.type,
+        ...(node.attrs ? { attrs: node.attrs } : {}),
+        ...(children.length ? { content: children } : {}),
+      },
+    ];
   };
 
   return { type: 'doc', content: normalizeNode(value) };
@@ -367,7 +375,10 @@ export default function MarkdownTiptapEditor({
   const toggle = (name: string) => editor.chain().focus()[name as 'toggleBold']().run();
   const canUndo = editor.can().chain().focus().undo().run();
   const canRedo = editor.can().chain().focus().redo().run();
-  const setAppearance = (attrs: { size?: (typeof TEXT_APPEARANCE_SIZES)[number]; color?: (typeof TEXT_APPEARANCE_COLORS)[number] }) => {
+  const setAppearance = (attrs: {
+    size?: (typeof TEXT_APPEARANCE_SIZES)[number];
+    color?: (typeof TEXT_APPEARANCE_COLORS)[number];
+  }) => {
     const normalized = normalizeTextAppearanceAttrs(attrs);
     if (!normalized) return editor.chain().focus().unsetMark('textAppearance').run();
     return editor.chain().focus().setMark('textAppearance', normalized).run();
