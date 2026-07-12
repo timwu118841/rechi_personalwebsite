@@ -3,8 +3,15 @@ import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import Underline from '@tiptap/extension-underline';
+import { Mark, mergeAttributes } from '@tiptap/core';
 import { useEffect, useRef, useState } from 'react';
 import type { MediaAsset } from '@/lib/content/types';
+import {
+  normalizeTextAppearanceAttrs,
+  normalizeTextMarks,
+  TEXT_APPEARANCE_COLORS,
+  TEXT_APPEARANCE_SIZES,
+} from '../../lib/content/text-appearance';
 
 type Props = {
   value: string;
@@ -83,7 +90,50 @@ const supportedNodes = new Set([
   'hardBreak',
   'image',
 ]);
-const supportedMarks = new Set(['bold', 'italic', 'strike', 'code', 'link', 'underline']);
+const supportedMarks = new Set([
+  'bold',
+  'italic',
+  'strike',
+  'code',
+  'link',
+  'underline',
+  'textAppearance',
+]);
+
+const TextAppearance = Mark.create({
+  name: 'textAppearance',
+  inclusive: false,
+  addAttributes() {
+    return {
+      size: { default: null },
+      color: { default: null },
+    };
+  },
+  parseHTML() {
+    return [
+      {
+        tag: 'span[data-editor-size], span[data-editor-color]',
+        getAttrs: (element) =>
+          normalizeTextAppearanceAttrs({
+            size: (element as HTMLElement).dataset.editorSize,
+            color: (element as HTMLElement).dataset.editorColor,
+          }) || false,
+      },
+    ];
+  },
+  renderHTML({ HTMLAttributes }) {
+    const attrs = normalizeTextAppearanceAttrs(HTMLAttributes);
+    if (!attrs) return ['span', {}, 0];
+    return [
+      'span',
+      mergeAttributes(
+        attrs.size ? { 'data-editor-size': attrs.size } : {},
+        attrs.color ? { 'data-editor-color': attrs.color } : {},
+      ),
+      0,
+    ];
+  },
+});
 
 /**
  * Keep persisted rich content within the node/mark allowlist understood by
@@ -100,9 +150,11 @@ export function normalizeTiptapDocument(value: unknown): JSONContent | undefined
     if (!supportedNodes.has(String(node.type))) return children;
     if (node.type === 'doc') return children;
     if (node.type === 'text') {
-      const marks = (node.marks || []).filter((mark) => supportedMarks.has(String(mark.type)));
+      const marks = normalizeTextMarks(
+        (node.marks || []).filter((mark) => supportedMarks.has(String(mark.type))),
+      ) as JSONContent['marks'];
       return typeof node.text === 'string' && node.text
-        ? [{ type: 'text', text: node.text, ...(marks.length ? { marks } : {}) }]
+        ? [{ type: 'text', text: node.text, ...(marks?.length ? { marks } : {}) }]
         : [];
     }
     if (node.type === 'image') {
@@ -112,14 +164,22 @@ export function normalizeTiptapDocument(value: unknown): JSONContent | undefined
     if (node.type === 'bulletList' || node.type === 'orderedList') {
       const listItems = children.filter((child) => {
         if (child.type !== 'listItem') return true;
-        return (child.content || []).some((item) =>
-          item.type !== 'paragraph' || Boolean((item.content || []).length),
+        return (child.content || []).some(
+          (item) => item.type !== 'paragraph' || Boolean((item.content || []).length),
         );
       });
       if (listItems.length === 0) return [{ type: 'paragraph', content: [] }];
-      return [{ type: node.type, ...(node.attrs ? { attrs: node.attrs } : {}), content: listItems }];
+      return [
+        { type: node.type, ...(node.attrs ? { attrs: node.attrs } : {}), content: listItems },
+      ];
     }
-    return [{ type: node.type, ...(node.attrs ? { attrs: node.attrs } : {}), ...(children.length ? { content: children } : {}) }];
+    return [
+      {
+        type: node.type,
+        ...(node.attrs ? { attrs: node.attrs } : {}),
+        ...(children.length ? { content: children } : {}),
+      },
+    ];
   };
 
   return { type: 'doc', content: normalizeNode(value) };
@@ -222,6 +282,7 @@ export default function MarkdownTiptapEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
       Underline,
+      TextAppearance,
       Link.configure({ openOnClick: false, protocols: ['http', 'https', 'mailto'] }),
       Image.configure({ inline: false, allowBase64: false }),
     ],
@@ -314,6 +375,18 @@ export default function MarkdownTiptapEditor({
   const toggle = (name: string) => editor.chain().focus()[name as 'toggleBold']().run();
   const canUndo = editor.can().chain().focus().undo().run();
   const canRedo = editor.can().chain().focus().redo().run();
+  const setAppearance = (attrs: {
+    size?: (typeof TEXT_APPEARANCE_SIZES)[number];
+    color?: (typeof TEXT_APPEARANCE_COLORS)[number];
+  }) => {
+    if (!Object.keys(attrs).length) return editor.chain().focus().unsetMark('textAppearance').run();
+    const normalized = normalizeTextAppearanceAttrs({
+      ...editor.getAttributes('textAppearance'),
+      ...attrs,
+    });
+    if (!normalized) return editor.chain().focus().unsetMark('textAppearance').run();
+    return editor.chain().focus().setMark('textAppearance', normalized).run();
+  };
   const slashMatches = slashCommands.filter(
     (command) =>
       !slashMenu?.query ||
@@ -573,6 +646,39 @@ export default function MarkdownTiptapEditor({
               }}
             >
               ↗
+            </button>
+            {TEXT_APPEARANCE_SIZES.map((size) => (
+              <button
+                key={size}
+                type="button"
+                aria-label={size === 'small' ? '小字' : '大字'}
+                aria-pressed={editor.isActive('textAppearance', { size })}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => setAppearance({ size })}
+              >
+                {size === 'small' ? 'A−' : 'A+'}
+              </button>
+            ))}
+            {TEXT_APPEARANCE_COLORS.map((color) => (
+              <button
+                key={color}
+                type="button"
+                aria-label={`文字顏色：${color}`}
+                aria-pressed={editor.isActive('textAppearance', { color })}
+                className={`tiptap-appearance-color tiptap-appearance-color-${color}`}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => setAppearance({ color })}
+              >
+                ●
+              </button>
+            ))}
+            <button
+              type="button"
+              aria-label="清除文字外觀"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => setAppearance({})}
+            >
+              清除
             </button>
           </div>
         )}
