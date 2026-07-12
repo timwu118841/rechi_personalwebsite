@@ -56,6 +56,29 @@ describe('safe Markdown rendering', () => {
     ).toBe('<p><span data-editor-size="large" data-editor-color="accent">安全</span></p>');
   });
 
+  it('merges duplicate appearance marks with valid dimensions', () => {
+    expect(
+      renderRichText({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: '合併',
+                marks: [
+                  { type: 'textAppearance', attrs: { size: 'small' } },
+                  { type: 'textAppearance', attrs: { color: 'accent' } },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBe('<p><span data-editor-size="small" data-editor-color="accent">合併</span></p>');
+  });
+
   it('renders rich list items with semantic list-item wrappers', () => {
     expect(
       renderRichText({

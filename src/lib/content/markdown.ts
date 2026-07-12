@@ -1,6 +1,10 @@
 import { marked } from 'marked';
 import sanitizeHtml from 'sanitize-html';
-import { appearanceDataAttrs, normalizeTextAppearanceAttrs } from './text-appearance';
+import {
+  appearanceDataAttrs,
+  normalizeTextAppearanceAttrs,
+  normalizeTextMarks,
+} from './text-appearance';
 
 marked.setOptions({ async: false, gfm: true, breaks: false });
 
@@ -29,10 +33,8 @@ function escapeHtml(value: string): string {
 function richNodeHtml(node: RichNode): string {
   if (node.type === 'text') {
     let value = escapeHtml(node.text || '');
-    const appearance = node.marks?.reduce<Record<string, unknown>>((merged, mark) => {
-      if (mark.type === 'textAppearance') return { ...merged, ...mark.attrs };
-      return merged;
-    }, {});
+    const marks = normalizeTextMarks(node.marks);
+    const appearance = marks?.find((mark) => mark.type === 'textAppearance')?.attrs;
     const dataAttrs = appearanceDataAttrs(appearance);
     if (Object.keys(dataAttrs).length) {
       const attrs = Object.entries(dataAttrs)
@@ -40,7 +42,7 @@ function richNodeHtml(node: RichNode): string {
         .join(' ');
       value = `<span ${attrs}>${value}</span>`;
     }
-    for (const mark of node.marks || []) {
+    for (const mark of marks || []) {
       if (mark.type === 'bold') value = `<strong>${value}</strong>`;
       if (mark.type === 'italic') value = `<em>${value}</em>`;
       if (mark.type === 'strike') value = `<del>${value}</del>`;
