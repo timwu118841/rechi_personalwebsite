@@ -294,6 +294,24 @@ button.secondary,
   content: '輸入內容，或輸入 / 選擇區塊';
   pointer-events: none;
 }
+.tiptap-editor .ProseMirror span[data-editor-size='small'] {
+  font-size: 0.88em;
+}
+.tiptap-editor .ProseMirror span[data-editor-size='large'] {
+  font-size: 1.18em;
+}
+.tiptap-editor .ProseMirror span[data-editor-color='ink'] {
+  color: var(--color-ink);
+}
+.tiptap-editor .ProseMirror span[data-editor-color='muted'] {
+  color: var(--color-muted);
+}
+.tiptap-editor .ProseMirror span[data-editor-color='accent'] {
+  color: var(--color-accent);
+}
+.tiptap-editor .ProseMirror span[data-editor-color='danger'] {
+  color: #a33d3d;
+}
 .tiptap-slash-menu {
   position: absolute;
   z-index: 5;

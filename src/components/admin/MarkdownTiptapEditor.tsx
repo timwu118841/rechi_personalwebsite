@@ -111,8 +111,20 @@ const TextAppearance = Mark.create({
   inclusive: false,
   addAttributes() {
     return {
-      size: { default: null },
-      color: { default: null },
+      size: {
+        default: null,
+        renderHTML: (attrs) =>
+          normalizeTextAppearanceAttrs({ size: attrs.size })?.size
+            ? { 'data-editor-size': attrs.size }
+            : {},
+      },
+      color: {
+        default: null,
+        renderHTML: (attrs) =>
+          normalizeTextAppearanceAttrs({ color: attrs.color })?.color
+            ? { 'data-editor-color': attrs.color }
+            : {},
+      },
     };
   },
   parseHTML() {
@@ -128,16 +140,7 @@ const TextAppearance = Mark.create({
     ];
   },
   renderHTML({ HTMLAttributes }) {
-    const attrs = normalizeTextAppearanceAttrs(HTMLAttributes);
-    if (!attrs) return ['span', {}, 0];
-    return [
-      'span',
-      mergeAttributes(
-        attrs.size ? { 'data-editor-size': attrs.size } : {},
-        attrs.color ? { 'data-editor-color': attrs.color } : {},
-      ),
-      0,
-    ];
+    return ['span', mergeAttributes(HTMLAttributes), 0];
   },
 });
 
@@ -267,6 +270,8 @@ export default function MarkdownTiptapEditor({
   );
   const editorShell = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const selectionRange = useRef<{ from: number; to: number } | null>(null);
+  const lastBodyJson = useRef(bodyJson);
   const mounted = useRef(true);
   const updateStats = (nextEditor: NonNullable<typeof editor>) => {
     const text = nextEditor.state.doc.textContent;
@@ -319,6 +324,8 @@ export default function MarkdownTiptapEditor({
   // normal onUpdate parent re-renders never overwrite in-progress edits.
   useEffect(() => {
     if (!editor || !richMode) return;
+    if (richDocument && bodyJson === lastBodyJson.current) return;
+    lastBodyJson.current = bodyJson;
     const incoming = richDocument || (value ? `<p>${escapeHtml(value)}</p>` : '<p></p>');
     const current = JSON.stringify(editor.getJSON());
     const next = typeof incoming === 'string' ? incoming : JSON.stringify(incoming);
@@ -327,7 +334,7 @@ export default function MarkdownTiptapEditor({
     editor.commands.setContent(incoming, { emitUpdate: false });
     updateStats(editor);
     setSlashMenu(null);
-  }, [editor, richDocument, value, richMode]);
+  }, [editor, richDocument, bodyJson, value, richMode]);
 
   useEffect(() => {
     if (!editor) return;
@@ -337,6 +344,7 @@ export default function MarkdownTiptapEditor({
         return;
       }
       const { from, to } = editor.state.selection;
+      selectionRange.current = { from, to };
       const start = editor.view.coordsAtPos(from);
       const end = editor.view.coordsAtPos(to);
       const bounds = editorShell.current.getBoundingClientRect();
@@ -384,13 +392,12 @@ export default function MarkdownTiptapEditor({
     size?: (typeof TEXT_APPEARANCE_SIZES)[number];
     color?: (typeof TEXT_APPEARANCE_COLORS)[number];
   }) => {
-    if (!Object.keys(attrs).length) return editor.chain().focus().unsetMark('textAppearance').run();
-    const normalized = normalizeTextAppearanceAttrs({
-      ...editor.getAttributes('textAppearance'),
-      ...attrs,
-    });
-    if (!normalized) return editor.chain().focus().unsetMark('textAppearance').run();
-    return editor.chain().focus().setMark('textAppearance', normalized).run();
+    const chain = editor.chain().focus();
+    if (selectionRange.current) chain.setTextSelection(selectionRange.current);
+    if (!Object.keys(attrs).length) return chain.unsetMark('textAppearance').run();
+    const normalized = normalizeTextAppearanceAttrs(attrs);
+    if (!normalized) return chain.unsetMark('textAppearance').run();
+    return chain.setMark('textAppearance', normalized).run();
   };
   const slashMatches = slashCommands.filter(
     (command) =>
@@ -598,7 +605,13 @@ export default function MarkdownTiptapEditor({
                 role="option"
                 aria-selected={index === slashMenu.index}
                 id={`tiptap-slash-option-${command.query}`}
-                onMouseDown={(event) => event.preventDefault()}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  selectionRange.current = {
+                    from: editor.state.selection.from,
+                    to: editor.state.selection.to,
+                  };
+                }}
                 onClick={() => runSlashCommand(index)}
               >
                 <strong>{command.label}</strong>
@@ -658,7 +671,13 @@ export default function MarkdownTiptapEditor({
                 type="button"
                 aria-label={size === 'small' ? '小字' : '大字'}
                 aria-pressed={editor.isActive('textAppearance', { size })}
-                onMouseDown={(event) => event.preventDefault()}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  selectionRange.current = {
+                    from: editor.state.selection.from,
+                    to: editor.state.selection.to,
+                  };
+                }}
                 onClick={() => setAppearance({ size })}
               >
                 {size === 'small' ? 'A−' : 'A+'}
@@ -680,7 +699,13 @@ export default function MarkdownTiptapEditor({
             <button
               type="button"
               aria-label="清除文字外觀"
-              onMouseDown={(event) => event.preventDefault()}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                selectionRange.current = {
+                  from: editor.state.selection.from,
+                  to: editor.state.selection.to,
+                };
+              }}
               onClick={() => setAppearance({})}
             >
               清除
