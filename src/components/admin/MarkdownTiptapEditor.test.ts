@@ -147,4 +147,68 @@ describe('normalizeTiptapDocument', () => {
       }),
     ).toEqual({ type: 'doc', content: [{ type: 'paragraph', content: [] }] });
   });
+
+  it('omits null text appearance dimensions and ignores malformed list children', () => {
+    expect(
+      normalizeTiptapDocument({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: '大小',
+                marks: [{ type: 'textAppearance', attrs: { size: 'large', color: null } }],
+              },
+              {
+                type: 'text',
+                text: '顏色',
+                marks: [{ type: 'textAppearance', attrs: { size: null, color: 'accent' } }],
+              },
+            ],
+          },
+          {
+            type: 'bulletList',
+            content: [
+              { type: 'paragraph', content: [{ type: 'text', text: '錯誤子節點' }] },
+              { type: 'listItem', content: [{ type: 'paragraph', content: [] }] },
+              {
+                type: 'listItem',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: '有效' }] }],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toEqual({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: '大小',
+              marks: [{ type: 'textAppearance', attrs: { size: 'large' } }],
+            },
+            {
+              type: 'text',
+              text: '顏色',
+              marks: [{ type: 'textAppearance', attrs: { color: 'accent' } }],
+            },
+          ],
+        },
+        {
+          type: 'bulletList',
+          content: [
+            {
+              type: 'listItem',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: '有效' }] }],
+            },
+          ],
+        },
+      ],
+    });
+  });
 });

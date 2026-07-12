@@ -57,7 +57,7 @@ if (!cacheProvider) {
 const publicAssets = await readdir(join(client, '_astro')).catch(() => []);
 if (!publicAssets.some((name) => name.startsWith('AdminApp.')))
   failures.push('管理後台 client bundle 缺失');
-if (!publicAssets.some((name) => name.startsWith('BaseLayout.')))
+if (!publicAssets.some((name) => name.startsWith('global.') && name.endsWith('.css')))
   failures.push('公開網站樣式 bundle 缺失');
 
 if (failures.length) {

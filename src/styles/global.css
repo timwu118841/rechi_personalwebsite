@@ -10,6 +10,7 @@
   --color-brand: #315f46;
   --color-brand-strong: #204432;
   --color-accent: #b66a3c;
+  --color-danger: #a33d3d;
   --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-serif: 'Noto Serif TC', 'Songti TC', 'PMingLiU', Georgia, serif;
   --space-1: 0.25rem;
@@ -40,6 +41,7 @@ html[data-theme='dark'] {
   --color-brand: #8bc69f;
   --color-brand-strong: #b5ddc1;
   --color-accent: #e5a878;
+  --color-danger: #ff9b9b;
   --shadow-soft: 0 18px 55px rgb(0 0 0 / 0.28);
 }
 
@@ -56,6 +58,7 @@ html[data-theme='dark'] {
     --color-brand: #8bc69f;
     --color-brand-strong: #b5ddc1;
     --color-accent: #e5a878;
+    --color-danger: #ff9b9b;
   }
 }
 

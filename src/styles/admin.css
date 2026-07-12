@@ -310,7 +310,7 @@ button.secondary,
   color: var(--color-accent);
 }
 .tiptap-editor .ProseMirror span[data-editor-color='danger'] {
-  color: #a33d3d;
+  color: var(--color-danger);
 }
 .tiptap-slash-menu {
   position: absolute;
@@ -386,7 +386,7 @@ button.secondary,
   color: #9bd1a7 !important;
 }
 .tiptap-appearance-color-danger {
-  color: #ff9b9b !important;
+  color: var(--color-danger) !important;
 }
 .tiptap-editor .ProseMirror img {
   max-width: 100%;

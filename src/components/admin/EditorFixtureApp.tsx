@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import MarkdownTiptapEditor from './MarkdownTiptapEditor';
+import '@/styles/global.css';
+import '@/styles/admin.css';
 
 const initialDocument = {
   type: 'doc',

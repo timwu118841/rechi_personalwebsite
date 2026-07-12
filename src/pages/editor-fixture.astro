@@ -1,5 +1,7 @@
 ---
 export const prerender = false;
+// Astro excludes underscore-prefixed route segments from its page graph. This
+// explicit, documented equivalent is used by the guarded editor E2E fixture.
 const runtimeProcess = (
   globalThis as typeof globalThis & {
     process?: { env?: Record<string, string | undefined> };
