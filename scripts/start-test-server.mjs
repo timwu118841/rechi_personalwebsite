@@ -1,8 +1,18 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, resolve, sep } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { Readable } from 'node:stream';
-import app from '../.vercel/output/functions/_render.func/dist/server/entry.mjs';
+
+const serverEntry = [
+  '.vercel/output/functions/_render.func/entry.mjs',
+  '.vercel/output/_functions/entry.mjs',
+  '.vercel/output/functions/_render.func/dist/server/entry.mjs',
+].map(resolve).find(existsSync);
+if (!serverEntry) {
+  throw new Error('Unable to locate the built Astro server entrypoint in .vercel/output.');
+}
+const { default: app } = await import(pathToFileURL(serverEntry).href);
 
 const port = Number(process.env.PLAYWRIGHT_PORT || 4321);
 const host = '127.0.0.1';
