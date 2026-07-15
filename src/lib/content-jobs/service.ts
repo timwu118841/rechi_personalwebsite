@@ -941,7 +941,10 @@ export class ContentJobService {
     return withCollisionSuffix(base, index);
   }
 
-  private async finalizeCandidate(candidateId: string, payload: DatabaseRecord | null): Promise<void> {
+  private async finalizeCandidate(
+    candidateId: string,
+    payload: DatabaseRecord | null,
+  ): Promise<void> {
     const actorId = stringValue(payload?.requested_by);
     if (!actorId) throw new Error('Publication job is missing its requesting actor.');
     const candidate = await this.getCandidateStatus(candidateId);

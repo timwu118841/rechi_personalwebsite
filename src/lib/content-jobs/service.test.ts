@@ -362,6 +362,15 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
     );
     const queuedAt = String(queuedInput?.p_run_after);
     expect(Date.parse(queuedAt)).toBeGreaterThan(Date.parse(candidate.activation_at));
+
+    candidate.state = 'prepared';
+    await service.requestPublish(
+      'candidate-id',
+      'admin-id',
+      { ...request, idempotencyKey: 'publish-prepared-now-operation' },
+      { immediate: true },
+    );
+    expect(rpc).toHaveBeenCalledTimes(2);
   });
 
   it('does not bypass review readiness or a future activation for immediate publication', async () => {
