@@ -575,13 +575,19 @@ export class ContentJobService {
     const requestedBy = stringValue(record(job.payload)?.requested_by);
     if (!requestedBy) throw new Error('Content job is missing its requesting actor.');
     const childPages = await this.notionClient().listChildPages(config.rootPageId);
+    if (!childPages.length) return;
     const { data: existingSources, error } = await this.client
       .from('article_sources')
       .select('id,external_id,configuration')
       .eq('provider', 'notion')
-      .in('external_id', childPages.map((page) => page.id));
+      .in(
+        'external_id',
+        childPages.map((page) => page.id),
+      );
     throwIfError(error);
-    const byPageId = new Map(rows(existingSources).map((source) => [String(source.external_id), source]));
+    const byPageId = new Map(
+      rows(existingSources).map((source) => [String(source.external_id), source]),
+    );
     for (const page of childPages) {
       const source = byPageId.get(page.id);
       if (source && !shouldSyncNotionPage(source.configuration, page.lastEditedTime)) continue;
@@ -680,7 +686,10 @@ export class ContentJobService {
       .from('article_sources')
       .update({
         source_url: snapshot.url,
-        configuration: mergeNotionSourceConfiguration(source?.configuration, snapshot.lastEditedTime),
+        configuration: mergeNotionSourceConfiguration(
+          source?.configuration,
+          snapshot.lastEditedTime,
+        ),
         state: snapshot.sourceState === 'archived' ? 'archived' : 'active',
         last_synced_at: new Date().toISOString(),
         last_error: null,
