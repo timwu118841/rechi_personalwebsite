@@ -258,8 +258,14 @@ export class NotionClient {
     });
     return Promise.all(
       childPages.map(async (childPage) => {
-        const page = await this.retrievePage(childPage.id);
-        return { ...childPage, lastEditedTime: page.last_edited_time ?? null };
+        try {
+          const page = await this.retrievePage(childPage.id);
+          return { ...childPage, lastEditedTime: page.last_edited_time ?? null };
+        } catch {
+          // Root sync must fail open when canonical metadata is unavailable;
+          // the service will enqueue this page as an unknown/legacy source.
+          return { ...childPage, lastEditedTime: null };
+        }
       }),
     );
   }
