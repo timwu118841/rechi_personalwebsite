@@ -390,6 +390,18 @@ export class ContentJobService {
     return record(data);
   }
 
+  async getJobStatus(jobId: string): Promise<DatabaseRecord | null> {
+    const { data, error } = await this.client
+      .from('content_jobs')
+      .select(
+        'id, job_type, candidate_id, state, attempts, max_attempts, run_after, started_at, completed_at, last_error',
+      )
+      .eq('id', jobId)
+      .maybeSingle();
+    throwIfError(error);
+    return record(data);
+  }
+
   async attestReview(
     candidateId: string,
     actorId: string,
