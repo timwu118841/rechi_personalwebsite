@@ -19,6 +19,40 @@ function list(results: unknown[], nextCursor: string | null = null) {
 }
 
 describe('NotionClient', () => {
+  it('fails open per child when canonical metadata retrieval fails', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith('/blocks/root/children?page_size=100')) {
+        return json(
+          list([
+            { object: 'block', id: 'child-1', type: 'child_page', child_page: { title: '第一篇' } },
+            { object: 'block', id: 'child-2', type: 'child_page', child_page: { title: '第二篇' } },
+          ]),
+        );
+      }
+      if (url.endsWith('/pages/child-1')) return json({ message: 'temporary failure' }, 503);
+      if (url.endsWith('/pages/child-2')) {
+        return json({
+          object: 'page',
+          id: 'child-2',
+          last_edited_time: '2026-07-15T00:00:02.000Z',
+          properties: {},
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    const client = new NotionClient({
+      token: 'secret',
+      fetch: fetchMock as typeof fetch,
+      maxRetries: 0,
+    });
+
+    await expect(client.listChildPages('root')).resolves.toEqual([
+      { id: 'child-1', title: '第一篇', lastEditedTime: null },
+      { id: 'child-2', title: '第二篇', lastEditedTime: '2026-07-15T00:00:02.000Z' },
+    ]);
+  });
+
   it('pins the API version and recursively paginates page properties, data sources, and nested blocks', async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {

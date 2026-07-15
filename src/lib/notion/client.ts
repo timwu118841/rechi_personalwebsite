@@ -262,8 +262,8 @@ export class NotionClient {
           const page = await this.retrievePage(childPage.id);
           return { ...childPage, lastEditedTime: page.last_edited_time ?? null };
         } catch {
-          // Root sync must fail open when canonical metadata is unavailable;
-          // the service will enqueue this page as an unknown/legacy source.
+          // Root discovery must remain useful when one child page's metadata
+          // is temporarily unavailable; null makes root sync fail open.
           return { ...childPage, lastEditedTime: null };
         }
       }),
