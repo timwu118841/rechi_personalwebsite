@@ -57,6 +57,13 @@ interface PublicationCandidateStatus {
   title: string;
 }
 
+interface WorkerResult {
+  claimed: number;
+  completed: number;
+  failed: number;
+  exhaustedBudget: boolean;
+}
+
 function localDateTime(value?: string) {
   const date = value ? new Date(value) : new Date();
   if (Number.isNaN(date.getTime())) return localDateTime();
@@ -460,18 +467,24 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
       ? crypto.randomUUID()
       : String(Date.now());
 
-  const sync = async () => {
-    if (!pageId.trim()) {
-      setMessage('請貼上 Notion page ID。');
-      return;
-    }
+  const runWorkerNow = async () => {
+    const result = await api<{ accepted: true; result: WorkerResult }>('/api/admin/notion/worker', {
+      method: 'POST',
+    });
+    const { claimed, completed, failed, exhaustedBudget } = result.result;
+    const remaining = exhaustedBudget ? '，仍有工作待處理' : '';
+    setMessage(`同步完成：處理 ${completed}/${claimed} 個工作，失敗 ${failed} 個${remaining}。`);
+  };
+
+  const enqueueAndRun = async (body: Record<string, unknown>, label: string) => {
     setBusy(true);
-    setMessage('已送出同步工作，文章正文仍由 Notion 管理。');
+    setMessage(`${label}已送出，正在立即同步…`);
     try {
       await api('/api/admin/notion/sync', {
         method: 'POST',
-        body: JSON.stringify({ pageId: pageId.trim(), idempotencyKey: operationId() }),
+        body: JSON.stringify(body),
       });
+      await runWorkerNow();
       await refresh();
     } catch (error) {
       setMessage((error as Error).message);
@@ -480,20 +493,19 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
     }
   };
 
-  const syncRoot = async () => {
-    setBusy(true);
-    setMessage('已送出 Notion root 同步工作。');
-    try {
-      await api('/api/admin/notion/sync', {
-        method: 'POST',
-        body: JSON.stringify({ root: true, idempotencyKey: operationId() }),
-      });
-      await refresh();
-    } catch (error) {
-      setMessage((error as Error).message);
-    } finally {
-      setBusy(false);
+  const sync = async () => {
+    if (!pageId.trim()) {
+      setMessage('請貼上 Notion page ID。');
+      return;
     }
+    await enqueueAndRun(
+      { pageId: pageId.trim(), idempotencyKey: operationId() },
+      'Notion 頁面同步工作',
+    );
+  };
+
+  const syncRoot = async () => {
+    await enqueueAndRun({ root: true, idempotencyKey: operationId() }, 'Root 同步工作');
   };
 
   const attest = async (reviewType: 'privacy' | 'legal', action: 'attest' | 'revoke') => {
@@ -615,7 +627,7 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
         <p>可同步設定的 root page 直屬頁面，或單獨貼上 page ID。</p>
         <div className="button-row">
           <button className="secondary" onClick={() => void syncRoot()} disabled={busy}>
-            同步 Root 直屬頁面
+            立即同步 Root 直屬頁面
           </button>
           <input
             value={pageId}
@@ -624,7 +636,7 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
             aria-label="Notion page ID"
           />
           <button onClick={() => void sync()} disabled={busy}>
-            排入同步
+            立即同步
           </button>
         </div>
         {message && <p role="status">{message}</p>}

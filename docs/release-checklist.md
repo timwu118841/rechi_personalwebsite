@@ -28,7 +28,7 @@
 - [ ] `NOTION_ROOT_PAGE_ID` 是 root page URL 末端的 32 個十六進位字元（可含 UUID 連字號），不是完整網址
 - [ ] `/admin` 的 root sync 只列舉 root 的直屬 `child_page`；孫頁與更深層頁面不會自動同步，所有文章頁都直接位於 root 下
 - [ ] Vercel Production 已建立每日執行的 `/api/internal/content-worker` Cron（`0 0 * * *`，UTC 00:00／台灣時間 08:00），且請求帶有 `Authorization: Bearer <CRON_SECRET>`
-- [ ] 已確認每輪 worker 最多處理 5 個 jobs；大量直屬頁面會由後續 Cron 輪次繼續處理
+- [ ] 已確認每輪 worker 最多處理 5 個 jobs；管理員可從後台立即執行 worker，大量直屬頁面由後續手動同步或 Cron 輪次繼續處理
 - [ ] 未授權的 worker 請求回應 `401`；缺少 `CRON_SECRET` 時回應 `503`；回應不可快取且不可索引
 - [ ] Supabase Storage 全域檔案上限至少 25 MB
 - [ ] `notion-staging` 為 private、單檔 25 MB；`site-media` 為 public、單檔 5 MB；兩者未存放敏感案件資料
@@ -37,7 +37,7 @@
 ## 功能驗收
 
 - [ ] `/admin` 可登入、建立草稿、發布、下架與重新編輯，不產生 Git commit 或 deployment
-- [ ] Root sync 能為每個直屬 `child_page` 排入 source job，且每頁都能建立或更新 source、不可變 revision 與 working copy；同步不會改變目前公開文章
+- [ ] Root sync 能為每個直屬 `child_page` 排入 source job，且立即執行後每頁都能建立或更新 source、不可變 revision 與 working copy；同步不會改變目前公開文章
 - [ ] 單頁 page ID 同步仍可獨立排入；候選需完成隱私與法律審查才可發布
 - [ ] Notion 內容在候選建立後變更或移到垃圾桶時，freshness gate 會取消舊候選
 - [ ] 新文章立即出現在文章頁、列表、搜尋、RSS 與 sitemap
