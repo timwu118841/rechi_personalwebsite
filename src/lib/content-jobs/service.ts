@@ -233,7 +233,7 @@ export class ContentJobService {
       );
     throwIfError(workingError);
     const bySource = new Map(rows(workingCopies).map((copy) => [String(copy.source_id), copy]));
-    const statuses = sources.map((source) => ({
+    const statuses: DatabaseRecord[] = sources.map((source) => ({
       ...source,
       working_copy_id: bySource.get(String(source.id))?.id ?? null,
       working_copy_version: bySource.get(String(source.id))?.version ?? null,
