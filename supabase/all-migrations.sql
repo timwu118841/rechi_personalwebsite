@@ -1655,6 +1655,7 @@ to service_role;
 
 -- END supabase/migrations/202607150002_enqueue_content_job_rpc.sql
 
+-- BEGIN supabase/migrations/202607150003_notion_direct_publication.sql
 -- Explicit direct-publication policy for the Notion editorial pipeline.
 -- Legacy article saves and candidates remain manual-review by default.
 
@@ -1887,3 +1888,4 @@ revoke execute on function public.prepare_publication_candidate(uuid,bigint,bigi
 grant execute on function public.prepare_publication_candidate(uuid,bigint,bigint,uuid) to service_role;
 revoke execute on function public.finalize_publication_candidate(uuid,bigint,uuid) from public, anon, authenticated;
 grant execute on function public.finalize_publication_candidate(uuid,bigint,uuid) to service_role;
+-- END supabase/migrations/202607150003_notion_direct_publication.sql
