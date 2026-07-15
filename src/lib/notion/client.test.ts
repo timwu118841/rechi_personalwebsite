@@ -168,6 +168,23 @@ describe('NotionClient', () => {
     expect(classifyNotionRetry({ status: 403, attempt: 0 }).retry).toBe(false);
   });
 
+  it('fails open with an unknown edit time when a canonical child page lookup fails', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes('/blocks/root/children')) {
+        return json(
+          list([{ object: 'block', id: 'child-1', type: 'child_page', child_page: { title: '文章' } }]),
+        );
+      }
+      return json({ message: 'temporary failure' }, 500);
+    });
+    const client = new NotionClient({ token: 'secret', fetch: fetchMock as typeof fetch, maxRetries: 0 });
+
+    await expect(client.listChildPages('root')).resolves.toEqual([
+      { id: 'child-1', title: '文章', lastEditedTime: null },
+    ]);
+  });
+
   it('fails closed on a legacy archived marker without changing the pinned contract', async () => {
     const client = new NotionClient({
       token: 'secret',
