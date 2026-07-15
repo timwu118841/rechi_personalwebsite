@@ -173,12 +173,18 @@ describe('NotionClient', () => {
       const url = String(input);
       if (url.includes('/blocks/root/children')) {
         return json(
-          list([{ object: 'block', id: 'child-1', type: 'child_page', child_page: { title: '文章' } }]),
+          list([
+            { object: 'block', id: 'child-1', type: 'child_page', child_page: { title: '文章' } },
+          ]),
         );
       }
       return json({ message: 'temporary failure' }, 500);
     });
-    const client = new NotionClient({ token: 'secret', fetch: fetchMock as typeof fetch, maxRetries: 0 });
+    const client = new NotionClient({
+      token: 'secret',
+      fetch: fetchMock as typeof fetch,
+      maxRetries: 0,
+    });
 
     await expect(client.listChildPages('root')).resolves.toEqual([
       { id: 'child-1', title: '文章', lastEditedTime: null },
