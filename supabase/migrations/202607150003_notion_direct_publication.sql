@@ -81,8 +81,10 @@ begin
     p_body_html, case when p_status = 'published' then 'draft' else p_status end,
     coalesce(p_published_at, now()), p_content_type_slug, p_category_slug, p_tags,
     p_featured, p_cover, p_seo_title, p_seo_description, p_canonical_url,
-    case when p_article_id is null then false else v_privacy end,
-    case when p_article_id is null then false else v_legal end
+    case when v_policy = 'manual_review' then true
+         when p_article_id is null then false else v_privacy end,
+    case when v_policy = 'manual_review' then true
+         when p_article_id is null then false else v_legal end
   );
   update public.articles
   set publication_policy = v_policy,
