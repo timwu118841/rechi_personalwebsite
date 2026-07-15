@@ -613,9 +613,12 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
     if (!selected?.activation_at || canPublishImmediately) return;
     const delay = Date.parse(selected.activation_at) - Date.now();
     if (!Number.isFinite(delay) || delay <= 0) return;
-    const timer = window.setTimeout(() => {
-      void refresh();
-    }, Math.min(delay + 50, 60_000));
+    const timer = window.setTimeout(
+      () => {
+        void refresh();
+      },
+      Math.min(delay + 50, 60_000),
+    );
     return () => window.clearTimeout(timer);
   }, [canPublishImmediately, selected?.activation_at]);
 

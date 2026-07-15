@@ -265,7 +265,9 @@ export class ContentJobService {
           .in('id', revisionIds)
       : { data: [], error: null };
     throwIfError(revisionsError);
-    const hashes = new Map(rows(revisions).map((revision) => [String(revision.id), revision.content_hash]));
+    const hashes = new Map(
+      rows(revisions).map((revision) => [String(revision.id), revision.content_hash]),
+    );
     for (const status of statuses) {
       const publication = latest.get(String(status.id));
       const copy = bySource.get(String(status.id));
