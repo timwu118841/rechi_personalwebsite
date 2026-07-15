@@ -84,7 +84,7 @@ https://www.notion.so/Editorial-Root-1429989fe8ac4effbc8f57f56486db54?pvs=4
 ### 4. Cron 與 Storage 前置條件
 
 - 依序套用全部 migration，包含 `supabase/migrations/202607150001_notion_content_pipeline.sql` 與其後的 `supabase/migrations/202607150002_enqueue_content_job_rpc.sql`。前者建立內容工作佇列、審查資料表與 private `notion-staging` bucket；後者提供 partial-index-safe 的 durable job enqueue RPC。
-- `vercel.json` 每分鐘以 GET 呼叫 `/api/internal/content-worker`。在 Vercel Production 設定 `CRON_SECRET` 後，Vercel 會自動送出 `Authorization: Bearer <CRON_SECRET>`；端點缺少或不符合時回應 `503` 或 `401`。詳見 [Vercel Cron Jobs](https://vercel.com/docs/cron-jobs/manage-cron-jobs)。
+- `vercel.json` 每天以 GET 呼叫 `/api/internal/content-worker`（`0 0 * * *`，UTC 00:00／台灣時間 08:00；Hobby 方案可能在該小時內觸發）。在 Vercel Production 設定 `CRON_SECRET` 後，Vercel 會自動送出 `Authorization: Bearer <CRON_SECRET>`；端點缺少或不符合時回應 `503` 或 `401`。詳見 [Vercel Cron Jobs](https://vercel.com/docs/cron-jobs/manage-cron-jobs)。
 - 每輪 worker 最多 claim 及處理 5 個 `sync_root`、`sync_source` 或 `finalize_candidate` jobs；root 下的頁面較多時，後續 Cron 輪次會繼續清空佇列。
 - 確認目標 Supabase project 已啟用 Storage，且全域檔案上限至少 25 MB；bucket 上限不能高於全域上限。
 - `notion-staging` 是 private bucket，上限 25 MB；`site-media` 是公開 bucket，上限 5 MB。公開 bucket 的 URL 可由任何取得網址的人讀取，不得存放敏感案件資料。
@@ -99,7 +99,7 @@ https://www.notion.so/Editorial-Root-1429989fe8ac4effbc8f57f56486db54?pvs=4
 5. 建立發布候選並檢查預覽；候選必須分別通過隱私與法律審查。
 6. 排入發布後，worker 會重新讀取 Notion、下載圖片並比對來源及媒體 hash；內容已變更或頁面已移到垃圾桶時會取消舊候選，不會發布過期版本。
 
-每輪 worker 最多處理 5 個 jobs。`sync_root` 本身也算一個 job；若 root 有多個直屬頁面，可能需要數輪每分鐘 Cron 才能完成全部 source jobs。
+每輪 worker 最多處理 5 個 jobs。`sync_root` 本身也算一個 job；若 root 有多個直屬頁面，可能需要後續每日 Cron 輪次才能完成全部 source jobs。需要更頻繁同步時，可改用外部 scheduler 或升級 Vercel Pro。
 
 ### 圖片與內容限制
 

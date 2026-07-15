@@ -3,5 +3,5 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
-  "crons": [{ "path": "/api/internal/content-worker", "schedule": "* * * * *" }]
+  "crons": [{ "path": "/api/internal/content-worker", "schedule": "0 0 * * *" }]
 }

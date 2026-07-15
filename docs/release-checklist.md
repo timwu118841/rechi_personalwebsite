@@ -26,7 +26,7 @@
 - [ ] 已開啟 root page，從右上角 **••• → Connections → Add connection** 分享給 integration，並確認直屬文章頁繼承存取權
 - [ ] `NOTION_ROOT_PAGE_ID` 是 root page URL 末端的 32 個十六進位字元（可含 UUID 連字號），不是完整網址
 - [ ] `/admin` 的 root sync 只列舉 root 的直屬 `child_page`；孫頁與更深層頁面不會自動同步，所有文章頁都直接位於 root 下
-- [ ] Vercel Production 已建立每分鐘執行的 `/api/internal/content-worker` Cron，且請求帶有 `Authorization: Bearer <CRON_SECRET>`
+- [ ] Vercel Production 已建立每日執行的 `/api/internal/content-worker` Cron（`0 0 * * *`，UTC 00:00／台灣時間 08:00），且請求帶有 `Authorization: Bearer <CRON_SECRET>`
 - [ ] 已確認每輪 worker 最多處理 5 個 jobs；大量直屬頁面會由後續 Cron 輪次繼續處理
 - [ ] 未授權的 worker 請求回應 `401`；缺少 `CRON_SECRET` 時回應 `503`；回應不可快取且不可索引
 - [ ] Supabase Storage 全域檔案上限至少 25 MB

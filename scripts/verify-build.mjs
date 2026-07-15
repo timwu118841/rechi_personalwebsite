@@ -47,10 +47,10 @@ const deploymentConfig = JSON.parse(await readFile(resolve('vercel.json'), 'utf8
 const cron = deploymentConfig.crons || vercelConfig?.crons || [];
 if (
   !cron.some(
-    (item) => item.path === '/api/internal/content-worker' && item.schedule === '* * * * *',
+    (item) => item.path === '/api/internal/content-worker' && item.schedule === '0 0 * * *',
   )
 ) {
-  failures.push('Vercel deployment config 缺少 content worker 的每分鐘 Cron mapping');
+  failures.push('Vercel deployment config 缺少 content worker 的每日 Cron mapping');
 }
 
 const functionFiles = await readdir(join(output, '_functions/chunks')).catch(() => []);
