@@ -20,7 +20,8 @@ npm run dev
 ## 啟用即時內容後台
 
 1. 建立 Supabase project。
-2. 依序在 SQL Editor 執行 `supabase/migrations/` 下的 migration（包含 `202607110004_admin_users.sql`、`202607150001_notion_content_pipeline.sql` 與 `202607150002_enqueue_content_job_rpc.sql`）。
+2. 新 Supabase project 可直接在 SQL Editor 執行整合檔 `supabase/all-migrations.sql`；若使用 Supabase CLI，則改為依序執行 `supabase/migrations/` 下的 migration。兩種方式擇一，不要在同一個空間重複執行。
+   - 已有部分 migration 的 project 不要直接執行整合檔，請從尚未套用的 migration 接續執行。
 3. 在 Supabase Authentication 啟用 Google provider，並將 Google Cloud OAuth redirect URI 設為 `https://<project-ref>.supabase.co/auth/v1/callback`；Supabase Redirect URLs 加入本機與正式站的 `/admin` URL。
 4. 將 `.env.example` 的 Supabase 變數填入 `.env`；正式站也要在 Vercel 設定相同環境變數。管理權限不再由部署環境變數控制，而是由 `public.admin_users` 資料表控制。
 5. Google 是預設登入方式；相容期可用 `PUBLIC_ADMIN_PASSWORD_LOGIN=true` 保留密碼登入，設為 `false` 即停用。
