@@ -76,6 +76,8 @@ interface WorkerResult {
 
 type ToastKind = 'success' | 'error';
 
+type CandidateFilter = 'active' | 'history';
+
 interface ToastState {
   id: number;
   kind: ToastKind;
@@ -564,6 +566,8 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
   const [articleForSource, setArticleForSource] = useState<Record<string, string>>({});
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
+  const [candidateFilter, setCandidateFilter] = useState<CandidateFilter>('active');
+  const [pollingCandidateId, setPollingCandidateId] = useState<string | null>(null);
   const { toast, showToast, dismissToast } = useToast();
   const busy = busyAction !== null;
   const selectedActivationTime = selected?.activation_at
@@ -574,6 +578,12 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
     Number.isFinite(selectedActivationTime) &&
     selectedActivationTime <= Date.now(),
   );
+  const visibleCandidates = useMemo(() => {
+    const history = new Set(['published', 'superseded', 'cancelled']);
+    return candidates.filter((candidate) =>
+      candidateFilter === 'history' ? history.has(candidate.state) : !history.has(candidate.state),
+    );
+  }, [candidateFilter, candidates]);
 
   const refresh = async (): Promise<PublicationCandidateStatus[]> => {
     const [sourceData, candidateData] = await Promise.all([
@@ -607,6 +617,26 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
       method: 'POST',
     });
     return result.result;
+  };
+
+  const pollCandidate = async (candidateId: string) => {
+    setPollingCandidateId(candidateId);
+    try {
+      for (let attempt = 0; attempt < 15; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        const result = await api<{ candidate: PublicationCandidateStatus }>(
+          `/api/admin/notion/candidates/${candidateId}`,
+        );
+        const next = result.candidate;
+        setCandidates((current) => current.map((item) => (item.id === candidateId ? next : item)));
+        setSelected((current) => (current?.id === candidateId ? next : current));
+        if (['published', 'media_failed', 'superseded', 'cancelled'].includes(next.state))
+          return next;
+      }
+    } finally {
+      setPollingCandidateId(null);
+    }
+    return null;
   };
 
   const runAction = async (action: string, operation: () => Promise<void>) => {
@@ -693,10 +723,13 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
       const refreshedCandidate = refreshedCandidates.find(
         (candidate) => candidate.id === selected.id,
       );
-      if (workerResult && refreshedCandidate?.state !== 'published') {
+      const polledCandidate =
+        immediate && refreshedCandidate ? await pollCandidate(refreshedCandidate.id) : null;
+      const finalCandidate = polledCandidate || refreshedCandidate;
+      if (workerResult && finalCandidate?.state !== 'published') {
         showToast(
           'error',
-          `立即發布尚未完成（目前狀態：${refreshedCandidate?.state || '未知'}）：${workerSummary(workerResult)}。`,
+          `立即發布尚未完成（目前狀態：${finalCandidate?.state || '未知'}）：${workerSummary(workerResult)}。`,
         );
       } else if (workerResult?.failed) {
         showToast('error', `發布工作執行失敗：${workerSummary(workerResult)}。`);
@@ -867,7 +900,20 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
         <div className="admin-form-card">
           <h2>發布候選</h2>
           <div className="admin-list">
-            {candidates.map((candidate) => (
+            <div className="admin-filter-tabs" role="tablist" aria-label="候選版本篩選">
+              {(['active', 'history'] as const).map((filter) => (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={candidateFilter === filter}
+                  className={candidateFilter === filter ? 'active' : 'secondary'}
+                  onClick={() => setCandidateFilter(filter)}
+                >
+                  {filter === 'active' ? '進行中' : '歷史紀錄'}
+                </button>
+              ))}
+            </div>
+            {visibleCandidates.map((candidate) => (
               <button
                 className="admin-list-item"
                 key={candidate.id}
@@ -881,7 +927,13 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
                 <span className={`status status-${candidate.state}`}>{candidate.state}</span>
               </button>
             ))}
-            {!candidates.length && <p className="admin-empty">尚未建立發布候選。</p>}
+            {!visibleCandidates.length && (
+              <p className="admin-empty">
+                {candidateFilter === 'active'
+                  ? '目前沒有進行中的發布候選。'
+                  : '目前沒有歷史發布紀錄。'}
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -892,7 +944,7 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
           <div className="button-row">
             <LoadingButton
               className="secondary"
-              disabled={busy}
+              disabled={busy || pollingCandidateId !== null}
               loading={busyAction === 'attest-privacy'}
               onClick={() => void attest('privacy', 'attest')}
             >
@@ -907,7 +959,11 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
               核准法律審查
             </LoadingButton>
             <LoadingButton
-              disabled={busy || selected.state === 'published'}
+              disabled={
+                busy ||
+                pollingCandidateId !== null ||
+                ['published', 'superseded', 'cancelled'].includes(selected.state)
+              }
               loading={busyAction === 'publish'}
               onClick={() => void publish(false)}
             >
@@ -915,7 +971,7 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
             </LoadingButton>
             <LoadingButton
               className="publish-now"
-              disabled={busy || !canPublishImmediately}
+              disabled={busy || pollingCandidateId !== null || !canPublishImmediately}
               loading={busyAction === 'publish-now'}
               onClick={requestImmediatePublish}
               title={
@@ -928,7 +984,7 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
             </LoadingButton>
             <LoadingButton
               className="secondary"
-              disabled={busy}
+              disabled={busy || pollingCandidateId !== null}
               loading={busyAction === 'preview'}
               onClick={() => void loadPreview()}
             >

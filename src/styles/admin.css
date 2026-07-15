@@ -196,6 +196,19 @@ button.secondary,
   gap: 0.65rem;
   margin-top: 2rem;
 }
+.admin-filter-tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+}
+.admin-filter-tabs button {
+  padding: 0.45rem 0.7rem;
+  font-size: 0.8rem;
+}
+.admin-filter-tabs button.active {
+  color: white;
+  background: #315f46;
+}
 .admin-list-item {
   display: flex;
   align-items: center;
@@ -642,6 +655,38 @@ legend {
   }
   .admin-login {
     gap: 2rem;
+  }
+  .admin-main {
+    padding: 1rem;
+  }
+  .admin-title-row,
+  .button-row {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+  .admin-title-row > *,
+  .button-row > * {
+    max-width: 100%;
+  }
+  .admin-form-card {
+    min-width: 0;
+    padding: 1rem;
+  }
+  .admin-list-item {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+  }
+  .admin-list-item > span:last-child {
+    margin-left: auto;
+    text-align: right;
+  }
+  .admin-filter-tabs {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    padding-bottom: 0.25rem;
+    background: white;
   }
   .admin-sidebar {
     position: sticky;
