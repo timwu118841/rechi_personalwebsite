@@ -407,11 +407,9 @@ export class ContentJobService {
       });
     }
     if (options.immediate) {
-      if (candidate.state !== 'ready_to_activate') {
+      if (!['prepared', 'ready_to_activate'].includes(String(candidate.state))) {
         throw Object.assign(
-          new Error(
-            'Current privacy and legal approvals are required before immediate publication.',
-          ),
+          new Error('Only due prepared or ready-to-activate candidates can publish immediately.'),
           { code: '409' },
         );
       }
@@ -434,6 +432,7 @@ export class ContentJobService {
     return (
       data || {
         candidate_id: candidateId,
+        job_id: null,
         state: 'queued',
         run_after: candidate.activation_at,
       }
@@ -530,18 +529,20 @@ export class ContentJobService {
     if (job.job_type === 'sync_root') return this.syncRoot(job);
     if (job.job_type === 'sync_source') return this.syncSource(job);
     if (job.job_type === 'finalize_candidate')
-      return this.finalizeCandidate(String(job.candidate_id));
+      return this.finalizeCandidate(String(job.candidate_id), record(job.payload));
     throw new Error(`Unsupported content job type: ${String(job.job_type)}`);
   }
 
   private async syncRoot(job: DatabaseRecord): Promise<void> {
     const config = getNotionConfig();
     if (!config) throw new Error('Notion editorial integration is not configured.');
+    const requestedBy = stringValue(record(job.payload)?.requested_by);
+    if (!requestedBy) throw new Error('Content job is missing its requesting actor.');
     const childPages = await this.notionClient().listChildPages(config.rootPageId);
     for (const page of childPages) {
       await this.enqueueSourceSync({
         pageId: page.id,
-        actorId: 'worker',
+        actorId: requestedBy,
         idempotencyKey: `root:${String(job.id)}:${page.id}`,
       });
     }
@@ -892,7 +893,9 @@ export class ContentJobService {
     return withCollisionSuffix(base, index);
   }
 
-  private async finalizeCandidate(candidateId: string): Promise<void> {
+  private async finalizeCandidate(candidateId: string, payload: DatabaseRecord | null): Promise<void> {
+    const actorId = stringValue(payload?.requested_by);
+    if (!actorId) throw new Error('Publication job is missing its requesting actor.');
     const candidate = await this.getCandidateStatus(candidateId);
     if (!candidate) throw new Error('Publication candidate not found.');
     const source = await this.getSourceStatus(String(candidate.source_id));
@@ -912,18 +915,22 @@ export class ContentJobService {
       hashes.sourceHash !== candidate.source_hash ||
       hashes.renderHash !== candidate.render_hash
     ) {
-      await this.cancelStaleCandidate(candidateId, `source_changed:${hashes.sourceHash}`);
+      await this.cancelStaleCandidate(candidateId, `source_changed:${hashes.sourceHash}`, actorId);
       throw new Error('source_changed');
     }
     const { error } = await this.client.rpc('finalize_publication_candidate', {
       p_candidate_id: candidateId,
       p_expected_publication_version: Number(candidate.expected_publication_version),
-      p_actor_id: null,
+      p_actor_id: actorId,
     });
     throwIfError(error);
   }
 
-  private async cancelStaleCandidate(candidateId: string, reason: string): Promise<void> {
+  private async cancelStaleCandidate(
+    candidateId: string,
+    reason: string,
+    actorId: string,
+  ): Promise<void> {
     const { data: candidate, error: readError } = await this.client
       .from('publication_candidates')
       .select('source_id')
@@ -944,7 +951,7 @@ export class ContentJobService {
     if (sourceId) {
       await this.enqueueSourceSync({
         sourceId,
-        actorId: 'worker',
+        actorId,
         idempotencyKey: `source-changed:${candidateId}:${reason}`,
       });
     }
