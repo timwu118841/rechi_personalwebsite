@@ -1,15 +1,23 @@
 begin;
 
-select plan(26);
+select plan(29);
 
 select has_table('public', 'article_sources', 'Notion source table exists');
 select has_table('public', 'article_source_revisions', 'Immutable revision table exists');
 select has_table('public', 'publication_candidates', 'Publication candidate table exists');
 select has_table('public', 'content_jobs', 'Durable content job table exists');
 select has_column('public', 'articles', 'publication_version', 'Articles have a publication CAS version');
+select has_column('public', 'articles', 'publication_policy', 'Articles have an explicit publication policy');
 select has_column('public', 'article_source_revisions', 'source_hash', 'Revisions persist source hashes');
 select has_column('public', 'article_source_revisions', 'render_hash', 'Revisions persist render hashes');
 select has_column('public', 'publication_candidates', 'candidate_hash', 'Candidates persist candidate hashes');
+select has_column('public', 'publication_candidates', 'publication_policy', 'Candidates persist their publication policy');
+select has_function(
+  'public',
+  'save_article_with_policy',
+  array['uuid', 'text', 'text', 'text', 'text', 'jsonb', 'text', 'text', 'timestamptz', 'text', 'text', 'text[]', 'boolean', 'jsonb', 'text', 'text', 'text', 'text'],
+  'Policy-aware article finalization is exposed through a dedicated RPC'
+);
 select has_function(
   'public',
   'finalize_publication_candidate',
