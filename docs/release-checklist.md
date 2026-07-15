@@ -4,6 +4,7 @@
 
 ## Supabase 與 Vercel
 
+- [ ] 新 Supabase project 已在 SQL Editor 執行 `supabase/all-migrations.sql`，或依序執行下列 migration；兩種方式不可在同一個 project 重複執行
 - [ ] 已套用 `supabase/migrations/202607100001_realtime_content.sql`
 - [ ] 已依序套用 `supabase/migrations/202607110001_rich_article_body.sql`
 - [ ] 已依序套用 `supabase/migrations/202607110002_unicode_article_slugs.sql`
