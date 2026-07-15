@@ -251,11 +251,17 @@ export class NotionClient {
         `/blocks/${encodeURIComponent(rootPageId)}/children?${query}`,
       );
     });
-    return blocks.flatMap((block) => {
+    const childPages = blocks.flatMap((block) => {
       if (block.type !== 'child_page') return [];
       const childPage = object(block.child_page);
       return [{ id: block.id, title: typeof childPage?.title === 'string' ? childPage.title : '' }];
     });
+    return Promise.all(
+      childPages.map(async (childPage) => {
+        const page = await this.retrievePage(childPage.id);
+        return { ...childPage, lastEditedTime: page.last_edited_time ?? null };
+      }),
+    );
   }
 
   async readSourceSnapshot(pageId: string): Promise<NotionSourceSnapshot> {

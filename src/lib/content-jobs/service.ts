@@ -22,6 +22,7 @@ import type {
 const WORKER_JOB_LIMIT = 5;
 const WORKER_BUDGET_MS = 45_000;
 const JOB_LEASE_SECONDS = 120;
+const NOTION_LAST_EDITED_TIME_KEY = 'notion_last_edited_time';
 
 type DatabaseRecord = Record<string, any>;
 
@@ -56,6 +57,29 @@ function rows(value: unknown): DatabaseRecord[] {
 
 function stringValue(value: unknown): string | null {
   return typeof value === 'string' && value ? value : null;
+}
+
+function validNotionTimestamp(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && Number.isFinite(Date.parse(value));
+}
+
+export function mergeNotionSourceConfiguration(
+  configuration: unknown,
+  lastEditedTime: string | null,
+): DatabaseRecord {
+  const current = record(configuration) ?? {};
+  return lastEditedTime ? { ...current, [NOTION_LAST_EDITED_TIME_KEY]: lastEditedTime } : current;
+}
+
+export function shouldSyncNotionPage(
+  configuration: unknown,
+  lastEditedTime: string | null,
+): boolean {
+  // Missing, malformed, or unavailable timestamps fail open: a source is synced
+  // rather than risking stale content due to incomplete metadata.
+  if (!validNotionTimestamp(lastEditedTime)) return true;
+  const current = record(configuration)?.[NOTION_LAST_EDITED_TIME_KEY];
+  return !validNotionTimestamp(current) || current !== lastEditedTime;
 }
 
 export interface PromotedMedia {
@@ -539,10 +563,20 @@ export class ContentJobService {
     const requestedBy = stringValue(record(job.payload)?.requested_by);
     if (!requestedBy) throw new Error('Content job is missing its requesting actor.');
     const childPages = await this.notionClient().listChildPages(config.rootPageId);
+    const { data: existingSources, error } = await this.client
+      .from('article_sources')
+      .select('id,external_id,configuration')
+      .eq('provider', 'notion')
+      .in('external_id', childPages.map((page) => page.id));
+    throwIfError(error);
+    const byPageId = new Map(rows(existingSources).map((source) => [String(source.external_id), source]));
     for (const page of childPages) {
+      const source = byPageId.get(page.id);
+      if (source && !shouldSyncNotionPage(source.configuration, page.lastEditedTime)) continue;
       await this.enqueueSourceSync({
-        pageId: page.id,
-        actorId: requestedBy,
+        sourceId: stringValue(source?.id) ?? undefined,
+        pageId: source ? undefined : page.id,
+        actorId: 'worker',
         idempotencyKey: `root:${String(job.id)}:${page.id}`,
       });
     }
@@ -569,6 +603,7 @@ export class ContentJobService {
             external_id: pageId,
             source_url: snapshot.url,
             state: snapshot.sourceState === 'archived' ? 'archived' : 'onboarding',
+            configuration: mergeNotionSourceConfiguration({}, snapshot.lastEditedTime),
           },
           { onConflict: 'provider,external_id' },
         )
@@ -634,6 +669,7 @@ export class ContentJobService {
       .from('article_sources')
       .update({
         source_url: snapshot.url,
+        configuration: mergeNotionSourceConfiguration(source?.configuration, snapshot.lastEditedTime),
         state: snapshot.sourceState === 'archived' ? 'archived' : 'active',
         last_synced_at: new Date().toISOString(),
         last_error: null,
