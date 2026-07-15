@@ -1,5 +1,15 @@
 import { createClient, type Session } from '@supabase/supabase-js';
-import { lazy, Suspense, type SyntheticEvent, useEffect, useMemo, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  type ButtonHTMLAttributes,
+  type SyntheticEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { Category, ContentType, MediaAsset, SiteSettings } from '@/lib/content/types';
 import type { JSONContent } from '@tiptap/react';
 import '@/styles/admin.css';
@@ -62,6 +72,91 @@ interface WorkerResult {
   completed: number;
   failed: number;
   exhaustedBudget: boolean;
+}
+
+type ToastKind = 'success' | 'error';
+
+interface ToastState {
+  id: number;
+  kind: ToastKind;
+  message: string;
+}
+
+function useToast() {
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const dismissToast = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    setToast(null);
+  }, []);
+
+  const showToast = useCallback((kind: ToastKind, message: string) => {
+    if (timer.current) clearTimeout(timer.current);
+    setToast({ id: Date.now(), kind, message });
+    timer.current = setTimeout(
+      () => {
+        timer.current = null;
+        setToast(null);
+      },
+      kind === 'error' ? 8_000 : 5_000,
+    );
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  return { toast, showToast, dismissToast };
+}
+
+function Toast({ toast, onDismiss }: { toast: ToastState | null; onDismiss: () => void }) {
+  if (!toast) return null;
+  return (
+    <div className="admin-toast-region" aria-live={toast.kind === 'error' ? 'assertive' : 'polite'}>
+      <div
+        key={toast.id}
+        className={`admin-toast admin-toast-${toast.kind}`}
+        role={toast.kind === 'error' ? 'alert' : 'status'}
+      >
+        <span className="admin-toast-mark" aria-hidden="true">
+          {toast.kind === 'success' ? '✓' : '!'}
+        </span>
+        <p>{toast.message}</p>
+        <button
+          type="button"
+          className="admin-toast-close"
+          onClick={onDismiss}
+          aria-label="關閉通知"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function LoadingButton({
+  loading,
+  children,
+  disabled,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { loading: boolean }) {
+  return (
+    <button
+      {...props}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      data-loading={loading || undefined}
+    >
+      {loading && <span className="admin-button-spinner" aria-hidden="true" />}
+      <span>{children}</span>
+    </button>
+  );
 }
 
 function localDateTime(value?: string) {
@@ -168,7 +263,15 @@ export default function AdminApp({
   }
   if (checking) return <AdminNotice title="正在確認登入狀態…" message="請稍候。" />;
   if (!session) return <Login client={client} passwordLoginEnabled={passwordLoginEnabled} />;
-  return <Dashboard session={session} onSignOut={() => client.auth.signOut()} />;
+  return (
+    <Dashboard
+      session={session}
+      onSignOut={async () => {
+        const { error } = await client.auth.signOut();
+        if (error) throw error;
+      }}
+    />
+  );
 }
 
 function AdminNotice({ title, message }: { title: string; message: string }) {
@@ -185,9 +288,8 @@ function AdminNotice({ title, message }: { title: string; message: string }) {
 function Login({ client, passwordLoginEnabled }: { client: any; passwordLoginEnabled: boolean }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [oauthError, setOauthError] = useState('');
+  const [busyAction, setBusyAction] = useState<'google' | 'password' | null>(null);
+  const { toast, showToast, dismissToast } = useToast();
   useEffect(() => {
     const search = new URLSearchParams(window.location.search);
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
@@ -197,40 +299,53 @@ function Login({ client, passwordLoginEnabled }: { client: any; passwordLoginEna
       hash.get('error_description') ||
       hash.get('error');
     if (error) {
-      setOauthError(error);
+      showToast('error', error);
       window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, []);
+  }, [showToast]);
   async function signInWithGoogle() {
-    setBusy(true);
-    setOauthError('');
-    const { error } = await client.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: `${window.location.origin}/admin` },
-    });
-    if (error) setOauthError('Google 登入失敗，請稍後再試。');
-    setBusy(false);
+    setBusyAction('google');
+    try {
+      const { error } = await client.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: `${window.location.origin}/admin` },
+      });
+      if (error) throw error;
+    } catch {
+      showToast('error', 'Google 登入失敗，請稍後再試。');
+      setBusyAction(null);
+    }
   }
   async function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true);
-    setMessage('');
-    const { error } = await client.auth.signInWithPassword({ email, password });
-    setMessage(error ? '登入失敗，請檢查帳號密碼與管理權限。' : '登入成功。');
-    setBusy(false);
+    setBusyAction('password');
+    try {
+      const { error } = await client.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      showToast('success', '登入成功。');
+    } catch {
+      showToast('error', '登入失敗，請檢查帳號密碼與管理權限。');
+    } finally {
+      setBusyAction(null);
+    }
   }
   return (
     <section className="admin-login">
+      <Toast toast={toast} onDismiss={dismissToast} />
       <div>
         <p className="admin-kicker">Private publishing</p>
         <h1>內容管理登入</h1>
         <p>只有列入管理者名單的帳號可以編輯或發布內容。</p>
       </div>
       <form onSubmit={submit}>
-        <button type="button" onClick={signInWithGoogle} disabled={busy}>
-          {busy ? '登入中…' : '使用 Google 登入'}
-        </button>
-        {oauthError && <p role="alert">{oauthError}</p>}
+        <LoadingButton
+          type="button"
+          onClick={signInWithGoogle}
+          disabled={busyAction !== null}
+          loading={busyAction === 'google'}
+        >
+          使用 Google 登入
+        </LoadingButton>
         {passwordLoginEnabled && (
           <>
             <label>
@@ -251,8 +366,9 @@ function Login({ client, passwordLoginEnabled }: { client: any; passwordLoginEna
                 required
               />
             </label>
-            <button disabled={busy}>{busy ? '登入中…' : '登入'}</button>
-            {message && <p role="status">{message}</p>}
+            <LoadingButton disabled={busyAction !== null} loading={busyAction === 'password'}>
+              登入
+            </LoadingButton>
           </>
         )}
       </form>
@@ -260,14 +376,15 @@ function Login({ client, passwordLoginEnabled }: { client: any; passwordLoginEna
   );
 }
 
-function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => void }) {
+function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => Promise<void> }) {
   const [tab, setTab] = useState<Tab>('notion');
   const [articles, setArticles] = useState<AdminArticle[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [contentTypes, setContentTypes] = useState<ContentType[]>([]);
   const [settings, setSettings] = useState<SiteSettings | null>(null);
   const [editing, setEditing] = useState<AdminArticle | null>(null);
-  const [message, setMessage] = useState('正在載入後台資料…');
+  const [signingOut, setSigningOut] = useState(false);
+  const { toast, showToast, dismissToast } = useToast();
 
   const api = async <T,>(path: string, init: RequestInit = {}): Promise<T> => {
     const response = await fetch(path, {
@@ -294,9 +411,8 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
       setSettings(settingData.settings);
       setCategories(taxonomyData.categories);
       setContentTypes(taxonomyData.contentTypes);
-      setMessage('');
     } catch (error) {
-      setMessage((error as Error).message);
+      showToast('error', (error as Error).message);
     }
   };
 
@@ -320,6 +436,7 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
 
   return (
     <div className="admin-shell">
+      <Toast toast={toast} onDismiss={dismissToast} />
       <header className="admin-header">
         <div>
           <p className="admin-kicker">即時內容管理</p>
@@ -330,9 +447,19 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
           <a href="/" target="_blank" rel="noreferrer">
             檢視網站
           </a>
-          <button className="text-button" onClick={onSignOut}>
+          <LoadingButton
+            className="text-button"
+            loading={signingOut}
+            onClick={() => {
+              setSigningOut(true);
+              void onSignOut().catch((error) => {
+                showToast('error', error instanceof Error ? error.message : '登出失敗。');
+                setSigningOut(false);
+              });
+            }}
+          >
             登出
-          </button>
+          </LoadingButton>
         </div>
       </header>
       <div className="admin-workspace">
@@ -356,11 +483,6 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
           </button>
         </nav>
         <main className="admin-main">
-          {message && (
-            <p className="admin-message" role="status">
-              {message}
-            </p>
-          )}
           {tab === 'notion' && <NotionEditorialPanel api={api} articles={articles} />}
           {tab === 'articles' && (
             <ArticlesPanel
@@ -371,7 +493,6 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
               setEditing={setEditing}
               upload={upload}
               onSave={async (article) => {
-                setMessage('儲存中…');
                 try {
                   const path = article.id
                     ? `/api/admin/articles/${article.id}`
@@ -385,9 +506,9 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
                   });
                   setEditing(null);
                   await reload();
-                  setMessage('文章已儲存，公開快取正在更新。');
+                  showToast('success', '文章已儲存，公開快取正在更新。');
                 } catch (error) {
-                  setMessage((error as Error).message);
+                  showToast('error', (error as Error).message);
                 }
               }}
             />
@@ -397,16 +518,15 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
               settings={settings}
               upload={upload}
               onSave={async (value) => {
-                setMessage('儲存中…');
                 try {
                   const result = await api<{ settings: SiteSettings }>('/api/admin/settings', {
                     method: 'PUT',
                     body: JSON.stringify(value),
                   });
                   setSettings(result.settings);
-                  setMessage('網站設定已更新，公開快取正在更新。');
+                  showToast('success', '網站設定已更新，公開快取正在更新。');
                 } catch (error) {
-                  setMessage((error as Error).message);
+                  showToast('error', (error as Error).message);
                 }
               }}
             />
@@ -416,16 +536,15 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
               categories={categories}
               contentTypes={contentTypes}
               onSave={async (kind, value) => {
-                setMessage('儲存中…');
                 try {
                   await api('/api/admin/taxonomies', {
                     method: 'POST',
                     body: JSON.stringify({ kind, value }),
                   });
                   await reload();
-                  setMessage('內容設定已更新。');
+                  showToast('success', '內容設定已更新。');
                 } catch (error) {
-                  setMessage((error as Error).message);
+                  showToast('error', (error as Error).message);
                 }
               }}
             />
@@ -443,10 +562,20 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
   const [selected, setSelected] = useState<PublicationCandidateStatus | null>(null);
   const [preview, setPreview] = useState('');
   const [articleForSource, setArticleForSource] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
+  const { toast, showToast, dismissToast } = useToast();
+  const busy = busyAction !== null;
+  const selectedActivationTime = selected?.activation_at
+    ? Date.parse(selected.activation_at)
+    : Number.NaN;
+  const canPublishImmediately = Boolean(
+    selected?.state === 'ready_to_activate' &&
+    Number.isFinite(selectedActivationTime) &&
+    selectedActivationTime <= Date.now(),
+  );
 
-  const refresh = async () => {
+  const refresh = async (): Promise<PublicationCandidateStatus[]> => {
     const [sourceData, candidateData] = await Promise.all([
       api<{ sources: NotionSourceStatus[] }>('/api/admin/notion/sources'),
       api<{ candidates: PublicationCandidateStatus[] }>('/api/admin/notion/candidates'),
@@ -456,10 +585,11 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
     setSelected((current) =>
       current ? candidateData.candidates.find((item) => item.id === current.id) || null : null,
     );
+    return candidateData.candidates;
   };
 
   useEffect(() => {
-    void refresh().catch((error) => setMessage((error as Error).message));
+    void refresh().catch((error) => showToast('error', (error as Error).message));
   }, []);
 
   const operationId = () =>
@@ -467,51 +597,67 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
       ? crypto.randomUUID()
       : String(Date.now());
 
-  const runWorkerNow = async () => {
+  const workerSummary = ({ claimed, completed, failed, exhaustedBudget }: WorkerResult) => {
+    const remaining = exhaustedBudget ? '，仍有工作待處理' : '';
+    return `處理 ${completed}/${claimed} 個工作，失敗 ${failed} 個${remaining}`;
+  };
+
+  const runWorkerNow = async (): Promise<WorkerResult> => {
     const result = await api<{ accepted: true; result: WorkerResult }>('/api/admin/notion/worker', {
       method: 'POST',
     });
-    const { claimed, completed, failed, exhaustedBudget } = result.result;
-    const remaining = exhaustedBudget ? '，仍有工作待處理' : '';
-    setMessage(`同步完成：處理 ${completed}/${claimed} 個工作，失敗 ${failed} 個${remaining}。`);
+    return result.result;
   };
 
-  const enqueueAndRun = async (body: Record<string, unknown>, label: string) => {
-    setBusy(true);
-    setMessage(`${label}已送出，正在立即同步…`);
+  const runAction = async (action: string, operation: () => Promise<void>) => {
+    setBusyAction(action);
     try {
+      await operation();
+    } catch (error) {
+      showToast('error', (error as Error).message);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const enqueueAndRun = async (body: Record<string, unknown>, label: string, action: string) => {
+    await runAction(action, async () => {
       await api('/api/admin/notion/sync', {
         method: 'POST',
         body: JSON.stringify(body),
       });
-      await runWorkerNow();
+      const result = await runWorkerNow();
       await refresh();
-    } catch (error) {
-      setMessage((error as Error).message);
-    } finally {
-      setBusy(false);
-    }
+      showToast(
+        result.failed > 0 ? 'error' : 'success',
+        `${label}同步完成：${workerSummary(result)}。`,
+      );
+    });
   };
 
   const sync = async () => {
     if (!pageId.trim()) {
-      setMessage('請貼上 Notion page ID。');
+      showToast('error', '請貼上 Notion page ID。');
       return;
     }
     await enqueueAndRun(
       { pageId: pageId.trim(), idempotencyKey: operationId() },
-      'Notion 頁面同步工作',
+      'Notion 頁面',
+      'sync-page',
     );
   };
 
   const syncRoot = async () => {
-    await enqueueAndRun({ root: true, idempotencyKey: operationId() }, 'Root 同步工作');
+    await enqueueAndRun(
+      { root: true, idempotencyKey: operationId() },
+      'Root 直屬頁面',
+      'sync-root',
+    );
   };
 
   const attest = async (reviewType: 'privacy' | 'legal', action: 'attest' | 'revoke') => {
     if (!selected) return;
-    setBusy(true);
-    try {
+    await runAction(`attest-${reviewType}`, async () => {
       await api(`/api/admin/notion/candidates/${selected.id}/attest`, {
         method: 'POST',
         body: JSON.stringify({
@@ -521,22 +667,19 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
           idempotencyKey: operationId(),
         }),
       });
-      setMessage(
+      showToast(
+        'success',
         `${reviewType === 'privacy' ? '隱私' : '法律'}審查已${action === 'attest' ? '核准' : '撤銷'}。`,
       );
       await refresh();
-    } catch (error) {
-      setMessage((error as Error).message);
-    } finally {
-      setBusy(false);
-    }
+    });
   };
 
-  const publish = async () => {
+  const publish = async (immediate = false) => {
     if (!selected) return;
-    setBusy(true);
-    try {
-      await api(`/api/admin/notion/candidates/${selected.id}/publish`, {
+    await runAction(immediate ? 'publish-now' : 'publish', async () => {
+      const publishPath = `/api/admin/notion/candidates/${selected.id}/publish${immediate ? '?immediate=true' : ''}`;
+      await api(publishPath, {
         method: 'POST',
         body: JSON.stringify({
           expectedRevisionId: selected.source_revision_id,
@@ -545,79 +688,94 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
           idempotencyKey: operationId(),
         }),
       });
-      setMessage('發布工作已排入佇列；worker 會在 activation_at 前後完成 freshness gate。');
-      await refresh();
-    } catch (error) {
-      setMessage((error as Error).message);
-    } finally {
-      setBusy(false);
-    }
+      const workerResult = immediate ? await runWorkerNow() : null;
+      const refreshedCandidates = await refresh();
+      const refreshedCandidate = refreshedCandidates.find(
+        (candidate) => candidate.id === selected.id,
+      );
+      if (workerResult && refreshedCandidate?.state !== 'published') {
+        showToast(
+          'error',
+          `立即發布尚未完成（目前狀態：${refreshedCandidate?.state || '未知'}）：${workerSummary(workerResult)}。`,
+        );
+      } else if (workerResult?.failed) {
+        showToast('error', `發布工作執行失敗：${workerSummary(workerResult)}。`);
+      } else {
+        showToast(
+          'success',
+          immediate
+            ? `立即發布工作已執行：${workerResult ? workerSummary(workerResult) : ''}。`
+            : '發布工作已排入佇列，worker 會在設定時間完成 freshness gate。',
+        );
+      }
+    });
+  };
+
+  const requestImmediatePublish = () => {
+    if (canPublishImmediately) setPublishConfirmOpen(true);
   };
 
   const loadPreview = async () => {
     if (!selected) return;
-    setBusy(true);
-    try {
+    await runAction('preview', async () => {
       const result = await api<{
         preview: { title: string; description: string; bodyMarkdown: string };
       }>(`/api/admin/notion/candidates/${selected.id}/preview`);
       setPreview(
         `${result.preview.title}\n\n${result.preview.description}\n\n${result.preview.bodyMarkdown}`,
       );
-    } catch (error) {
-      setMessage((error as Error).message);
-    } finally {
-      setBusy(false);
-    }
+      showToast('success', '候選版本預覽已載入。');
+    });
   };
 
   const bind = async (sourceId: string) => {
     const articleId = articleForSource[sourceId];
     if (!articleId) {
-      setMessage('請先選擇要綁定的既有文章。');
+      showToast('error', '請先選擇要綁定的既有文章。');
       return;
     }
-    setBusy(true);
-    try {
+    await runAction(`bind-${sourceId}`, async () => {
       await api(`/api/admin/notion/sources/${sourceId}/bind`, {
         method: 'POST',
         body: JSON.stringify({ articleId }),
       });
-      setMessage('來源已綁定；目前公開快照尚未變更。');
+      showToast('success', '來源已綁定；目前公開快照尚未變更。');
       await refresh();
-    } catch (error) {
-      setMessage((error as Error).message);
-    } finally {
-      setBusy(false);
-    }
+    });
   };
 
   const prepare = async (sourceId: string) => {
-    setBusy(true);
-    try {
+    await runAction(`prepare-${sourceId}`, async () => {
       await api(`/api/admin/notion/sources/${sourceId}/candidate`, {
         method: 'POST',
         body: JSON.stringify({}),
       });
-      setMessage('已建立不可變發布候選，請完成隱私與法律審查。');
+      showToast('success', '已建立不可變發布候選，請完成隱私與法律審查。');
       await refresh();
-    } catch (error) {
-      setMessage((error as Error).message);
-    } finally {
-      setBusy(false);
-    }
+    });
   };
 
   return (
     <section>
+      <Toast toast={toast} onDismiss={dismissToast} />
       <div className="admin-title-row">
         <div>
           <p className="admin-kicker">Editorial source</p>
           <h1>Notion 文章發布</h1>
         </div>
-        <button className="secondary" onClick={() => void refresh()} disabled={busy}>
+        <LoadingButton
+          className="secondary"
+          onClick={() =>
+            void runAction('refresh', async () => {
+              await refresh();
+              showToast('success', 'Notion 狀態已更新。');
+            })
+          }
+          disabled={busy}
+          loading={busyAction === 'refresh'}
+        >
           重新整理
-        </button>
+        </LoadingButton>
       </div>
       <p className="admin-message">
         正文只在 Notion 編輯；這裡只負責同步、審查、預覽候選版本與發布。同步不會改變目前公開文章。
@@ -626,20 +784,28 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
         <h2>同步 Notion 頁面</h2>
         <p>可同步設定的 root page 直屬頁面，或單獨貼上 page ID。</p>
         <div className="button-row">
-          <button className="secondary" onClick={() => void syncRoot()} disabled={busy}>
+          <LoadingButton
+            className="secondary"
+            onClick={() => void syncRoot()}
+            disabled={busy}
+            loading={busyAction === 'sync-root'}
+          >
             立即同步 Root 直屬頁面
-          </button>
+          </LoadingButton>
           <input
             value={pageId}
             onChange={(event) => setPageId(event.target.value)}
             placeholder="Notion page ID"
             aria-label="Notion page ID"
           />
-          <button onClick={() => void sync()} disabled={busy}>
+          <LoadingButton
+            onClick={() => void sync()}
+            disabled={busy}
+            loading={busyAction === 'sync-page'}
+          >
             立即同步
-          </button>
+          </LoadingButton>
         </div>
-        {message && <p role="status">{message}</p>}
       </div>
       <div className="admin-two-columns">
         <div className="admin-form-card">
@@ -672,23 +838,25 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
                           </option>
                         ))}
                       </select>
-                      <button
+                      <LoadingButton
                         className="secondary"
                         disabled={busy}
+                        loading={busyAction === `bind-${source.id}`}
                         onClick={() => void bind(source.id)}
                       >
                         綁定
-                      </button>
+                      </LoadingButton>
                     </span>
                   )}
                   {source.working_copy_id && (
-                    <button
+                    <LoadingButton
                       className="secondary"
                       disabled={busy}
+                      loading={busyAction === `prepare-${source.id}`}
                       onClick={() => void prepare(source.id)}
                     >
                       建立發布候選
-                    </button>
+                    </LoadingButton>
                   )}
                 </span>
               </div>
@@ -722,31 +890,90 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
           <h2>候選審查：{selected.title}</h2>
           <p>候選 hash：{selected.candidate_hash}</p>
           <div className="button-row">
-            <button
+            <LoadingButton
               className="secondary"
               disabled={busy}
+              loading={busyAction === 'attest-privacy'}
               onClick={() => void attest('privacy', 'attest')}
             >
               核准隱私審查
-            </button>
-            <button
+            </LoadingButton>
+            <LoadingButton
               className="secondary"
               disabled={busy}
+              loading={busyAction === 'attest-legal'}
               onClick={() => void attest('legal', 'attest')}
             >
               核准法律審查
-            </button>
-            <button
+            </LoadingButton>
+            <LoadingButton
               disabled={busy || selected.state === 'published'}
-              onClick={() => void publish()}
+              loading={busyAction === 'publish'}
+              onClick={() => void publish(false)}
             >
               排入發布
-            </button>
-            <button className="secondary" disabled={busy} onClick={() => void loadPreview()}>
+            </LoadingButton>
+            <LoadingButton
+              className="publish-now"
+              disabled={busy || !canPublishImmediately}
+              loading={busyAction === 'publish-now'}
+              onClick={requestImmediatePublish}
+              title={
+                canPublishImmediately
+                  ? '立即執行已到期且完成審查的發布候選'
+                  : '候選須完成隱私與法律審查，且已到發布時間，才能立即發布'
+              }
+            >
+              立即發布
+            </LoadingButton>
+            <LoadingButton
+              className="secondary"
+              disabled={busy}
+              loading={busyAction === 'preview'}
+              onClick={() => void loadPreview()}
+            >
               載入預覽
-            </button>
+            </LoadingButton>
           </div>
           {preview && <pre className="admin-preview">{preview}</pre>}
+        </div>
+      )}
+      {selected && publishConfirmOpen && (
+        <div className="admin-dialog-backdrop" role="presentation">
+          <section
+            className="admin-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="publish-confirm-title"
+            aria-describedby="publish-confirm-description"
+          >
+            <p className="admin-kicker">Ready to publish</p>
+            <h2 id="publish-confirm-title">立即發布這個候選版本？</h2>
+            <p id="publish-confirm-description">
+              「{selected.title}」已完成必要審查且已到發布時間。送出後仍會重新檢查 Notion
+              freshness、圖片與資料庫版本，任何一項不符都會停止發布。
+            </p>
+            <div className="button-row admin-dialog-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setPublishConfirmOpen(false)}
+              >
+                先不要
+              </button>
+              <LoadingButton
+                type="button"
+                className="publish-now"
+                loading={busyAction === 'publish-now'}
+                onClick={() => {
+                  setPublishConfirmOpen(false);
+                  void publish(true);
+                }}
+              >
+                確認立即發布
+              </LoadingButton>
+            </div>
+          </section>
         </div>
       )}
     </section>
@@ -835,17 +1062,24 @@ function ArticleEditor({
 }) {
   const [value, setValue] = useState(article);
   const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const { toast, showToast, dismissToast } = useToast();
   const set = <K extends keyof AdminArticle>(key: K, next: AdminArticle[K]) =>
     setValue((current) => ({ ...current, [key]: next }));
   return (
     <form
       className="admin-form"
-      onSubmit={(event) => {
+      onSubmit={async (event) => {
         event.preventDefault();
-        void onSave(value);
+        setSaving(true);
+        try {
+          await onSave(value);
+        } finally {
+          setSaving(false);
+        }
       }}
     >
+      <Toast toast={toast} onDismiss={dismissToast} />
       <div className="admin-title-row">
         <div>
           <p className="admin-kicker">Article editor</p>
@@ -855,7 +1089,9 @@ function ArticleEditor({
           <button type="button" className="secondary" onClick={onCancel}>
             取消
           </button>
-          <button>儲存文章</button>
+          <LoadingButton loading={saving} disabled={saving || uploading}>
+            儲存文章
+          </LoadingButton>
         </div>
       </div>
       <div className="admin-two-columns">
@@ -1002,11 +1238,12 @@ function ArticleEditor({
                   const altInput = document.querySelector<HTMLInputElement>('#cover-alt');
                   if (!file || !altInput?.value.trim()) return;
                   setUploading(true);
-                  setUploadError('');
                   try {
                     set('cover', await upload(file, altInput.value.trim()));
+                    showToast('success', '文章封面已上傳。');
                   } catch (error) {
-                    setUploadError(
+                    showToast(
+                      'error',
                       error instanceof Error ? error.message : '圖片上傳失敗，請再試一次。',
                     );
                   } finally {
@@ -1016,8 +1253,11 @@ function ArticleEditor({
                 }}
               />
             </label>
-            {uploading && <small>圖片上傳中…</small>}
-            {uploadError && <small role="alert">{uploadError}</small>}
+            {uploading && (
+              <small className="admin-upload-progress" role="status">
+                <span className="admin-button-spinner" aria-hidden="true" /> 圖片上傳中…
+              </small>
+            )}
           </fieldset>
           <label>
             SEO 標題
@@ -1079,14 +1319,20 @@ function SiteSettingsPanel({
   onSave: (settings: SiteSettings) => Promise<void>;
 }) {
   const [value, setValue] = useState(settings);
+  const [saving, setSaving] = useState(false);
   const set = <K extends keyof SiteSettings>(key: K, next: SiteSettings[K]) =>
     setValue((current) => ({ ...current, [key]: next }));
   return (
     <form
       className="admin-form narrow"
-      onSubmit={(event) => {
+      onSubmit={async (event) => {
         event.preventDefault();
-        void onSave(value);
+        setSaving(true);
+        try {
+          await onSave(value);
+        } finally {
+          setSaving(false);
+        }
       }}
     >
       <div className="admin-title-row">
@@ -1094,7 +1340,7 @@ function SiteSettingsPanel({
           <p className="admin-kicker">Presentation</p>
           <h1>網站與作者</h1>
         </div>
-        <button>儲存設定</button>
+        <LoadingButton loading={saving}>儲存設定</LoadingButton>
       </div>
       <div className="admin-form-card">
         <h2>網站資訊</h2>
@@ -1179,9 +1425,10 @@ function MediaUpload({
 }) {
   const [alt, setAlt] = useState(value?.alt || '');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const { toast, showToast, dismissToast } = useToast();
   return (
     <fieldset>
+      <Toast toast={toast} onDismiss={dismissToast} />
       <legend>{label}</legend>
       {value && <img className="admin-cover-preview" src={value.url} alt={value.alt} />}
       <label>
@@ -1197,11 +1444,12 @@ function MediaUpload({
             const file = event.target.files?.[0];
             if (!file || !alt.trim()) return;
             setBusy(true);
-            setError('');
             try {
               onChange(await upload(file, alt.trim()));
+              showToast('success', `${label}已上傳。`);
             } catch (uploadError) {
-              setError(
+              showToast(
+                'error',
                 uploadError instanceof Error ? uploadError.message : '圖片上傳失敗，請再試一次。',
               );
             } finally {
@@ -1211,8 +1459,11 @@ function MediaUpload({
           }}
         />
       </label>
-      {busy && <small>圖片上傳中…</small>}
-      {error && <small role="alert">{error}</small>}
+      {busy && (
+        <small className="admin-upload-progress" role="status">
+          <span className="admin-button-spinner" aria-hidden="true" /> 圖片上傳中…
+        </small>
+      )}
     </fieldset>
   );
 }
@@ -1238,6 +1489,7 @@ function TaxonomyPanel({
     name: '',
     description: '',
   });
+  const [saving, setSaving] = useState<'category' | 'contentType' | null>(null);
   return (
     <section>
       <div className="admin-title-row">
@@ -1249,9 +1501,14 @@ function TaxonomyPanel({
       <div className="admin-two-columns">
         <form
           className="admin-form-card"
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault();
-            void onSave('category', category);
+            setSaving('category');
+            try {
+              await onSave('category', category);
+            } finally {
+              setSaving(null);
+            }
           }}
         >
           <h2>文章分類</h2>
@@ -1309,13 +1566,20 @@ function TaxonomyPanel({
             />
             顯示在前台
           </label>
-          <button>儲存分類</button>
+          <LoadingButton loading={saving === 'category'} disabled={saving !== null}>
+            儲存分類
+          </LoadingButton>
         </form>
         <form
           className="admin-form-card"
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault();
-            void onSave('contentType', contentType);
+            setSaving('contentType');
+            try {
+              await onSave('contentType', contentType);
+            } finally {
+              setSaving(null);
+            }
           }}
         >
           <h2>內容類型</h2>
@@ -1357,7 +1621,9 @@ function TaxonomyPanel({
               required
             />
           </label>
-          <button>儲存內容類型</button>
+          <LoadingButton loading={saving === 'contentType'} disabled={saving !== null}>
+            儲存內容類型
+          </LoadingButton>
         </form>
       </div>
     </section>

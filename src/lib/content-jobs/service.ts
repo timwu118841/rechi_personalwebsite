@@ -393,6 +393,7 @@ export class ContentJobService {
     candidateId: string,
     actorId: string,
     input: PublishRequest,
+    options: { immediate?: boolean } = {},
   ): Promise<DatabaseRecord> {
     const candidate = await this.getCandidateStatus(candidateId);
     if (!candidate) throw new Error('Publication candidate not found.');
@@ -405,12 +406,29 @@ export class ContentJobService {
         code: '409',
       });
     }
+    if (options.immediate) {
+      if (candidate.state !== 'ready_to_activate') {
+        throw Object.assign(
+          new Error(
+            'Current privacy and legal approvals are required before immediate publication.',
+          ),
+          { code: '409' },
+        );
+      }
+      const activationAt = Date.parse(String(candidate.activation_at));
+      if (!Number.isFinite(activationAt) || activationAt > Date.now()) {
+        throw Object.assign(
+          new Error('Scheduled publication cannot be published immediately before activation.'),
+          { code: '409' },
+        );
+      }
+    }
     const data = await this.enqueueJob({
       jobType: 'finalize_candidate',
       candidateId,
       dedupeKey: `finalize_candidate:${candidateId}:${input.idempotencyKey}`,
       payload: { requested_by: actorId, candidate_id: candidateId },
-      runAfter: candidate.activation_at || undefined,
+      runAfter: options.immediate ? undefined : candidate.activation_at || undefined,
       priority: 1,
     });
     return (

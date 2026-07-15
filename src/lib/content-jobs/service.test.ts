@@ -322,4 +322,80 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
       }),
     ]);
   });
+
+  it('queues an already-reviewed due candidate immediately with the existing dedupe key', async () => {
+    const candidate = {
+      id: 'candidate-id',
+      source_revision_id: 'revision-id',
+      working_copy_version: 4,
+      candidate_hash: 'candidate-hash',
+      state: 'ready_to_activate',
+      activation_at: '2020-01-01T00:00:00.000Z',
+    };
+    const from = vi.fn(() => ({
+      select: () => ({
+        eq: () => ({ maybeSingle: async () => ({ data: candidate, error: null }) }),
+      }),
+    }));
+    let queuedInput: Record<string, unknown> | undefined;
+    const rpc = vi.fn(async (_name: string, input: Record<string, unknown>) => {
+      queuedInput = input;
+      return { data: { id: 'job-id' }, error: null };
+    });
+    const service = new ContentJobService(clientWith({ from, rpc }));
+    const request = {
+      expectedRevisionId: 'revision-id',
+      expectedMetadataVersion: 4,
+      expectedCandidateHash: 'candidate-hash',
+      idempotencyKey: 'publish-now-operation',
+    };
+
+    await service.requestPublish('candidate-id', 'admin-id', request, { immediate: true });
+
+    expect(rpc).toHaveBeenCalledWith(
+      'enqueue_content_job',
+      expect.objectContaining({
+        p_job_type: 'finalize_candidate',
+        p_dedupe_key: 'finalize_candidate:candidate-id:publish-now-operation',
+        p_run_after: expect.any(String),
+      }),
+    );
+    const queuedAt = String(queuedInput?.p_run_after);
+    expect(Date.parse(queuedAt)).toBeGreaterThan(Date.parse(candidate.activation_at));
+  });
+
+  it('does not bypass review readiness or a future activation for immediate publication', async () => {
+    const candidate = {
+      id: 'candidate-id',
+      source_revision_id: 'revision-id',
+      working_copy_version: 4,
+      candidate_hash: 'candidate-hash',
+      state: 'prepared',
+      activation_at: '2999-01-01T00:00:00.000Z',
+    };
+    const from = vi.fn(() => ({
+      select: () => ({
+        eq: () => ({ maybeSingle: async () => ({ data: candidate, error: null }) }),
+      }),
+    }));
+    const rpc = vi.fn();
+    const service = new ContentJobService(clientWith({ from, rpc }));
+    const request = {
+      expectedRevisionId: 'revision-id',
+      expectedMetadataVersion: 4,
+      expectedCandidateHash: 'candidate-hash',
+      idempotencyKey: 'publish-now-operation',
+    };
+
+    await expect(
+      service.requestPublish('candidate-id', 'admin-id', request, { immediate: true }),
+    ).rejects.toMatchObject({ code: '409' });
+    expect(rpc).not.toHaveBeenCalled();
+
+    candidate.state = 'ready_to_activate';
+    await expect(
+      service.requestPublish('candidate-id', 'admin-id', request, { immediate: true }),
+    ).rejects.toMatchObject({ code: '409' });
+    expect(rpc).not.toHaveBeenCalled();
+  });
 });

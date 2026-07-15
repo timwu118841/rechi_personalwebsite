@@ -12,10 +12,12 @@ export const POST: APIRoute = async ({ request, params }) => {
     const admin = await requireAdmin(request);
     const candidateId = params.candidateId;
     if (!candidateId) throw new RequestValidationError('candidateId is required.');
+    const immediate = new URL(request.url).searchParams.get('immediate') === 'true';
     const publication = await getContentJobService().requestPublish(
       candidateId,
       admin.id,
       parsePublishRequest(await readJson(request)),
+      { immediate },
     );
     return json({ accepted: true, publication }, { status: 202 });
   } catch (error) {
