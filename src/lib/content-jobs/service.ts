@@ -209,7 +209,11 @@ export class ContentJobService {
     });
   }
 
-  async listSourceStatus(limit: number, articleId?: string, view: 'all' | 'active' | 'history' = 'all'): Promise<DatabaseRecord[]> {
+  async listSourceStatus(
+    limit: number,
+    articleId?: string,
+    view: 'all' | 'active' | 'history' = 'all',
+  ): Promise<DatabaseRecord[]> {
     let query = this.client
       .from('article_sources')
       .select('*')
@@ -238,13 +242,17 @@ export class ContentJobService {
     const { data: published, error: publishedError } = await this.client
       .from('publication_candidates')
       .select('source_id,source_revision_id,source_hash,activated_at')
-      .in('source_id', sources.map((source) => String(source.id)))
+      .in(
+        'source_id',
+        sources.map((source) => String(source.id)),
+      )
       .eq('state', 'published')
       .order('activated_at', { ascending: false });
     throwIfError(publishedError);
     const latest = new Map<string, DatabaseRecord>();
     for (const candidate of rows(published)) {
-      if (!latest.has(String(candidate.source_id))) latest.set(String(candidate.source_id), candidate);
+      if (!latest.has(String(candidate.source_id)))
+        latest.set(String(candidate.source_id), candidate);
     }
     const matches = new Set<string>();
     for (const status of statuses) {
@@ -254,7 +262,8 @@ export class ContentJobService {
         publication &&
         copy &&
         String(copy.source_revision_id) === String(publication.source_revision_id)
-      ) matches.add(String(status.id));
+      )
+        matches.add(String(status.id));
     }
     return statuses.filter((source) =>
       view === 'active' ? !matches.has(String(source.id)) : matches.has(String(source.id)),
@@ -393,14 +402,19 @@ export class ContentJobService {
     return candidate;
   }
 
-  async listCandidateStatus(limit: number, articleId?: string, view: 'all' | 'active' | 'history' = 'all'): Promise<DatabaseRecord[]> {
+  async listCandidateStatus(
+    limit: number,
+    articleId?: string,
+    view: 'all' | 'active' | 'history' = 'all',
+  ): Promise<DatabaseRecord[]> {
     let query = this.client
       .from('publication_candidates')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(limit);
     if (articleId) query = query.eq('article_id', articleId);
-    if (view === 'active') query = query.in('state', ['prepared', 'publishing', 'media_failed', 'ready_to_activate']);
+    if (view === 'active')
+      query = query.in('state', ['prepared', 'publishing', 'media_failed', 'ready_to_activate']);
     if (view === 'history') query = query.in('state', ['published', 'superseded', 'cancelled']);
     const { data, error } = await query;
     throwIfError(error);

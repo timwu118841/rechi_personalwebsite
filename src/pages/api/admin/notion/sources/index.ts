@@ -14,7 +14,9 @@ export const GET: APIRoute = async ({ request, url }) => {
     const articleId = url.searchParams.get('articleId') || undefined;
     const view = url.searchParams.get('view');
     const normalizedView = view === 'active' || view === 'history' ? view : 'all';
-    return json({ sources: await getContentJobService().listSourceStatus(limit, articleId, normalizedView) });
+    return json({
+      sources: await getContentJobService().listSourceStatus(limit, articleId, normalizedView),
+    });
   } catch (error) {
     return contentJobErrorResponse(error);
   }
