@@ -65,6 +65,7 @@ interface PublicationCandidateStatus {
   state: string;
   activation_at?: string;
   title: string;
+  failure_reason?: string | null;
 }
 
 interface WorkerResult {
@@ -76,7 +77,15 @@ interface WorkerResult {
 
 interface PublicationJob {
   id?: string;
+  job_id?: string;
+  candidate_id?: string | null;
   state?: string;
+  error?: string | null;
+}
+
+interface PublicationDiagnostic {
+  kind: 'success' | 'media' | 'stale' | 'failure' | 'timeout';
+  message: string;
 }
 
 type ToastKind = 'success' | 'error';
@@ -171,6 +180,27 @@ function localDateTime(value?: string) {
   if (Number.isNaN(date.getTime())) return localDateTime();
   const offset = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function diagnosticState(value: unknown) {
+  return typeof value === 'string' && /^[a-z0-9_-]{1,64}$/i.test(value) ? value : 'unknown';
+}
+
+function sanitizedDiagnostic(value: unknown) {
+  if (typeof value !== 'string') return '';
+  return value
+    .replace(/\bBearer\s+[^\s]+/gi, 'Bearer [已隱藏]')
+    .replace(/\b(token|secret|password|api[_-]?key)\s*[=:]\s*[^\s,;]+/gi, '$1=[已隱藏]')
+    .replace(/https?:\/\/[^\s]+/gi, (url) => {
+      try {
+        const parsed = new URL(url);
+        return `${parsed.origin}${parsed.pathname}`;
+      } catch {
+        return '[連結已隱藏]';
+      }
+    })
+    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[憑證已隱藏]')
+    .slice(0, 240);
 }
 
 /** Keep legacy/partially migrated rows from crashing the editor render. */
@@ -617,15 +647,29 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
 
   useEffect(() => {
     if (!selected?.activation_at || canPublishImmediately) return;
-    const delay = Date.parse(selected.activation_at) - Date.now();
-    if (!Number.isFinite(delay) || delay <= 0) return;
-    const timer = window.setTimeout(
-      () => {
+    let cancelled = false;
+    let timer: number | undefined;
+    const scheduleRefresh = () => {
+      const delay = Date.parse(selected.activation_at as string) - Date.now();
+      if (!Number.isFinite(delay)) return;
+      if (delay <= 0) {
         void refresh();
-      },
-      Math.min(delay + 50, 60_000),
-    );
-    return () => window.clearTimeout(timer);
+        return;
+      }
+      timer = window.setTimeout(
+        () => {
+          if (cancelled) return;
+          if (Date.parse(selected.activation_at as string) <= Date.now()) void refresh();
+          else scheduleRefresh();
+        },
+        Math.min(delay + 50, 60_000),
+      );
+    };
+    scheduleRefresh();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
   }, [canPublishImmediately, selected?.activation_at]);
 
   const operationId = () =>
@@ -661,6 +705,20 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
       }
     } finally {
       setPollingCandidateId(null);
+    }
+    return null;
+  };
+
+  const pollPublicationJob = async (jobId: string, candidateId: string) => {
+    for (let attempt = 0; attempt < 15; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      const { job } = await api<{ job: PublicationJob }>(`/api/admin/notion/jobs/${jobId}`);
+      if (job.candidate_id && job.candidate_id !== candidateId) {
+        throw new Error(
+          `發布工作候選版本不一致（候選 ${candidateId}，工作 ${jobId} 指向 ${job.candidate_id}）。`,
+        );
+      }
+      if (['succeeded', 'failed', 'cancelled'].includes(String(job.state))) return job;
     }
     return null;
   };
@@ -729,24 +787,33 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
       const refreshedCandidate = refreshedCandidates.find(
         (candidate) => candidate.id === selected.id,
       );
-      const polledCandidate =
-        immediate && refreshedCandidate ? await pollCandidate(refreshedCandidate.id) : null;
+      const candidateId = selected.id;
+      const polledCandidate = immediate ? await pollCandidate(candidateId) : null;
       const jobId = publicationResponse.publication?.id;
-      if (immediate && jobId) {
-        for (let attempt = 0; attempt < 15; attempt += 1) {
-          await new Promise((resolve) => setTimeout(resolve, 400));
-          const { job } = await api<{ job: PublicationJob }>(`/api/admin/notion/jobs/${jobId}`);
-          if (['succeeded', 'failed', 'cancelled'].includes(String(job.state))) break;
-        }
-      }
+      const polledJob = immediate
+        ? jobId
+          ? await pollPublicationJob(jobId, candidateId)
+          : null
+        : null;
       const finalCandidate = polledCandidate || refreshedCandidate;
+      const diagnostic = `候選 ${candidateId}${jobId ? `、工作 ${jobId}` : ''}`;
       if (workerResult && finalCandidate?.state !== 'published') {
         showToast(
           'error',
-          `立即發布尚未完成（目前狀態：${finalCandidate?.state || '未知'}）：${workerSummary(workerResult)}。`,
+          `立即發布尚未完成（${diagnostic}，候選狀態：${finalCandidate?.state || '未知'}${polledJob?.state ? `，工作狀態：${polledJob.state}` : ''}${finalCandidate?.failure_reason ? `，原因：${finalCandidate.failure_reason}` : ''}）：${workerSummary(workerResult)}。`,
         );
       } else if (workerResult?.failed) {
-        showToast('error', `發布工作執行失敗：${workerSummary(workerResult)}。`);
+        showToast(
+          'error',
+          `發布工作執行失敗（${diagnostic}${polledJob?.last_error || polledJob?.error ? `，原因：${polledJob.last_error || polledJob.error}` : ''}）：${workerSummary(workerResult)}。`,
+        );
+      } else if (polledJob?.state === 'failed' || polledJob?.state === 'cancelled') {
+        showToast(
+          'error',
+          `發布工作未完成（${diagnostic}，工作狀態：${polledJob.state}${polledJob.last_error || polledJob.error ? `，原因：${polledJob.last_error || polledJob.error}` : ''}）。`,
+        );
+      } else if (immediate && (!polledCandidate || !polledJob)) {
+        showToast('error', `立即發布逾時（${diagnostic}）：尚未取得候選與工作終態。`);
       } else {
         showToast(
           'success',
@@ -936,8 +1003,10 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
                 aria-pressed={selected?.id === candidate.id}
               >
                 <span>
-                  <strong>{candidate.title}</strong>
-                  <small>{candidate.activation_at || '立即發布'}</small>
+                  <strong className="admin-breakable-text">{candidate.title}</strong>
+                  <small className="admin-breakable-text">
+                    {candidate.activation_at || '立即發布'}
+                  </small>
                 </span>
                 <span className={`status status-${candidate.state}`}>{candidate.state}</span>
               </button>
@@ -955,7 +1024,7 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
       {selected && (
         <div className="admin-form-card">
           <h2>發布候選：{selected.title}</h2>
-          <p>候選 hash：{selected.candidate_hash}</p>
+          <p className="admin-breakable-id">候選 hash：{selected.candidate_hash}</p>
           <div className="button-row">
             <LoadingButton
               disabled={

@@ -64,7 +64,7 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
           result: { claimed: 1, completed: 1, failed: 0, exhaustedBudget: false },
         };
       } else if (url.pathname === '/api/admin/notion/jobs/job-1') {
-        body = { job: { id: 'job-1', state: 'succeeded' } };
+        body = { job: { id: 'job-1', candidate_id: 'candidate-1', state: 'succeeded' } };
       } else {
         body = { ok: true };
       }

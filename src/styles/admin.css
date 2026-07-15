@@ -220,11 +220,18 @@ button.secondary,
   text-align: left;
 }
 .admin-list-item span:first-child {
+  min-width: 0;
   display: grid;
   gap: 0.2rem;
 }
 .admin-list-item small {
   color: #728075;
+}
+.admin-breakable-text,
+.admin-breakable-id {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .status {
   padding: 0.25rem 0.55rem;
