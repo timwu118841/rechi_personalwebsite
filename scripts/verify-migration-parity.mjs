@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const root = resolve(new URL('..', import.meta.url).pathname);
@@ -50,12 +50,56 @@ for (const marker of requiredMarkers)
 let psql = null;
 try {
   psql = execFileSync('sh', ['-c', 'command -v psql'], { encoding: 'utf8' }).trim();
-} catch {}
+} catch {
+  // psql is an optional local verification prerequisite.
+}
 if (psql) {
   const databaseUrl = process.env.DATABASE_URL || process.env.SUPABASE_DB_URL;
-  if (databaseUrl) {
+  if (databaseUrl && process.env.RUN_MIGRATION_PARITY_DB === '1') {
+    const suffix = `${process.pid}_${Date.now()}`;
+    const names = [`migration_parity_ordered_${suffix}`, `migration_parity_bundle_${suffix}`];
+    const urls = names.map((name) => {
+      const url = new URL(databaseUrl);
+      url.pathname = `/${name}`;
+      return url.toString();
+    });
+    try {
+      for (const name of names)
+        execFileSync(
+          psql,
+          [databaseUrl, '-v', 'ON_ERROR_STOP=1', '-c', `create database ${name}`],
+          { stdio: 'inherit' },
+        );
+      const orderedSql = files
+        .map((file) => readFileSync(resolve(migrationsDir, file), 'utf8'))
+        .join('\n');
+      execFileSync(psql, [urls[0], '-v', 'ON_ERROR_STOP=1'], {
+        input: orderedSql,
+        stdio: ['pipe', 'inherit', 'inherit'],
+      });
+      execFileSync(psql, [urls[1], '-v', 'ON_ERROR_STOP=1'], {
+        input: readFileSync(bundlePath),
+        stdio: ['pipe', 'inherit', 'inherit'],
+      });
+      console.log(
+        'PASS: ordered and bundled migrations applied to disposable PostgreSQL databases.',
+      );
+    } finally {
+      for (const name of names) {
+        try {
+          execFileSync(
+            psql,
+            [databaseUrl, '-v', 'ON_ERROR_STOP=1', '-c', `drop database if exists ${name}`],
+            { stdio: 'inherit' },
+          );
+        } catch {
+          // Best-effort cleanup must not mask the migration failure.
+        }
+      }
+    }
+  } else if (databaseUrl) {
     console.log(
-      `PostgreSQL client found at ${psql}; fresh-database execution requires an explicit disposable DATABASE_URL and is not run against an existing target.`,
+      'PostgreSQL client found; set RUN_MIGRATION_PARITY_DB=1 with DATABASE_URL/SUPABASE_DB_URL for disposable fresh-database smoke verification.',
     );
   } else {
     console.log(
