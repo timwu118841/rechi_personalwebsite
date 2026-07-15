@@ -1,6 +1,6 @@
 begin;
 
-select plan(29);
+select plan(32);
 
 select has_table('public', 'article_sources', 'Notion source table exists');
 select has_table('public', 'article_source_revisions', 'Immutable revision table exists');
@@ -67,6 +67,41 @@ select ok(
       and grantee in ('anon', 'authenticated')
   ),
   'Editorial pipeline tables are not granted to browser roles'
+);
+
+select is(
+  (select (public.save_article_with_policy(
+    null, 'manual-review-defaults', 'Manual review defaults',
+    'A sufficiently long description for the new manual review article.',
+    'Body from manual review', null, 'Body from manual review', 'draft', now(),
+    'legal-articles', 'legal-practice', '{}'::text[], false, null,
+    null, null, null, 'manual_review'
+  )).privacy_reviewed),
+  false,
+  'A new manual-review article defaults privacy review to false'
+);
+
+update public.articles
+set privacy_reviewed = true, legal_reviewed = false
+where slug = 'manual-review-defaults';
+
+select is(
+  (select (public.save_article_with_policy(
+    (select id from public.articles where slug = 'manual-review-defaults'),
+    'manual-review-defaults', 'Manual review defaults',
+    'A sufficiently long description for the new manual review article.',
+    'Body from manual review', null, 'Body from manual review', 'draft', now(),
+    'legal-articles', 'legal-practice', '{}'::text[], false, null,
+    null, null, null, 'manual_review'
+  )).legal_reviewed),
+  false,
+  'Existing manual-review approvals are preserved rather than fabricated'
+);
+
+select is(
+  (select privacy_reviewed from public.articles where slug = 'manual-review-defaults'),
+  true,
+  'Existing manual-review privacy approval remains true after save'
 );
 
 insert into public.article_sources (id, external_id, state)
