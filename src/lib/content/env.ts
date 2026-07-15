@@ -5,6 +5,12 @@ export interface SupabaseEnvironment {
   passwordLoginEnabled: boolean;
 }
 
+export interface PublicSupabaseEnvironment {
+  url: string;
+  publishableKey: string;
+  passwordLoginEnabled: boolean;
+}
+
 export function normalizeAdminEmail(email: string): string {
   return email.normalize('NFKC').trim().toLowerCase();
 }
@@ -20,6 +26,42 @@ export function getPublicSupabaseConfig() {
   return url && publishableKey
     ? { url, publishableKey, passwordLoginEnabled: isPasswordLoginEnabled() }
     : null;
+}
+
+export function getPublicSupabaseEnvironment(): PublicSupabaseEnvironment | null {
+  return getPublicSupabaseConfig();
+}
+
+export function isNotionEditorialEnabled(): boolean {
+  return read('NOTION_EDITORIAL_ENABLED') === 'true';
+}
+
+export type NotionPublicationMode = 'legacy' | 'shadow' | 'notion';
+
+export function getNotionPublicationMode(): NotionPublicationMode {
+  const value = read('NOTION_PUBLICATION_MODE');
+  return value === 'shadow' || value === 'notion' ? value : 'legacy';
+}
+
+export function getContentPublicReadMode(): 'service' | 'publishable' {
+  return read('CONTENT_PUBLIC_READ_MODE') === 'publishable' ? 'publishable' : 'service';
+}
+
+export function getNotionConfig() {
+  if (!isNotionEditorialEnabled()) return null;
+  const token = read('NOTION_TOKEN');
+  const rootPageId = read('NOTION_ROOT_PAGE_ID');
+  return token && rootPageId
+    ? {
+        token,
+        rootPageId,
+        version: '2026-03-11' as const,
+      }
+    : null;
+}
+
+export function getCronSecret(): string {
+  return read('CRON_SECRET');
 }
 
 export function isPasswordLoginEnabled(): boolean {

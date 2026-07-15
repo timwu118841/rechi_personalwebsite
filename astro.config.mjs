@@ -9,7 +9,7 @@ const site = process.env.SITE_URL || 'http://localhost:4321';
 export default defineConfig({
   site,
   output: 'server',
-  adapter: vercel(),
+  adapter: vercel({ maxDuration: 60 }),
   cache: { provider: cacheVercel() },
   integrations: [react(), markdoc()],
   markdown: {

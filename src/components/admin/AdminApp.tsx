@@ -34,7 +34,28 @@ interface AdminArticle {
   legalReviewed: boolean;
 }
 
-type Tab = 'articles' | 'site' | 'taxonomies';
+type Tab = 'notion' | 'articles' | 'site' | 'taxonomies';
+
+type DashboardApi = <T>(path: string, init?: RequestInit) => Promise<T>;
+
+interface NotionSourceStatus {
+  id: string;
+  external_id: string;
+  state: string;
+  article_id?: string | null;
+  last_synced_at?: string | null;
+  working_copy_id?: string | null;
+}
+
+interface PublicationCandidateStatus {
+  id: string;
+  source_revision_id: string;
+  working_copy_version: number;
+  candidate_hash: string;
+  state: string;
+  activation_at?: string;
+  title: string;
+}
 
 function localDateTime(value?: string) {
   const date = value ? new Date(value) : new Date();
@@ -233,7 +254,7 @@ function Login({ client, passwordLoginEnabled }: { client: any; passwordLoginEna
 }
 
 function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => void }) {
-  const [tab, setTab] = useState<Tab>('articles');
+  const [tab, setTab] = useState<Tab>('notion');
   const [articles, setArticles] = useState<AdminArticle[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [contentTypes, setContentTypes] = useState<ContentType[]>([]);
@@ -310,8 +331,11 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
       <div className="admin-workspace">
         <nav className="admin-sidebar" aria-label="後台導覽">
           <p>內容</p>
+          <button className={tab === 'notion' ? 'active' : ''} onClick={() => setTab('notion')}>
+            Notion 發布
+          </button>
           <button className={tab === 'articles' ? 'active' : ''} onClick={() => setTab('articles')}>
-            文章管理
+            舊文章管理
           </button>
           <p>網站設定</p>
           <button className={tab === 'site' ? 'active' : ''} onClick={() => setTab('site')}>
@@ -330,6 +354,7 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
               {message}
             </p>
           )}
+          {tab === 'notion' && <NotionEditorialPanel api={api} articles={articles} />}
           {tab === 'articles' && (
             <ArticlesPanel
               articles={articles}
@@ -401,6 +426,318 @@ function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => 
         </main>
       </div>
     </div>
+  );
+}
+
+function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: AdminArticle[] }) {
+  const [pageId, setPageId] = useState('');
+  const [sources, setSources] = useState<NotionSourceStatus[]>([]);
+  const [candidates, setCandidates] = useState<PublicationCandidateStatus[]>([]);
+  const [selected, setSelected] = useState<PublicationCandidateStatus | null>(null);
+  const [preview, setPreview] = useState('');
+  const [articleForSource, setArticleForSource] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const refresh = async () => {
+    const [sourceData, candidateData] = await Promise.all([
+      api<{ sources: NotionSourceStatus[] }>('/api/admin/notion/sources'),
+      api<{ candidates: PublicationCandidateStatus[] }>('/api/admin/notion/candidates'),
+    ]);
+    setSources(sourceData.sources);
+    setCandidates(candidateData.candidates);
+    setSelected((current) =>
+      current ? candidateData.candidates.find((item) => item.id === current.id) || null : null,
+    );
+  };
+
+  useEffect(() => {
+    void refresh().catch((error) => setMessage((error as Error).message));
+  }, []);
+
+  const operationId = () =>
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : String(Date.now());
+
+  const sync = async () => {
+    if (!pageId.trim()) {
+      setMessage('請貼上 Notion page ID。');
+      return;
+    }
+    setBusy(true);
+    setMessage('已送出同步工作，文章正文仍由 Notion 管理。');
+    try {
+      await api('/api/admin/notion/sync', {
+        method: 'POST',
+        body: JSON.stringify({ pageId: pageId.trim(), idempotencyKey: operationId() }),
+      });
+      await refresh();
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const syncRoot = async () => {
+    setBusy(true);
+    setMessage('已送出 Notion root 同步工作。');
+    try {
+      await api('/api/admin/notion/sync', {
+        method: 'POST',
+        body: JSON.stringify({ root: true, idempotencyKey: operationId() }),
+      });
+      await refresh();
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const attest = async (reviewType: 'privacy' | 'legal', action: 'attest' | 'revoke') => {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      await api(`/api/admin/notion/candidates/${selected.id}/attest`, {
+        method: 'POST',
+        body: JSON.stringify({
+          candidateHash: selected.candidate_hash,
+          reviewType,
+          action,
+          idempotencyKey: operationId(),
+        }),
+      });
+      setMessage(
+        `${reviewType === 'privacy' ? '隱私' : '法律'}審查已${action === 'attest' ? '核准' : '撤銷'}。`,
+      );
+      await refresh();
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const publish = async () => {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      await api(`/api/admin/notion/candidates/${selected.id}/publish`, {
+        method: 'POST',
+        body: JSON.stringify({
+          expectedRevisionId: selected.source_revision_id,
+          expectedMetadataVersion: selected.working_copy_version,
+          expectedCandidateHash: selected.candidate_hash,
+          idempotencyKey: operationId(),
+        }),
+      });
+      setMessage('發布工作已排入佇列；worker 會在 activation_at 前後完成 freshness gate。');
+      await refresh();
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const loadPreview = async () => {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      const result = await api<{
+        preview: { title: string; description: string; bodyMarkdown: string };
+      }>(`/api/admin/notion/candidates/${selected.id}/preview`);
+      setPreview(
+        `${result.preview.title}\n\n${result.preview.description}\n\n${result.preview.bodyMarkdown}`,
+      );
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const bind = async (sourceId: string) => {
+    const articleId = articleForSource[sourceId];
+    if (!articleId) {
+      setMessage('請先選擇要綁定的既有文章。');
+      return;
+    }
+    setBusy(true);
+    try {
+      await api(`/api/admin/notion/sources/${sourceId}/bind`, {
+        method: 'POST',
+        body: JSON.stringify({ articleId }),
+      });
+      setMessage('來源已綁定；目前公開快照尚未變更。');
+      await refresh();
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const prepare = async (sourceId: string) => {
+    setBusy(true);
+    try {
+      await api(`/api/admin/notion/sources/${sourceId}/candidate`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      setMessage('已建立不可變發布候選，請完成隱私與法律審查。');
+      await refresh();
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section>
+      <div className="admin-title-row">
+        <div>
+          <p className="admin-kicker">Editorial source</p>
+          <h1>Notion 文章發布</h1>
+        </div>
+        <button className="secondary" onClick={() => void refresh()} disabled={busy}>
+          重新整理
+        </button>
+      </div>
+      <p className="admin-message">
+        正文只在 Notion 編輯；這裡只負責同步、審查、預覽候選版本與發布。同步不會改變目前公開文章。
+      </p>
+      <div className="admin-form-card">
+        <h2>同步 Notion 頁面</h2>
+        <p>可同步設定的 root page 直屬頁面，或單獨貼上 page ID。</p>
+        <div className="button-row">
+          <button className="secondary" onClick={() => void syncRoot()} disabled={busy}>
+            同步 Root 直屬頁面
+          </button>
+          <input
+            value={pageId}
+            onChange={(event) => setPageId(event.target.value)}
+            placeholder="Notion page ID"
+            aria-label="Notion page ID"
+          />
+          <button onClick={() => void sync()} disabled={busy}>
+            排入同步
+          </button>
+        </div>
+        {message && <p role="status">{message}</p>}
+      </div>
+      <div className="admin-two-columns">
+        <div className="admin-form-card">
+          <h2>來源狀態</h2>
+          <div className="admin-list">
+            {sources.map((source) => (
+              <div className="admin-list-item" key={source.id}>
+                <span>
+                  <strong>{source.external_id}</strong>
+                  <small>{source.last_synced_at || '尚未同步'}</small>
+                </span>
+                <span>
+                  <span className={`status status-${source.state}`}>{source.state}</span>
+                  {!source.article_id && (
+                    <span className="button-row">
+                      <select
+                        value={articleForSource[source.id] || ''}
+                        onChange={(event) =>
+                          setArticleForSource((current) => ({
+                            ...current,
+                            [source.id]: event.target.value,
+                          }))
+                        }
+                        aria-label="選擇要綁定的文章"
+                      >
+                        <option value="">選擇既有文章</option>
+                        {articles.map((article) => (
+                          <option value={article.id} key={article.id}>
+                            {article.title}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        className="secondary"
+                        disabled={busy}
+                        onClick={() => void bind(source.id)}
+                      >
+                        綁定
+                      </button>
+                    </span>
+                  )}
+                  {source.working_copy_id && (
+                    <button
+                      className="secondary"
+                      disabled={busy}
+                      onClick={() => void prepare(source.id)}
+                    >
+                      建立發布候選
+                    </button>
+                  )}
+                </span>
+              </div>
+            ))}
+            {!sources.length && <p className="admin-empty">尚未綁定 Notion 來源。</p>}
+          </div>
+        </div>
+        <div className="admin-form-card">
+          <h2>發布候選</h2>
+          <div className="admin-list">
+            {candidates.map((candidate) => (
+              <button
+                className="admin-list-item"
+                key={candidate.id}
+                onClick={() => setSelected(candidate)}
+                aria-pressed={selected?.id === candidate.id}
+              >
+                <span>
+                  <strong>{candidate.title}</strong>
+                  <small>{candidate.activation_at || '立即發布'}</small>
+                </span>
+                <span className={`status status-${candidate.state}`}>{candidate.state}</span>
+              </button>
+            ))}
+            {!candidates.length && <p className="admin-empty">尚未建立發布候選。</p>}
+          </div>
+        </div>
+      </div>
+      {selected && (
+        <div className="admin-form-card">
+          <h2>候選審查：{selected.title}</h2>
+          <p>候選 hash：{selected.candidate_hash}</p>
+          <div className="button-row">
+            <button
+              className="secondary"
+              disabled={busy}
+              onClick={() => void attest('privacy', 'attest')}
+            >
+              核准隱私審查
+            </button>
+            <button
+              className="secondary"
+              disabled={busy}
+              onClick={() => void attest('legal', 'attest')}
+            >
+              核准法律審查
+            </button>
+            <button
+              disabled={busy || selected.state === 'published'}
+              onClick={() => void publish()}
+            >
+              排入發布
+            </button>
+            <button className="secondary" disabled={busy} onClick={() => void loadPreview()}>
+              載入預覽
+            </button>
+          </div>
+          {preview && <pre className="admin-preview">{preview}</pre>}
+        </div>
+      )}
+    </section>
   );
 }
 

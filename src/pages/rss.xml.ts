@@ -1,12 +1,12 @@
 import rss from '@astrojs/rss';
 import type { APIRoute } from 'astro';
-import { getContentRepository } from '@/lib/content/repository';
+import { getPublicContentRepository } from '@/lib/content/repository';
 import { articlePath } from '@/lib/content/slug';
 
 export const prerender = false;
 
 export const GET: APIRoute = async (context) => {
-  const repository = getContentRepository();
+  const repository = getPublicContentRepository();
   const [{ items: articles }, settings] = await Promise.all([
     repository.listPublishedArticles({ pageSize: 1000 }),
     repository.getSiteSettings(),

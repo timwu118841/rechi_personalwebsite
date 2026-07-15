@@ -7,4 +7,5 @@ test-results
 package-lock.json
 .omx
 .codex
+supabase/.temp
 openspec

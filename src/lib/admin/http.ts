@@ -33,6 +33,9 @@ export function errorResponse(error: unknown) {
     detail?: string;
     details?: string;
   };
+  if (value?.code === '409') {
+    return json({ message: value.message || '資料已變更，請重新載入後再試。' }, { status: 409 });
+  }
   if (value?.code === '23505') {
     const message = '網址代稱已被使用，請更換後再儲存。';
     if (value.field) {

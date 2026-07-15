@@ -23,8 +23,10 @@ for (const path of [
   if (!(await exists(path))) failures.push(`缺少 Vercel server output：${path}`);
 }
 
+let vercelConfig;
 if (await exists(join(output, 'config.json'))) {
-  const config = JSON.parse(await readFile(join(output, 'config.json'), 'utf8'));
+  vercelConfig = JSON.parse(await readFile(join(output, 'config.json'), 'utf8'));
+  const config = vercelConfig;
   const sources = (config.routes || [])
     .map((route) => route.src)
     .filter(Boolean)
@@ -35,10 +37,20 @@ if (await exists(join(output, 'config.json'))) {
     '/articles',
     '/rss\\.xml',
     '/sitemap\\.xml',
+    '/api/internal/content-worker',
   ]) {
     if (!sources.includes(route)) failures.push(`Vercel server output 缺少動態路由：${route}`);
   }
   if (sources.includes('keystatic')) failures.push('Vercel 路由仍包含已移除的 Keystatic');
+}
+const deploymentConfig = JSON.parse(await readFile(resolve('vercel.json'), 'utf8'));
+const cron = deploymentConfig.crons || vercelConfig?.crons || [];
+if (
+  !cron.some(
+    (item) => item.path === '/api/internal/content-worker' && item.schedule === '* * * * *',
+  )
+) {
+  failures.push('Vercel deployment config 缺少 content worker 的每分鐘 Cron mapping');
 }
 
 const functionFiles = await readdir(join(output, '_functions/chunks')).catch(() => []);
@@ -52,6 +64,19 @@ if (!cacheProvider) {
   if (!source.includes('Vercel-Cache-Tag') || !source.includes('Vercel-CDN-Cache-Control')) {
     failures.push('Vercel cache provider 未輸出 cache tag／control 支援');
   }
+}
+
+const workerFunction = join(output, 'functions/api/internal/content-worker.func/.vc-config.json');
+if (await exists(workerFunction)) {
+  const workerConfig = JSON.parse(await readFile(workerFunction, 'utf8'));
+  if (workerConfig.maxDuration !== 60) {
+    failures.push('content worker 未設定 maxDuration=60');
+  }
+} else if (await exists(join(output, 'functions/_render.func/.vc-config.json'))) {
+  const renderConfig = JSON.parse(
+    await readFile(join(output, 'functions/_render.func/.vc-config.json'), 'utf8'),
+  );
+  if (renderConfig.maxDuration !== 60) failures.push('Vercel server output 未設定 maxDuration=60');
 }
 
 const publicAssets = await readdir(join(client, '_astro')).catch(() => []);

@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import { getContentRepository } from '@/lib/content/repository';
-const tags = await getContentRepository().listTags();
+import { getPublicContentRepository } from '@/lib/content/repository';
+const tags = await getPublicContentRepository().listTags();
 if (Astro.cache.enabled)
   Astro.cache.set({ maxAge: 86400, swr: 604800, tags: ['content', 'site-settings', 'taxonomies'] });
 ---

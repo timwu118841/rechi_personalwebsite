@@ -2,12 +2,12 @@
 import ArticleCard from '@/components/ArticleCard.astro';
 import Pagination from '@/components/Pagination.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import { getContentRepository } from '@/lib/content/repository';
+import { getPublicContentRepository } from '@/lib/content/repository';
 import { DEFAULT_PAGE_SIZE, pageCanonical, parsePage } from '@/lib/pagination';
 
 const page = parsePage(Astro.url.searchParams.get('page'));
 if (page === null) return Astro.rewrite('/404');
-const repository = getContentRepository();
+const repository = getPublicContentRepository();
 const [result, settings] = await Promise.all([
   repository.listPublishedArticles({ page, pageSize: DEFAULT_PAGE_SIZE }),
   repository.getSiteSettings(),
