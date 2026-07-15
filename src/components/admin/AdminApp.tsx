@@ -182,11 +182,11 @@ function localDateTime(value?: string) {
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
-function diagnosticState(value: unknown) {
+function diagnosticState(value: unknown): string {
   return typeof value === 'string' && /^[a-z0-9_-]{1,64}$/i.test(value) ? value : 'unknown';
 }
 
-function sanitizedDiagnostic(value: unknown) {
+function sanitizedDiagnostic(value: unknown): string {
   if (typeof value !== 'string') return '';
   return value
     .replace(/\bBearer\s+[^\s]+/gi, 'Bearer [已隱藏]')
@@ -609,6 +609,9 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [candidateFilter, setCandidateFilter] = useState<CandidateFilter>('active');
   const [pollingCandidateId, setPollingCandidateId] = useState<string | null>(null);
+  const [publicationDiagnostic, setPublicationDiagnostic] = useState<PublicationDiagnostic | null>(
+    null,
+  );
   const { toast, showToast, dismissToast } = useToast();
   const busy = busyAction !== null;
   const selectedActivationTime = selected?.activation_at
@@ -689,38 +692,64 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
     return result.result;
   };
 
-  const pollCandidate = async (candidateId: string) => {
+  const pollImmediatePublication = async (candidateId: string, jobId: string) => {
     setPollingCandidateId(candidateId);
     try {
       for (let attempt = 0; attempt < 15; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 800));
-        const result = await api<{ candidate: PublicationCandidateStatus }>(
-          `/api/admin/notion/candidates/${candidateId}`,
-        );
-        const next = result.candidate;
-        setCandidates((current) => current.map((item) => (item.id === candidateId ? next : item)));
-        setSelected((current) => (current?.id === candidateId ? next : current));
-        if (['published', 'media_failed', 'superseded', 'cancelled'].includes(next.state))
-          return next;
+        if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 800));
+        const [{ candidate }, { job }] = await Promise.all([
+          api<{ candidate: PublicationCandidateStatus }>(
+            `/api/admin/notion/candidates/${candidateId}`,
+          ),
+          api<{ job: PublicationJob }>(`/api/admin/notion/jobs/${jobId}`),
+        ]);
+        if (candidate.id !== candidateId) {
+          return {
+            kind: 'failure' as const,
+            message: `發布狀態無法確認：候選回應不符。候選 ID：${candidateId}；工作 ID：${jobId}。`,
+          };
+        }
+        if (job.id !== jobId || job.candidate_id !== candidateId) {
+          return {
+            kind: 'failure' as const,
+            message: `發布狀態無法確認：工作與候選不符。候選 ID：${candidateId}；工作 ID：${jobId}。`,
+          };
+        }
+        setSelected(candidate);
+        if (candidate.state === 'published' && job.state === 'succeeded') {
+          return {
+            kind: 'success' as const,
+            message: `立即發布完成。候選 ID：${candidateId}；工作 ID：${jobId}。`,
+          };
+        }
+        if (candidate.state === 'media_failed') {
+          const reason = sanitizedDiagnostic(candidate.failure_reason);
+          return {
+            kind: 'media' as const,
+            message: `媒體處理失敗${reason ? `（${reason}）` : ''}。候選 ID：${candidateId}；工作 ID：${jobId}。`,
+          };
+        }
+        if (['superseded', 'cancelled'].includes(candidate.state)) {
+          return {
+            kind: 'stale' as const,
+            message: `候選已失效（${diagnosticState(candidate.state)}）。候選 ID：${candidateId}；工作 ID：${jobId}。`,
+          };
+        }
+        if (['failed', 'cancelled'].includes(String(job.state))) {
+          const error = sanitizedDiagnostic(job.error);
+          return {
+            kind: 'failure' as const,
+            message: `發布工作失敗（${diagnosticState(job.state)}${error ? `：${error}` : ''}）。候選 ID：${candidateId}；工作 ID：${jobId}。`,
+          };
+        }
       }
     } finally {
       setPollingCandidateId(null);
     }
-    return null;
-  };
-
-  const pollPublicationJob = async (jobId: string, candidateId: string) => {
-    for (let attempt = 0; attempt < 15; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 400));
-      const { job } = await api<{ job: PublicationJob }>(`/api/admin/notion/jobs/${jobId}`);
-      if (job.candidate_id && job.candidate_id !== candidateId) {
-        throw new Error(
-          `發布工作候選版本不一致（候選 ${candidateId}，工作 ${jobId} 指向 ${job.candidate_id}）。`,
-        );
-      }
-      if (['succeeded', 'failed', 'cancelled'].includes(String(job.state))) return job;
-    }
-    return null;
+    return {
+      kind: 'timeout' as const,
+      message: `等待發布結果逾時，請重新整理後再確認。候選 ID：${candidateId}；工作 ID：${jobId}。`,
+    };
   };
 
   const runAction = async (action: string, operation: () => Promise<void>) => {
@@ -771,49 +800,35 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
 
   const publish = async (immediate = false) => {
     if (!selected) return;
+    const candidate = selected;
     await runAction(immediate ? 'publish-now' : 'publish', async () => {
-      const publishPath = `/api/admin/notion/candidates/${selected.id}/publish${immediate ? '?immediate=true' : ''}`;
+      setPublicationDiagnostic(null);
+      const publishPath = `/api/admin/notion/candidates/${candidate.id}/publish${immediate ? '?immediate=true' : ''}`;
       const publicationResponse = await api<{ publication: PublicationJob }>(publishPath, {
         method: 'POST',
         body: JSON.stringify({
-          expectedRevisionId: selected.source_revision_id,
-          expectedMetadataVersion: selected.working_copy_version,
-          expectedCandidateHash: selected.candidate_hash,
+          expectedRevisionId: candidate.source_revision_id,
+          expectedMetadataVersion: candidate.working_copy_version,
+          expectedCandidateHash: candidate.candidate_hash,
           idempotencyKey: operationId(),
         }),
       });
       const workerResult = immediate ? await runWorkerNow() : null;
-      const refreshedCandidates = await refresh();
-      const refreshedCandidate = refreshedCandidates.find(
-        (candidate) => candidate.id === selected.id,
-      );
-      const candidateId = selected.id;
-      const polledCandidate = immediate ? await pollCandidate(candidateId) : null;
-      const jobId = publicationResponse.publication?.id;
-      const polledJob = immediate
-        ? jobId
-          ? await pollPublicationJob(jobId, candidateId)
-          : null
-        : null;
-      const finalCandidate = polledCandidate || refreshedCandidate;
-      const diagnostic = `候選 ${candidateId}${jobId ? `、工作 ${jobId}` : ''}`;
-      if (workerResult && finalCandidate?.state !== 'published') {
-        showToast(
-          'error',
-          `立即發布尚未完成（${diagnostic}，候選狀態：${finalCandidate?.state || '未知'}${polledJob?.state ? `，工作狀態：${polledJob.state}` : ''}${finalCandidate?.failure_reason ? `，原因：${finalCandidate.failure_reason}` : ''}）：${workerSummary(workerResult)}。`,
-        );
+      await refresh();
+      const jobId = publicationResponse.publication?.id || publicationResponse.publication?.job_id;
+      if (immediate && !jobId) {
+        const diagnostic = {
+          kind: 'failure' as const,
+          message: `發布工作未回傳可追蹤的工作 ID。候選 ID：${candidate.id}；工作 ID：未知。`,
+        };
+        setPublicationDiagnostic(diagnostic);
+        showToast('error', diagnostic.message);
+      } else if (immediate && jobId) {
+        const diagnostic = await pollImmediatePublication(candidate.id, jobId);
+        setPublicationDiagnostic(diagnostic);
+        showToast(diagnostic.kind === 'success' ? 'success' : 'error', diagnostic.message);
       } else if (workerResult?.failed) {
-        showToast(
-          'error',
-          `發布工作執行失敗（${diagnostic}${polledJob?.last_error || polledJob?.error ? `，原因：${polledJob.last_error || polledJob.error}` : ''}）：${workerSummary(workerResult)}。`,
-        );
-      } else if (polledJob?.state === 'failed' || polledJob?.state === 'cancelled') {
-        showToast(
-          'error',
-          `發布工作未完成（${diagnostic}，工作狀態：${polledJob.state}${polledJob.last_error || polledJob.error ? `，原因：${polledJob.last_error || polledJob.error}` : ''}）。`,
-        );
-      } else if (immediate && (!polledCandidate || !polledJob)) {
-        showToast('error', `立即發布逾時（${diagnostic}）：尚未取得候選與工作終態。`);
+        showToast('error', `發布工作執行失敗：${workerSummary(workerResult)}。`);
       } else {
         showToast(
           'success',
@@ -1022,8 +1037,8 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
         </div>
       </div>
       {selected && (
-        <div className="admin-form-card">
-          <h2>發布候選：{selected.title}</h2>
+        <div className="admin-form-card admin-candidate-detail">
+          <h2 className="admin-breakable-text">發布候選：{selected.title}</h2>
           <p className="admin-breakable-id">候選 hash：{selected.candidate_hash}</p>
           <div className="button-row">
             <LoadingButton
@@ -1060,6 +1075,16 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
             </LoadingButton>
           </div>
           {preview && <pre className="admin-preview">{preview}</pre>}
+        </div>
+      )}
+      {publicationDiagnostic && (
+        <div
+          className={`admin-publication-diagnostic admin-publication-${publicationDiagnostic.kind}`}
+          role={publicationDiagnostic.kind === 'success' ? 'status' : 'alert'}
+          aria-live={publicationDiagnostic.kind === 'success' ? 'polite' : 'assertive'}
+        >
+          <strong>{publicationDiagnostic.kind === 'success' ? '發布完成' : '發布診斷'}</strong>
+          <p>{publicationDiagnostic.message}</p>
         </div>
       )}
       {selected && publishConfirmOpen && (

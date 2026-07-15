@@ -168,21 +168,40 @@ as $$
 declare
   v_candidate public.publication_candidates%rowtype;
   v_article public.articles%rowtype;
-  v_privacy text;
-  v_legal text;
+  v_privacy public.publication_review_attestations%rowtype;
+  v_legal public.publication_review_attestations%rowtype;
+  v_candidate_content_hash text;
   v_has_pending_media boolean;
   v_has_failed_media boolean;
 begin
   if p_actor_id is null then raise exception 'publication actor is required' using errcode = '28000'; end if;
   select * into v_candidate from public.publication_candidates where id = p_candidate_id for update;
   if not found then raise exception 'publication candidate not found' using errcode = 'P0002'; end if;
-  if v_candidate.state not in ('prepared', 'media_failed', 'ready_to_activate') then raise exception 'candidate cannot be finalized in state %', v_candidate.state using errcode = '22023'; end if;
   if v_candidate.expected_publication_version <> p_expected_publication_version then raise exception 'candidate publication version conflict' using errcode = '40001'; end if;
+  if v_candidate.state = 'published' then
+    select * into v_article from public.articles where id = v_candidate.article_id;
+    if not found or v_article.publication_version <> p_expected_publication_version + 1 then
+      raise exception 'published candidate article version conflict' using errcode = '40001';
+    end if;
+    return query select v_candidate.id, 'published'::text, v_article.id, v_article.publication_version;
+    return;
+  end if;
+  if v_candidate.state not in ('prepared', 'media_failed', 'ready_to_activate') then raise exception 'candidate cannot be finalized in state %', v_candidate.state using errcode = '22023'; end if;
   if v_candidate.activation_at > now() then raise exception 'candidate is not due for activation' using errcode = '55P03'; end if;
   if v_candidate.publication_policy = 'manual_review' then
-    select decision into v_privacy from public.publication_review_attestations where candidate_id = v_candidate.id and review_kind = 'privacy' order by id desc limit 1;
-    select decision into v_legal from public.publication_review_attestations where candidate_id = v_candidate.id and review_kind = 'legal' order by id desc limit 1;
-    if v_privacy is distinct from 'approved' or v_legal is distinct from 'approved' then raise exception 'current privacy and legal approvals are required' using errcode = '23514'; end if;
+    select content_hash into v_candidate_content_hash
+    from public.article_source_revisions
+    where id = v_candidate.source_revision_id and source_id = v_candidate.source_id;
+    select * into v_privacy from public.publication_review_attestations where candidate_id = v_candidate.id and review_kind = 'privacy' order by id desc limit 1;
+    select * into v_legal from public.publication_review_attestations where candidate_id = v_candidate.id and review_kind = 'legal' order by id desc limit 1;
+    if v_privacy.decision is distinct from 'approved'
+       or v_legal.decision is distinct from 'approved'
+       or v_privacy.candidate_source_revision_id is distinct from v_candidate.source_revision_id
+       or v_legal.candidate_source_revision_id is distinct from v_candidate.source_revision_id
+       or v_privacy.candidate_content_hash is distinct from v_candidate_content_hash
+       or v_legal.candidate_content_hash is distinct from v_candidate_content_hash then
+      raise exception 'current privacy and legal approvals are required' using errcode = '23514';
+    end if;
   elsif v_candidate.publication_policy <> 'notion_direct' then
     raise exception 'unknown publication policy' using errcode = '22023';
   end if;
@@ -203,11 +222,17 @@ begin
   elsif p_expected_publication_version <> 0 then raise exception 'new article publication version must be zero' using errcode = '40001'; end if;
   select * into v_article from public.save_article_with_policy(
     v_candidate.article_id, v_candidate.slug, v_candidate.title, v_candidate.description,
-    v_candidate.body_markdown, v_candidate.body_json, v_candidate.body_html, 'published',
+    v_candidate.body_markdown, v_candidate.body_json, v_candidate.body_html,
+    case when v_candidate.publication_policy = 'manual_review' then 'draft' else 'published' end,
     v_candidate.activation_at, v_candidate.content_type_slug, v_candidate.category_slug,
     v_candidate.tags, v_candidate.featured, v_candidate.cover, v_candidate.seo_title,
     v_candidate.seo_description, v_candidate.canonical_url, v_candidate.publication_policy);
-  update public.articles set publication_version = p_expected_publication_version + 1, updated_at = now()
+  update public.articles
+    set privacy_reviewed = case when v_candidate.publication_policy = 'manual_review' then true else privacy_reviewed end,
+        legal_reviewed = case when v_candidate.publication_policy = 'manual_review' then true else legal_reviewed end,
+        status = 'published',
+        publication_version = p_expected_publication_version + 1,
+        updated_at = now()
     where id = v_article.id and publication_version = p_expected_publication_version returning * into v_article;
   if not found then raise exception 'article publication version conflict' using errcode = '40001'; end if;
   update public.publication_candidates set state = 'superseded' where article_id = v_article.id and state = 'published' and id <> v_candidate.id;

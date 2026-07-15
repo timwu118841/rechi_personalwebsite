@@ -31,6 +31,8 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
     expect(
       shouldSyncNotionPage({ notion_last_edited_time: 'not-a-date' }, '2026-07-15T00:00:00.000Z'),
     ).toBe(true);
+    expect(shouldSyncNotionPage(configuration, '2026-07-15T08:00:00+08:00')).toBe(true);
+    expect(shouldSyncNotionPage(configuration, '2026-07-15')).toBe(true);
   });
 
   it('merges canonical timestamp without dropping existing source configuration', () => {
@@ -42,6 +44,243 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
     ).toEqual({ editorial_mode: 'shadow', notion_last_edited_time: '2026-07-15T00:00:00.000Z' });
     expect(mergeNotionSourceConfiguration({ editorial_mode: 'shadow' }, null)).toEqual({
       editorial_mode: 'shadow',
+    });
+    expect(
+      mergeNotionSourceConfiguration(
+        { editorial_mode: 'shadow', notion_last_edited_time: '2026-07-15T00:00:00.000Z' },
+        '2026-07-16T08:00:00+08:00',
+      ),
+    ).toEqual({
+      editorial_mode: 'shadow',
+      notion_last_edited_time: '2026-07-15T00:00:00.000Z',
+    });
+  });
+
+  it('uses revision source hashes for source views and keeps actionable candidates active', async () => {
+    const sourceRows = [
+      { id: 'unchanged', updated_at: '2026-07-15T03:00:00.000Z' },
+      { id: 'open', updated_at: '2026-07-15T02:00:00.000Z' },
+      { id: 'changed', updated_at: '2026-07-15T01:00:00.000Z' },
+    ];
+    const workingCopies = sourceRows.map((source, index) => ({
+      id: `copy-${source.id}`,
+      source_id: source.id,
+      version: 1,
+      source_revision_id: `revision-${index + 1}`,
+    }));
+    const publications = sourceRows.map((source, index) => ({
+      source_id: source.id,
+      source_revision_id: `revision-${index + 1}`,
+      source_hash: `published-${index + 1}`,
+      activated_at: `2026-07-15T0${index}:00:00.000Z`,
+    }));
+    const revisions = [
+      { id: 'revision-1', source_hash: 'published-1', content_hash: 'render-1' },
+      { id: 'revision-2', source_hash: 'published-2', content_hash: 'render-2' },
+      // The render hash deliberately matches the publication source hash. This
+      // source is still changed because its source hash does not match.
+      { id: 'revision-3', source_hash: 'changed-3', content_hash: 'published-3' },
+    ];
+    const selectedRevisionColumns: string[] = [];
+    let candidateQuery = 0;
+    const from = vi.fn((table: string) => {
+      if (table === 'article_sources') {
+        return {
+          select: () => ({
+            order: () => ({
+              limit: async () => ({ data: sourceRows, error: null }),
+            }),
+          }),
+        };
+      }
+      if (table === 'article_working_copies') {
+        return {
+          select: () => ({
+            in: async () => ({ data: workingCopies, error: null }),
+          }),
+        };
+      }
+      if (table === 'publication_candidates') {
+        candidateQuery += 1;
+        if (candidateQuery % 2 === 1) {
+          return {
+            select: () => ({
+              in: () => ({
+                eq: () => ({
+                  order: async () => ({ data: publications, error: null }),
+                }),
+              }),
+            }),
+          };
+        }
+        return {
+          select: () => ({
+            in: () => ({
+              in: async () => ({ data: [{ source_id: 'open' }], error: null }),
+            }),
+          }),
+        };
+      }
+      expect(table).toBe('article_source_revisions');
+      return {
+        select(columns: string) {
+          selectedRevisionColumns.push(columns);
+          return { in: async () => ({ data: revisions, error: null }) };
+        },
+      };
+    });
+    const service = new ContentJobService(clientWith({ from }));
+
+    await expect(service.listSourceStatus(25, undefined, 'active')).resolves.toEqual([
+      expect.objectContaining({ id: 'open' }),
+      expect.objectContaining({ id: 'changed' }),
+    ]);
+    await expect(service.listSourceStatus(25, undefined, 'history')).resolves.toEqual([
+      expect.objectContaining({ id: 'unchanged' }),
+    ]);
+    expect(selectedRevisionColumns).toEqual(['id,source_hash', 'id,source_hash']);
+  });
+
+  it('does not persist a canonical Notion timestamp before the complete source sync succeeds', async () => {
+    const priorTimestamp = '2026-07-14T00:00:00.000Z';
+    const nextTimestamp = '2026-07-15T00:00:00.000Z';
+    const sourceWrites: Array<Record<string, unknown>> = [];
+    const source = {
+      id: 'source-id',
+      article_id: null,
+      configuration: { editorial_mode: 'shadow', notion_last_edited_time: priorTimestamp },
+    };
+    const from = vi.fn((table: string) => {
+      if (table === 'article_sources') {
+        return {
+          upsert(value: Record<string, unknown>) {
+            sourceWrites.push(value);
+            return {
+              select: () => ({ single: async () => ({ data: source, error: null }) }),
+            };
+          },
+          update(value: Record<string, unknown>) {
+            sourceWrites.push(value);
+            return { eq: async () => ({ error: null }) };
+          },
+        };
+      }
+      expect(table).toBe('article_source_revisions');
+      return {
+        upsert: async () => ({ error: { message: 'revision write failed' } }),
+      };
+    });
+    const service = new ContentJobService(clientWith({ from }));
+    Object.defineProperty(service, 'notionClient', {
+      value: () => ({
+        readSourceSnapshot: async () => ({
+          pageId: 'page-id',
+          sourceState: 'active',
+          lastEditedTime: nextTimestamp,
+          url: 'https://www.notion.so/page-id',
+          properties: { title: '文章', description: '', tags: [], slug: null, values: {} },
+          document: { version: 1, blocks: [], searchText: '文章', mediaSourceRefs: [] },
+        }),
+      }),
+    });
+
+    await expect(
+      (
+        service as unknown as {
+          syncSource(job: Record<string, unknown>): Promise<void>;
+        }
+      ).syncSource({ id: 'job-id', payload: { notion_page_id: 'page-id' } }),
+    ).rejects.toThrow('revision write failed');
+
+    expect(sourceWrites).toHaveLength(1);
+    expect(sourceWrites[0]).not.toHaveProperty('configuration');
+    expect(shouldSyncNotionPage(source.configuration, nextTimestamp)).toBe(true);
+  });
+
+  it('persists the canonical Notion timestamp only in the final successful source update', async () => {
+    const priorTimestamp = '2026-07-14T00:00:00.000Z';
+    const nextTimestamp = '2026-07-15T00:00:00.000Z';
+    const events: Array<{ operation: string; value: Record<string, unknown> }> = [];
+    const source = {
+      id: 'source-id',
+      article_id: null,
+      configuration: { editorial_mode: 'shadow', notion_last_edited_time: priorTimestamp },
+    };
+    let revisionRequest = 0;
+    const from = vi.fn((table: string) => {
+      if (table === 'article_sources') {
+        return {
+          upsert(value: Record<string, unknown>) {
+            events.push({ operation: 'source-upsert', value });
+            return {
+              select: () => ({ single: async () => ({ data: source, error: null }) }),
+            };
+          },
+          update(value: Record<string, unknown>) {
+            events.push({ operation: 'source-update', value });
+            return { eq: async () => ({ error: null }) };
+          },
+        };
+      }
+      if (table === 'article_source_revisions') {
+        revisionRequest += 1;
+        if (revisionRequest === 1) {
+          return { upsert: async () => ({ error: null }) };
+        }
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({ single: async () => ({ data: { id: 'revision-id' }, error: null }) }),
+            }),
+          }),
+        };
+      }
+      expect(table).toBe('article_working_copies');
+      return {
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({ data: { id: 'working-copy-id' }, error: null }),
+          }),
+        }),
+        update(value: Record<string, unknown>) {
+          events.push({ operation: 'working-copy-update', value });
+          return { eq: async () => ({ error: null }) };
+        },
+      };
+    });
+    const service = new ContentJobService(clientWith({ from }));
+    Object.defineProperty(service, 'notionClient', {
+      value: () => ({
+        readSourceSnapshot: async () => ({
+          pageId: 'page-id',
+          sourceState: 'active',
+          lastEditedTime: nextTimestamp,
+          url: 'https://www.notion.so/page-id',
+          properties: { title: '文章', description: '', tags: [], slug: null, values: {} },
+          document: { version: 1, blocks: [], searchText: '文章', mediaSourceRefs: [] },
+        }),
+      }),
+    });
+
+    await (
+      service as unknown as {
+        syncSource(job: Record<string, unknown>): Promise<void>;
+      }
+    ).syncSource({ id: 'job-id', payload: { notion_page_id: 'page-id' } });
+
+    expect(events.map(({ operation }) => operation)).toEqual([
+      'source-upsert',
+      'working-copy-update',
+      'source-update',
+    ]);
+    expect(events[0]?.value).not.toHaveProperty('configuration');
+    expect(events[2]?.value).toMatchObject({
+      configuration: {
+        editorial_mode: 'shadow',
+        notion_last_edited_time: nextTimestamp,
+      },
+      state: 'active',
+      last_error: null,
     });
   });
 

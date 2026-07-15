@@ -60,7 +60,9 @@ function stringValue(value: unknown): string | null {
 }
 
 function validNotionTimestamp(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0 && Number.isFinite(Date.parse(value));
+  if (typeof value !== 'string' || !value) return false;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
 }
 
 export function mergeNotionSourceConfiguration(
@@ -68,7 +70,9 @@ export function mergeNotionSourceConfiguration(
   lastEditedTime: string | null,
 ): DatabaseRecord {
   const current = record(configuration) ?? {};
-  return lastEditedTime ? { ...current, [NOTION_LAST_EDITED_TIME_KEY]: lastEditedTime } : current;
+  return validNotionTimestamp(lastEditedTime)
+    ? { ...current, [NOTION_LAST_EDITED_TIME_KEY]: lastEditedTime }
+    : current;
 }
 
 export function shouldSyncNotionPage(
@@ -254,6 +258,18 @@ export class ContentJobService {
       if (!latest.has(String(candidate.source_id)))
         latest.set(String(candidate.source_id), candidate);
     }
+    const { data: openCandidates, error: openCandidatesError } = await this.client
+      .from('publication_candidates')
+      .select('source_id')
+      .in(
+        'source_id',
+        sources.map((source) => String(source.id)),
+      )
+      .in('state', ['prepared', 'publishing', 'media_failed', 'ready_to_activate']);
+    throwIfError(openCandidatesError);
+    const actionable = new Set(
+      rows(openCandidates).map((candidate) => String(candidate.source_id)),
+    );
     const matches = new Set<string>();
     const revisionIds = statuses
       .map((status) => String(bySource.get(String(status.id))?.source_revision_id || ''))
@@ -261,27 +277,34 @@ export class ContentJobService {
     const { data: revisions, error: revisionsError } = revisionIds.length
       ? await this.client
           .from('article_source_revisions')
-          .select('id,content_hash')
+          .select('id,source_hash')
           .in('id', revisionIds)
       : { data: [], error: null };
     throwIfError(revisionsError);
     const hashes = new Map(
-      rows(revisions).map((revision) => [String(revision.id), revision.content_hash]),
+      rows(revisions).map((revision) => [String(revision.id), revision.source_hash]),
     );
     for (const status of statuses) {
       const publication = latest.get(String(status.id));
       const copy = bySource.get(String(status.id));
+      const revisionHash = stringValue(hashes.get(String(copy?.source_revision_id)));
+      const publishedHash = stringValue(publication?.source_hash);
       if (
         publication &&
         copy &&
         String(copy.source_revision_id) === String(publication.source_revision_id) &&
-        String(hashes.get(String(copy.source_revision_id))) === String(publication.source_hash)
+        revisionHash &&
+        revisionHash === publishedHash
       )
         matches.add(String(status.id));
     }
-    return statuses.filter((source) =>
-      view === 'active' ? !matches.has(String(source.id)) : matches.has(String(source.id)),
-    );
+    return statuses.filter((source) => {
+      const sourceId = String(source.id);
+      const hasPublishedCurrentRevision = matches.has(sourceId);
+      const hasActionableCandidate = actionable.has(sourceId);
+      if (view === 'active') return hasActionableCandidate || !hasPublishedCurrentRevision;
+      return !hasActionableCandidate && hasPublishedCurrentRevision;
+    });
   }
 
   async getSourceStatus(sourceId: string): Promise<DatabaseRecord | null> {
@@ -688,7 +711,6 @@ export class ContentJobService {
             external_id: pageId,
             source_url: snapshot.url,
             state: snapshot.sourceState === 'archived' ? 'archived' : 'onboarding',
-            configuration: mergeNotionSourceConfiguration({}, snapshot.lastEditedTime),
           },
           { onConflict: 'provider,external_id' },
         )
