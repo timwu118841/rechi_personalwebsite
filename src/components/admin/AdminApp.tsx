@@ -919,6 +919,7 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
                 <button
                   type="button"
                   role="tab"
+                  key={filter}
                   aria-selected={candidateFilter === filter}
                   className={candidateFilter === filter ? 'active' : 'secondary'}
                   onClick={() => setCandidateFilter(filter)}

@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test';
 
+test.skip(
+  !['1', 'true'].includes(process.env.ALLOW_FIXTURE_CONTENT ?? ''),
+  'requires ALLOW_FIXTURE_CONTENT',
+);
+
 const requestLogs = new WeakMap<object, string[]>();
 
 const activeCandidate = {
