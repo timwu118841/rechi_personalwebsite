@@ -3,7 +3,7 @@ import Analytics from '@/components/Analytics.astro';
 import SeoHead, { type Props as SeoProps } from '@/components/SeoHead.astro';
 import SiteFooter from '@/components/SiteFooter.astro';
 import SiteHeader from '@/components/SiteHeader.astro';
-import { getContentRepository, type SiteSettings } from '@/lib/content/repository';
+import { getPublicContentRepository, type SiteSettings } from '@/lib/content/repository';
 import '@/styles/global.css';
 
 interface Props extends Omit<SeoProps, 'settings'> {
@@ -11,7 +11,7 @@ interface Props extends Omit<SeoProps, 'settings'> {
   siteSettings?: SiteSettings;
 }
 const { bodyClass = '', siteSettings, ...seo } = Astro.props;
-const settings = siteSettings || (await getContentRepository().getSiteSettings());
+const settings = siteSettings || (await getPublicContentRepository().getSiteSettings());
 ---
 
 <!doctype html>

@@ -442,6 +442,16 @@ legend {
   color: #244e34;
   background: #e4eee5;
 }
+
+.admin-preview {
+  max-height: 28rem;
+  overflow: auto;
+  margin-top: 1rem;
+  padding: 1rem;
+  white-space: pre-wrap;
+  background: #f5f7f3;
+  border: 1px solid #d9dfd8;
+}
 .admin-empty {
   padding: 2rem;
   color: #728075;

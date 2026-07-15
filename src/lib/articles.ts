@@ -1,4 +1,4 @@
-import { getContentRepository, type Article, type Category } from './content/repository';
+import { getPublicContentRepository, type Article, type Category } from './content/repository';
 
 export {
   formatDate,
@@ -18,11 +18,12 @@ export function articleSlug(article: Pick<Article, 'slug'>): string {
 
 export async function getPublishedArticles(now = new Date()): Promise<Article[]> {
   void now;
-  return (await getContentRepository().listPublishedArticles({ page: 1, pageSize: 1000 })).items;
+  return (await getPublicContentRepository().listPublishedArticles({ page: 1, pageSize: 1000 }))
+    .items;
 }
 
 export async function getCategories(options: { includeHidden?: boolean } = {}) {
-  return getContentRepository().listCategories(options);
+  return getPublicContentRepository().listCategories(options);
 }
 
 export async function getCategoryMap(options: { includeHidden?: boolean } = {}) {
@@ -31,7 +32,7 @@ export async function getCategoryMap(options: { includeHidden?: boolean } = {}) 
 }
 
 export async function getContentTypes() {
-  return getContentRepository().listContentTypes();
+  return getPublicContentRepository().listContentTypes();
 }
 
 export async function getContentTypeMap() {

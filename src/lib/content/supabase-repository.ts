@@ -80,7 +80,7 @@ function media(value: unknown): MediaAsset | undefined {
   };
 }
 
-function articleFromRow(
+export function articleFromRow(
   row: RecordRow,
   categories: Map<string, string>,
   contentTypes: Map<string, string>,
@@ -113,7 +113,7 @@ function articleFromRow(
   };
 }
 
-function settingsFromRow(row: RecordRow): SiteSettings {
+export function settingsFromRow(row: RecordRow): SiteSettings {
   return {
     siteTitle: String(row.site_title),
     shortTitle: String(row.short_title),

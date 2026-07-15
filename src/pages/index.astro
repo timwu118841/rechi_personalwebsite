@@ -1,9 +1,9 @@
 ---
 import ArticleCard from '@/components/ArticleCard.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import { getContentRepository } from '@/lib/content/repository';
+import { getPublicContentRepository } from '@/lib/content/repository';
 
-const repository = getContentRepository();
+const repository = getPublicContentRepository();
 const [{ items: articles }, settings] = await Promise.all([
   repository.listPublishedArticles({ page: 1, pageSize: 5 }),
   repository.getSiteSettings(),

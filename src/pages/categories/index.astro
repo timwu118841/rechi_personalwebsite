@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import { getContentRepository } from '@/lib/content/repository';
-const repository = getContentRepository();
+import { getPublicContentRepository } from '@/lib/content/repository';
+const repository = getPublicContentRepository();
 const [articles, categories] = await Promise.all([
   repository.listPublishedArticles({ pageSize: 1000 }),
   repository.listCategories(),

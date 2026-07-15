@@ -22,7 +22,7 @@ export default defineConfig({
   ],
   webServer: {
     command: `PLAYWRIGHT_PORT=${port} ALLOW_FIXTURE_CONTENT=true ASTRO_TELEMETRY_DISABLED=1 node scripts/start-test-server.mjs`,
-    url: baseURL,
+    url: `${baseURL}/__playwright_health`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

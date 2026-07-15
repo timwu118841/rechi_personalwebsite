@@ -1,8 +1,8 @@
 ---
 import LegalDisclaimer from '@/components/LegalDisclaimer.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import { getContentRepository } from '@/lib/content/repository';
-const settings = await getContentRepository().getSiteSettings();
+import { getPublicContentRepository } from '@/lib/content/repository';
+const settings = await getPublicContentRepository().getSiteSettings();
 if (Astro.cache.enabled) Astro.cache.set({ maxAge: 86400, swr: 604800, tags: ['site-settings'] });
 ---
 

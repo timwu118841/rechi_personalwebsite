@@ -1,10 +1,10 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import { getContentRepository } from '@/lib/content/repository';
+import { getPublicContentRepository } from '@/lib/content/repository';
 import { articlePath } from '@/lib/content/slug';
 
 const query = (Astro.url.searchParams.get('q') || '').trim().slice(0, 100);
-const results = query ? await getContentRepository().searchPublishedArticles(query, 20) : [];
+const results = query ? await getPublicContentRepository().searchPublishedArticles(query, 20) : [];
 Astro.cache.set(false);
 ---
 

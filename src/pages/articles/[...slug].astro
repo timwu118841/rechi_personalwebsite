@@ -4,11 +4,11 @@ import TagList from '@/components/TagList.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { formatDate, readingTimeMinutes } from '@/lib/articles';
 import { renderMarkdown, renderRichText } from '@/lib/content/markdown';
-import { getContentRepository } from '@/lib/content/repository';
+import { getPublicContentRepository } from '@/lib/content/repository';
 import { articleCacheTag, articlePath, decodeSlugPathParam } from '@/lib/content/slug';
 
 const slug = decodeSlugPathParam(Astro.params.slug || '');
-const repository = getContentRepository();
+const repository = getPublicContentRepository();
 const [article, settings] = await Promise.all([
   repository.getPublishedArticle(slug),
   repository.getSiteSettings(),

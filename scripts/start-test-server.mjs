@@ -38,6 +38,11 @@ function staticFile(pathname) {
 const server = createServer(async (incoming, outgoing) => {
   try {
     const url = new URL(incoming.url || '/', `http://${host}:${port}`);
+    if (url.pathname === '/__playwright_health') {
+      outgoing.statusCode = 200;
+      outgoing.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return outgoing.end('ok');
+    }
     const file = staticFile(url.pathname);
     if (file && (incoming.method === 'GET' || incoming.method === 'HEAD')) {
       const stats = statSync(file);

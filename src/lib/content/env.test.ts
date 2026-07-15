@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { getSupabaseEnvironment, isPasswordLoginEnabled, normalizeAdminEmail } from './env';
+import {
+  getNotionConfig,
+  getSupabaseEnvironment,
+  isPasswordLoginEnabled,
+  normalizeAdminEmail,
+} from './env';
 
 const original = { ...process.env };
 
@@ -26,5 +31,27 @@ describe('Supabase admin environment', () => {
     expect(isPasswordLoginEnabled()).toBe(false);
     process.env.PUBLIC_ADMIN_PASSWORD_LOGIN = 'true';
     expect(isPasswordLoginEnabled()).toBe(true);
+  });
+});
+
+describe('Notion editorial environment', () => {
+  it('returns null when editorial sync is disabled even with complete credentials', () => {
+    process.env.NOTION_EDITORIAL_ENABLED = 'false';
+    process.env.NOTION_TOKEN = 'token';
+    process.env.NOTION_ROOT_PAGE_ID = 'root-page';
+
+    expect(getNotionConfig()).toBeNull();
+  });
+
+  it('returns config when editorial sync is enabled with complete credentials', () => {
+    process.env.NOTION_EDITORIAL_ENABLED = 'true';
+    process.env.NOTION_TOKEN = 'token';
+    process.env.NOTION_ROOT_PAGE_ID = 'root-page';
+
+    expect(getNotionConfig()).toEqual({
+      token: 'token',
+      rootPageId: 'root-page',
+      version: '2026-03-11',
+    });
   });
 });
