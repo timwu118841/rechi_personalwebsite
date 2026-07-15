@@ -74,6 +74,11 @@ interface WorkerResult {
   exhaustedBudget: boolean;
 }
 
+interface PublicationJob {
+  id?: string;
+  state?: string;
+}
+
 type ToastKind = 'success' | 'error';
 
 type CandidateFilter = 'active' | 'history';
@@ -685,31 +690,11 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
     );
   };
 
-  const attest = async (reviewType: 'privacy' | 'legal', action: 'attest' | 'revoke') => {
-    if (!selected) return;
-    await runAction(`attest-${reviewType}`, async () => {
-      await api(`/api/admin/notion/candidates/${selected.id}/attest`, {
-        method: 'POST',
-        body: JSON.stringify({
-          candidateHash: selected.candidate_hash,
-          reviewType,
-          action,
-          idempotencyKey: operationId(),
-        }),
-      });
-      showToast(
-        'success',
-        `${reviewType === 'privacy' ? '隱私' : '法律'}審查已${action === 'attest' ? '核准' : '撤銷'}。`,
-      );
-      await refresh();
-    });
-  };
-
   const publish = async (immediate = false) => {
     if (!selected) return;
     await runAction(immediate ? 'publish-now' : 'publish', async () => {
       const publishPath = `/api/admin/notion/candidates/${selected.id}/publish${immediate ? '?immediate=true' : ''}`;
-      await api(publishPath, {
+      const publicationResponse = await api<{ publication: PublicationJob }>(publishPath, {
         method: 'POST',
         body: JSON.stringify({
           expectedRevisionId: selected.source_revision_id,
@@ -725,6 +710,14 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
       );
       const polledCandidate =
         immediate && refreshedCandidate ? await pollCandidate(refreshedCandidate.id) : null;
+      const jobId = publicationResponse.publication?.id;
+      if (immediate && jobId) {
+        for (let attempt = 0; attempt < 15; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          const { job } = await api<{ job: PublicationJob }>(`/api/admin/notion/jobs/${jobId}`);
+          if (['succeeded', 'failed', 'cancelled'].includes(String(job.state))) break;
+        }
+      }
       const finalCandidate = polledCandidate || refreshedCandidate;
       if (workerResult && finalCandidate?.state !== 'published') {
         showToast(
@@ -783,7 +776,7 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
         method: 'POST',
         body: JSON.stringify({}),
       });
-      showToast('success', '已建立不可變發布候選，請完成隱私與法律審查。');
+      showToast('success', '已建立不可變發布候選，可在到期後立即發布。');
       await refresh();
     });
   };
@@ -811,7 +804,7 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
         </LoadingButton>
       </div>
       <p className="admin-message">
-        正文只在 Notion 編輯；這裡只負責同步、審查、預覽候選版本與發布。同步不會改變目前公開文章。
+        正文只在 Notion 編輯；這裡只負責同步、預覽候選版本與發布。同步不會改變目前公開文章。
       </p>
       <div className="admin-form-card">
         <h2>同步 Notion 頁面</h2>
@@ -939,25 +932,9 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
       </div>
       {selected && (
         <div className="admin-form-card">
-          <h2>候選審查：{selected.title}</h2>
+          <h2>發布候選：{selected.title}</h2>
           <p>候選 hash：{selected.candidate_hash}</p>
           <div className="button-row">
-            <LoadingButton
-              className="secondary"
-              disabled={busy || pollingCandidateId !== null}
-              loading={busyAction === 'attest-privacy'}
-              onClick={() => void attest('privacy', 'attest')}
-            >
-              核准隱私審查
-            </LoadingButton>
-            <LoadingButton
-              className="secondary"
-              disabled={busy}
-              loading={busyAction === 'attest-legal'}
-              onClick={() => void attest('legal', 'attest')}
-            >
-              核准法律審查
-            </LoadingButton>
             <LoadingButton
               disabled={
                 busy ||
@@ -976,8 +953,8 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
               onClick={requestImmediatePublish}
               title={
                 canPublishImmediately
-                  ? '立即執行已到期且完成審查的發布候選'
-                  : '候選須完成隱私與法律審查，且已到發布時間，才能立即發布'
+                  ? '立即執行已到期的發布候選'
+                  : '候選須處於 prepared 或 ready_to_activate，且已到發布時間'
               }
             >
               立即發布
@@ -1006,7 +983,7 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
             <p className="admin-kicker">Ready to publish</p>
             <h2 id="publish-confirm-title">立即發布這個候選版本？</h2>
             <p id="publish-confirm-description">
-              「{selected.title}」已完成必要審查且已到發布時間。送出後仍會重新檢查 Notion
+              「{selected.title}」已到發布時間。送出後仍會重新檢查 Notion
               freshness、圖片與資料庫版本，任何一項不符都會停止發布。
             </p>
             <div className="button-row admin-dialog-actions">

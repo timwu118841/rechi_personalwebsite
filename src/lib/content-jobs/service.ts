@@ -394,12 +394,25 @@ export class ContentJobService {
     const { data, error } = await this.client
       .from('content_jobs')
       .select(
-        'id, job_type, candidate_id, state, attempts, max_attempts, run_after, started_at, completed_at, last_error',
+        'id, job_type, candidate_id, state, attempts, max_attempts, run_after, locked_at, completed_at, last_error',
       )
       .eq('id', jobId)
       .maybeSingle();
     throwIfError(error);
-    return record(data);
+    const job = record(data);
+    if (!job) return null;
+    return {
+      id: job.id,
+      job_type: job.job_type,
+      candidate_id: job.candidate_id,
+      state: job.state,
+      attempts: Number(job.attempts) || 0,
+      max_attempts: Number(job.max_attempts) || 0,
+      run_after: job.run_after,
+      locked_at: job.locked_at,
+      completed_at: job.completed_at,
+      error: typeof job.last_error === 'string' ? job.last_error.slice(0, 500) : null,
+    };
   }
 
   async attestReview(
