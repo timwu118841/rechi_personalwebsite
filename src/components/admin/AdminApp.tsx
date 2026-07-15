@@ -383,7 +383,13 @@ function Login({ client, passwordLoginEnabled }: { client: any; passwordLoginEna
   );
 }
 
-export function Dashboard({ session, onSignOut }: { session: Session; onSignOut: () => Promise<void> }) {
+export function Dashboard({
+  session,
+  onSignOut,
+}: {
+  session: Session;
+  onSignOut: () => Promise<void>;
+}) {
   const [tab, setTab] = useState<Tab>('notion');
   const [articles, setArticles] = useState<AdminArticle[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);

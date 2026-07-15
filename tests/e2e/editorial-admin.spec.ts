@@ -11,7 +11,12 @@ const activeCandidate = {
   activation_at: '2020-01-01T00:00:00.000Z',
   title: '待發布文章',
 };
-const historyCandidate = { ...activeCandidate, id: 'candidate-history', state: 'published', title: '歷史文章' };
+const historyCandidate = {
+  ...activeCandidate,
+  id: 'candidate-history',
+  state: 'published',
+  title: '歷史文章',
+};
 
 test.describe('受保護的 Notion 編輯發布後台', () => {
   test.beforeEach(async ({ page }) => {
@@ -25,31 +30,47 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
       requests.push(`${request.method()} ${url.pathname}${url.search}`);
       let body: unknown;
       if (url.pathname === '/api/admin/articles') body = { articles: [] };
-      else if (url.pathname === '/api/admin/settings') body = { settings: { shortTitle: '測試站' } };
-      else if (url.pathname === '/api/admin/taxonomies') body = { categories: [], contentTypes: [] };
+      else if (url.pathname === '/api/admin/settings')
+        body = { settings: { shortTitle: '測試站' } };
+      else if (url.pathname === '/api/admin/taxonomies')
+        body = { categories: [], contentTypes: [] };
       else if (url.pathname === '/api/admin/notion/sources') body = { sources: [] };
       else if (url.pathname === '/api/admin/notion/candidates') {
-        body = { candidates: url.searchParams.get('view') === 'history' ? [historyCandidate] : [candidate] };
-      } else if (url.pathname === '/api/admin/notion/candidates/candidate-1' && request.method() === 'GET') {
+        body = {
+          candidates: url.searchParams.get('view') === 'history' ? [historyCandidate] : [candidate],
+        };
+      } else if (
+        url.pathname === '/api/admin/notion/candidates/candidate-1' &&
+        request.method() === 'GET'
+      ) {
         candidatePolls += 1;
         if (candidatePolls > 0) candidate = { ...candidate, state: 'published' };
         body = { candidate };
       } else if (url.pathname === '/api/admin/notion/candidates/candidate-1/publish') {
         body = { publication: { id: 'job-1', state: 'queued' } };
       } else if (url.pathname === '/api/admin/notion/worker') {
-        body = { accepted: true, result: { claimed: 1, completed: 1, failed: 0, exhaustedBudget: false } };
+        body = {
+          accepted: true,
+          result: { claimed: 1, completed: 1, failed: 0, exhaustedBudget: false },
+        };
       } else if (url.pathname === '/api/admin/notion/jobs/job-1') {
         body = { job: { id: 'job-1', state: 'succeeded' } };
       } else {
         body = { ok: true };
       }
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(body),
+      });
     });
     await page.goto('/admin-fixture');
     await expect(page.getByRole('heading', { name: 'Notion 文章發布' })).toBeVisible();
   });
 
-  test('does not expose Notion privacy/legal controls and filters active/history candidates', async ({ page }) => {
+  test('does not expose Notion privacy/legal controls and filters active/history candidates', async ({
+    page,
+  }) => {
     await expect(page.getByText('待發布文章')).toBeVisible();
     await expect(page.getByText('歷史文章')).toHaveCount(0);
     await expect(page.getByText(/隱私審查|法律審查|privacyReviewed|legalReviewed/i)).toHaveCount(0);
@@ -60,19 +81,25 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     await expect(page.getByText('待發布文章')).toBeVisible();
   });
 
-  test('publishes an overdue prepared candidate and polls exact job/candidate endpoints', async ({ page }) => {
+  test('publishes an overdue prepared candidate and polls exact job/candidate endpoints', async ({
+    page,
+  }) => {
     const immediate = page.getByRole('button', { name: '立即發布' });
     await expect(immediate).toBeEnabled();
     await immediate.click();
     await page.getByRole('button', { name: '確認立即發布' }).click();
     await expect(page.getByRole('status')).toContainText('立即發布工作已執行');
     const requests = requestLogs.get(page) || [];
-    expect(requests).toContain('POST /api/admin/notion/candidates/candidate-1/publish?immediate=true');
+    expect(requests).toContain(
+      'POST /api/admin/notion/candidates/candidate-1/publish?immediate=true',
+    );
     expect(requests).toContain('GET /api/admin/notion/candidates/candidate-1');
     expect(requests).toContain('GET /api/admin/notion/jobs/job-1');
   });
 
   test('keeps the dashboard within the viewport on desktop and mobile', async ({ page }) => {
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
   });
 });
