@@ -8,7 +8,9 @@ const serverEntry = [
   '.vercel/output/functions/_render.func/entry.mjs',
   '.vercel/output/_functions/entry.mjs',
   '.vercel/output/functions/_render.func/dist/server/entry.mjs',
-].map(resolve).find(existsSync);
+]
+  .map(resolve)
+  .find(existsSync);
 if (!serverEntry) {
   throw new Error('Unable to locate the built Astro server entrypoint in .vercel/output.');
 }
