@@ -19,8 +19,13 @@ const historyCandidate = {
 };
 
 test.describe('受保護的 Notion 編輯發布後台', () => {
-  test.beforeEach(async ({ page }) => {
-    let candidate = { ...activeCandidate };
+  test.beforeEach(async ({ page }, testInfo) => {
+    let candidate = {
+      ...activeCandidate,
+      state: testInfo.title.includes('ready_to_activate')
+        ? 'ready_to_activate'
+        : activeCandidate.state,
+    };
     let candidatePolls = 0;
     const requests: string[] = [];
     requestLogs.set(page, requests);
@@ -84,6 +89,7 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
   test('publishes an overdue prepared candidate and polls exact job/candidate endpoints', async ({
     page,
   }) => {
+    await page.getByRole('button', { name: /待發布文章/ }).click();
     const immediate = page.getByRole('button', { name: '立即發布' });
     await expect(immediate).toBeEnabled();
     await immediate.click();
@@ -95,6 +101,20 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     );
     expect(requests).toContain('GET /api/admin/notion/candidates/candidate-1');
     expect(requests).toContain('GET /api/admin/notion/jobs/job-1');
+  });
+
+  test('shows accessible feedback for a deterministic sync and worker transition', async ({
+    page,
+  }) => {
+    await page.getByLabel('Notion page ID').fill('page-fixture-1');
+    await page.getByRole('button', { name: '立即同步', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Notion 頁面同步完成');
+    await expect(page.getByRole('status')).toContainText('處理 1/1 個工作，失敗 0 個');
+  });
+
+  test('allows an overdue ready_to_activate candidate to publish immediately', async ({ page }) => {
+    await page.getByRole('button', { name: /待發布文章/ }).click();
+    await expect(page.getByRole('button', { name: '立即發布' })).toBeEnabled();
   });
 
   test('keeps the dashboard within the viewport on desktop and mobile', async ({ page }) => {
