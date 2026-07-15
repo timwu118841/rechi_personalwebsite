@@ -255,13 +255,25 @@ export class ContentJobService {
         latest.set(String(candidate.source_id), candidate);
     }
     const matches = new Set<string>();
+    const revisionIds = statuses
+      .map((status) => String(bySource.get(String(status.id))?.source_revision_id || ''))
+      .filter(Boolean);
+    const { data: revisions, error: revisionsError } = revisionIds.length
+      ? await this.client
+          .from('article_source_revisions')
+          .select('id,content_hash')
+          .in('id', revisionIds)
+      : { data: [], error: null };
+    throwIfError(revisionsError);
+    const hashes = new Map(rows(revisions).map((revision) => [String(revision.id), revision.content_hash]));
     for (const status of statuses) {
       const publication = latest.get(String(status.id));
       const copy = bySource.get(String(status.id));
       if (
         publication &&
         copy &&
-        String(copy.source_revision_id) === String(publication.source_revision_id)
+        String(copy.source_revision_id) === String(publication.source_revision_id) &&
+        String(hashes.get(String(copy.source_revision_id))) === String(publication.source_hash)
       )
         matches.add(String(status.id));
     }

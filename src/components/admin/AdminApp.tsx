@@ -579,7 +579,7 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
     ? Date.parse(selected.activation_at)
     : Number.NaN;
   const canPublishImmediately = Boolean(
-    selected?.state === 'ready_to_activate' &&
+    (selected?.state === 'prepared' || selected?.state === 'ready_to_activate') &&
     Number.isFinite(selectedActivationTime) &&
     selectedActivationTime <= Date.now(),
   );
@@ -592,8 +592,10 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
 
   const refresh = async (): Promise<PublicationCandidateStatus[]> => {
     const [sourceData, candidateData] = await Promise.all([
-      api<{ sources: NotionSourceStatus[] }>('/api/admin/notion/sources'),
-      api<{ candidates: PublicationCandidateStatus[] }>('/api/admin/notion/candidates'),
+      api<{ sources: NotionSourceStatus[] }>('/api/admin/notion/sources?view=active'),
+      api<{ candidates: PublicationCandidateStatus[] }>(
+        `/api/admin/notion/candidates?view=${candidateFilter}`,
+      ),
     ]);
     setSources(sourceData.sources);
     setCandidates(candidateData.candidates);
@@ -605,7 +607,17 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
 
   useEffect(() => {
     void refresh().catch((error) => showToast('error', (error as Error).message));
-  }, []);
+  }, [candidateFilter]);
+
+  useEffect(() => {
+    if (!selected?.activation_at || canPublishImmediately) return;
+    const delay = Date.parse(selected.activation_at) - Date.now();
+    if (!Number.isFinite(delay) || delay <= 0) return;
+    const timer = window.setTimeout(() => {
+      void refresh();
+    }, Math.min(delay + 50, 60_000));
+    return () => window.clearTimeout(timer);
+  }, [canPublishImmediately, selected?.activation_at]);
 
   const operationId = () =>
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
