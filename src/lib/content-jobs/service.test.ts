@@ -1,6 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
-import { buildNotionRevisionInsert, ContentJobService, notionWorkingCopyText } from './service';
+import {
+  buildNotionRevisionInsert,
+  ContentJobService,
+  mergeNotionSourceConfiguration,
+  notionWorkingCopyText,
+  shouldSyncNotionPage,
+} from './service';
 
 function clientWith(overrides: {
   from?: (table: string) => unknown;
@@ -13,6 +19,32 @@ function clientWith(overrides: {
 }
 
 describe('ContentJobService idempotency and unbound-source behavior', () => {
+  it('skips unchanged canonical Notion timestamps but fails open for missing or malformed metadata', () => {
+    const configuration = {
+      editorial_mode: 'shadow',
+      notion_last_edited_time: '2026-07-15T00:00:00.000Z',
+    };
+    expect(shouldSyncNotionPage(configuration, '2026-07-15T00:00:00.000Z')).toBe(false);
+    expect(shouldSyncNotionPage(configuration, '2026-07-15T00:00:01.000Z')).toBe(true);
+    expect(shouldSyncNotionPage({}, '2026-07-15T00:00:00.000Z')).toBe(true);
+    expect(shouldSyncNotionPage(configuration, null)).toBe(true);
+    expect(
+      shouldSyncNotionPage({ notion_last_edited_time: 'not-a-date' }, '2026-07-15T00:00:00.000Z'),
+    ).toBe(true);
+  });
+
+  it('merges canonical timestamp without dropping existing source configuration', () => {
+    expect(
+      mergeNotionSourceConfiguration(
+        { editorial_mode: 'shadow', notion_last_edited_time: 'old' },
+        '2026-07-15T00:00:00.000Z',
+      ),
+    ).toEqual({ editorial_mode: 'shadow', notion_last_edited_time: '2026-07-15T00:00:00.000Z' });
+    expect(mergeNotionSourceConfiguration({ editorial_mode: 'shadow' }, null)).toEqual({
+      editorial_mode: 'shadow',
+    });
+  });
+
   it('enqueues a dedicated root sync job without exposing the configured root page id', async () => {
     const rpc = vi.fn(async () => ({ data: null, error: null }));
     const service = new ContentJobService(clientWith({ rpc }));

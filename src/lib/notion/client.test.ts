@@ -35,6 +35,22 @@ describe('NotionClient', () => {
           },
         });
       }
+      if (url.endsWith('/pages/child-1')) {
+        return json({
+          object: 'page',
+          id: 'child-1',
+          last_edited_time: '2026-07-15T00:00:01.000Z',
+          properties: {},
+        });
+      }
+      if (url.endsWith('/pages/child-2')) {
+        return json({
+          object: 'page',
+          id: 'child-2',
+          last_edited_time: '2026-07-15T00:00:02.000Z',
+          properties: {},
+        });
+      }
       if (url.includes('/properties/rel?') && url.includes('start_cursor=prop-2')) {
         return json(list([{ object: 'property_item', type: 'relation', relation: { id: 'r3' } }]));
       }
@@ -121,8 +137,8 @@ describe('NotionClient', () => {
     expect(snapshot.document.blocks[0]?.children?.[0]?.blockId).toBe('child');
     expect(pages.map((page) => page.id)).toEqual(['p1', 'p2']);
     expect(childPages).toEqual([
-      { id: 'child-1', title: '第一篇' },
-      { id: 'child-2', title: '第二篇' },
+      { id: 'child-1', title: '第一篇', lastEditedTime: '2026-07-15T00:00:01.000Z' },
+      { id: 'child-2', title: '第二篇', lastEditedTime: '2026-07-15T00:00:02.000Z' },
     ]);
     expect(calls.some((call) => call.url.includes('/blocks/child-1/children'))).toBe(false);
     expect(
