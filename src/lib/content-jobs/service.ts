@@ -586,9 +586,8 @@ export class ContentJobService {
       const source = byPageId.get(page.id);
       if (source && !shouldSyncNotionPage(source.configuration, page.lastEditedTime)) continue;
       await this.enqueueSourceSync({
-        sourceId: stringValue(source?.id) ?? undefined,
-        pageId: source ? undefined : page.id,
-        actorId: 'worker',
+        pageId: page.id,
+        actorId: requestedBy,
         idempotencyKey: `root:${String(job.id)}:${page.id}`,
       });
     }
@@ -941,10 +940,7 @@ export class ContentJobService {
     return withCollisionSuffix(base, index);
   }
 
-  private async finalizeCandidate(
-    candidateId: string,
-    payload: DatabaseRecord | null,
-  ): Promise<void> {
+  private async finalizeCandidate(candidateId: string, payload: DatabaseRecord | null): Promise<void> {
     const actorId = stringValue(payload?.requested_by);
     if (!actorId) throw new Error('Publication job is missing its requesting actor.');
     const candidate = await this.getCandidateStatus(candidateId);
