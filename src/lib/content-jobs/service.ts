@@ -270,7 +270,6 @@ export class ContentJobService {
     const actionable = new Set(
       rows(openCandidates).map((candidate) => String(candidate.source_id)),
     );
-    const matches = new Set<string>();
     const revisionIds = statuses
       .map((status) => String(bySource.get(String(status.id))?.source_revision_id || ''))
       .filter(Boolean);
@@ -284,23 +283,19 @@ export class ContentJobService {
     const hashes = new Map(
       rows(revisions).map((revision) => [String(revision.id), revision.source_hash]),
     );
-    for (const status of statuses) {
-      const publication = latest.get(String(status.id));
-      const copy = bySource.get(String(status.id));
-      const revisionHash = stringValue(hashes.get(String(copy?.source_revision_id)));
-      const publishedHash = stringValue(publication?.source_hash);
-      if (
-        publication &&
-        copy &&
-        String(copy.source_revision_id) === String(publication.source_revision_id) &&
-        revisionHash &&
-        revisionHash === publishedHash
-      )
-        matches.add(String(status.id));
-    }
     return statuses.filter((source) => {
       const sourceId = String(source.id);
-      const hasPublishedCurrentRevision = matches.has(sourceId);
+      const publication = latest.get(sourceId);
+      const workingCopy = bySource.get(sourceId);
+      const revisionHash = stringValue(hashes.get(String(workingCopy?.source_revision_id)));
+      const publishedHash = stringValue(publication?.source_hash);
+      const hasPublishedCurrentRevision = Boolean(
+        publication &&
+        workingCopy &&
+        String(workingCopy.source_revision_id) === String(publication.source_revision_id) &&
+        revisionHash &&
+        revisionHash === publishedHash,
+      );
       const hasActionableCandidate = actionable.has(sourceId);
       if (view === 'active') return hasActionableCandidate || !hasPublishedCurrentRevision;
       return !hasActionableCandidate && hasPublishedCurrentRevision;

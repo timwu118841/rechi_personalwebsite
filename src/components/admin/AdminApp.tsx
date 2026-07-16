@@ -629,7 +629,7 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
     );
   }, [candidateFilter, candidates]);
 
-  const refresh = async (): Promise<PublicationCandidateStatus[]> => {
+  const refresh = async (): Promise<void> => {
     const [sourceData, candidateData] = await Promise.all([
       api<{ sources: NotionSourceStatus[] }>('/api/admin/notion/sources?view=active'),
       api<{ candidates: PublicationCandidateStatus[] }>(
@@ -641,7 +641,6 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
     setSelected((current) =>
       current ? candidateData.candidates.find((item) => item.id === current.id) || null : null,
     );
-    return candidateData.candidates;
   };
 
   useEffect(() => {
@@ -813,7 +812,7 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
           idempotencyKey: operationId(),
         }),
       });
-      const workerResult = immediate ? await runWorkerNow() : null;
+      if (immediate) await runWorkerNow();
       await refresh();
       const jobId = publicationResponse.publication?.id || publicationResponse.publication?.job_id;
       if (immediate && !jobId) {
@@ -827,15 +826,8 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
         const diagnostic = await pollImmediatePublication(candidate.id, jobId);
         setPublicationDiagnostic(diagnostic);
         showToast(diagnostic.kind === 'success' ? 'success' : 'error', diagnostic.message);
-      } else if (workerResult?.failed) {
-        showToast('error', `發布工作執行失敗：${workerSummary(workerResult)}。`);
       } else {
-        showToast(
-          'success',
-          immediate
-            ? `立即發布工作已執行：${workerResult ? workerSummary(workerResult) : ''}。`
-            : '發布工作已排入佇列，worker 會在設定時間完成 freshness gate。',
-        );
+        showToast('success', '發布工作已排入佇列，worker 會在設定時間完成 freshness gate。');
       }
     });
   };
