@@ -389,15 +389,37 @@ export class ContentJobService {
     actorId: string,
     expectedWorkingCopyVersion?: number,
     expectedPublicationVersion?: number,
+    requestedSlug?: string,
   ): Promise<unknown> {
     const { data: workingCopy, error: workingError } = await this.client
       .from('article_working_copies')
-      .select('id,version,article_id')
+      .select('id,version,article_id,slug')
       .eq('source_id', sourceId)
       .maybeSingle();
     throwIfError(workingError);
     if (!workingCopy)
       throw new Error('Bind the source to an article before preparing a candidate.');
+    if (requestedSlug !== undefined) {
+      const slug = normalizeSlug(requestedSlug);
+      const [{ data: articles, error: articleError }, { data: copies, error: copiesError }] =
+        await Promise.all([
+          this.client.from('articles').select('slug').eq('slug', slug),
+          this.client.from('article_working_copies').select('id,slug').eq('slug', slug),
+        ]);
+      throwIfError(articleError);
+      throwIfError(copiesError);
+      const articleTaken = rows(articles).length > 0;
+      const copyTaken = rows(copies).some((copy) => String(copy.id) !== String(workingCopy.id));
+      if (articleTaken || copyTaken) throw new Error('網址代稱已被使用。');
+      if (String(workingCopy.slug || '') !== slug) {
+        const { error: slugError } = await this.client
+          .from('article_working_copies')
+          .update({ slug })
+          .eq('id', workingCopy.id)
+          .eq('version', expectedWorkingCopyVersion ?? Number(workingCopy.version));
+        throwIfError(slugError);
+      }
+    }
     let publicationVersion = expectedPublicationVersion;
     if (publicationVersion === undefined && workingCopy.article_id) {
       const { data: article, error } = await this.client
