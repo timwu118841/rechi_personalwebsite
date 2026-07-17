@@ -354,7 +354,7 @@ button.secondary,
 }
 .tiptap-editor .ProseMirror:focus {
   border-color: var(--admin-accent);
-  box-shadow: 0 0 0 2px rgb(49 95 70 / 0.12);
+  box-shadow: 0 0 0 2px rgb(37 99 235 / 0.16);
 }
 .tiptap-canvas {
   position: relative;

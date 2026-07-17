@@ -41,6 +41,9 @@
 
 html[data-theme='dark'] {
   color-scheme: dark;
+  --color-primary: #f4f4f5;
+  --color-secondary: #d4d4d8;
+  --color-accent-blue: #60a5fa;
   --color-ink: #edf2ed;
   --color-muted: #b8c2b9;
   --color-subtle: #aab6ac;
@@ -58,6 +61,9 @@ html[data-theme='dark'] {
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) {
     color-scheme: dark;
+    --color-primary: #f4f4f5;
+    --color-secondary: #d4d4d8;
+    --color-accent-blue: #60a5fa;
     --color-ink: #edf2ed;
     --color-muted: #b8c2b9;
     --color-subtle: #aab6ac;
@@ -933,6 +939,7 @@ html[data-theme='dark'] .prose span[data-editor-color='danger'] {
   *::after {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+    transform: none !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
