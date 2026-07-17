@@ -12,8 +12,14 @@ export const GET: APIRoute = async ({ request, url }) => {
     await requireAdmin(request);
     const limit = parseLimit(url.searchParams.get('limit'));
     const articleId = url.searchParams.get('articleId') || undefined;
+    const view = url.searchParams.get('view');
+    const normalizedView = view === 'active' || view === 'history' ? view : 'all';
     return json({
-      candidates: await getContentJobService().listCandidateStatus(limit, articleId),
+      candidates: await getContentJobService().listCandidateStatus(
+        limit,
+        articleId,
+        normalizedView,
+      ),
     });
   } catch (error) {
     return contentJobErrorResponse(error);

@@ -22,6 +22,7 @@ import type {
 const WORKER_JOB_LIMIT = 5;
 const WORKER_BUDGET_MS = 45_000;
 const JOB_LEASE_SECONDS = 120;
+const NOTION_LAST_EDITED_TIME_KEY = 'notion_last_edited_time';
 
 type DatabaseRecord = Record<string, any>;
 
@@ -56,6 +57,33 @@ function rows(value: unknown): DatabaseRecord[] {
 
 function stringValue(value: unknown): string | null {
   return typeof value === 'string' && value ? value : null;
+}
+
+function validNotionTimestamp(value: unknown): value is string {
+  if (typeof value !== 'string' || !value) return false;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
+}
+
+export function mergeNotionSourceConfiguration(
+  configuration: unknown,
+  lastEditedTime: string | null,
+): DatabaseRecord {
+  const current = record(configuration) ?? {};
+  return validNotionTimestamp(lastEditedTime)
+    ? { ...current, [NOTION_LAST_EDITED_TIME_KEY]: lastEditedTime }
+    : current;
+}
+
+export function shouldSyncNotionPage(
+  configuration: unknown,
+  lastEditedTime: string | null,
+): boolean {
+  // Missing, malformed, or unavailable timestamps fail open: a source is synced
+  // rather than risking stale content due to incomplete metadata.
+  if (!validNotionTimestamp(lastEditedTime)) return true;
+  const current = record(configuration)?.[NOTION_LAST_EDITED_TIME_KEY];
+  return !validNotionTimestamp(current) || current !== lastEditedTime;
 }
 
 export interface PromotedMedia {
@@ -185,7 +213,11 @@ export class ContentJobService {
     });
   }
 
-  async listSourceStatus(limit: number, articleId?: string): Promise<DatabaseRecord[]> {
+  async listSourceStatus(
+    limit: number,
+    articleId?: string,
+    view: 'all' | 'active' | 'history' = 'all',
+  ): Promise<DatabaseRecord[]> {
     let query = this.client
       .from('article_sources')
       .select('*')
@@ -198,18 +230,76 @@ export class ContentJobService {
     if (!sources.length) return sources;
     const { data: workingCopies, error: workingError } = await this.client
       .from('article_working_copies')
-      .select('id,source_id,version')
+      .select('id,source_id,version,source_revision_id')
       .in(
         'source_id',
         sources.map((source) => String(source.id)),
       );
     throwIfError(workingError);
     const bySource = new Map(rows(workingCopies).map((copy) => [String(copy.source_id), copy]));
-    return sources.map((source) => ({
+    const statuses: DatabaseRecord[] = sources.map((source) => ({
       ...source,
       working_copy_id: bySource.get(String(source.id))?.id ?? null,
       working_copy_version: bySource.get(String(source.id))?.version ?? null,
     }));
+    if (view === 'all') return statuses;
+    const { data: published, error: publishedError } = await this.client
+      .from('publication_candidates')
+      .select('source_id,source_revision_id,source_hash,activated_at')
+      .in(
+        'source_id',
+        sources.map((source) => String(source.id)),
+      )
+      .eq('state', 'published')
+      .order('activated_at', { ascending: false });
+    throwIfError(publishedError);
+    const latest = new Map<string, DatabaseRecord>();
+    for (const candidate of rows(published)) {
+      if (!latest.has(String(candidate.source_id)))
+        latest.set(String(candidate.source_id), candidate);
+    }
+    const { data: openCandidates, error: openCandidatesError } = await this.client
+      .from('publication_candidates')
+      .select('source_id')
+      .in(
+        'source_id',
+        sources.map((source) => String(source.id)),
+      )
+      .in('state', ['prepared', 'publishing', 'media_failed', 'ready_to_activate']);
+    throwIfError(openCandidatesError);
+    const actionable = new Set(
+      rows(openCandidates).map((candidate) => String(candidate.source_id)),
+    );
+    const revisionIds = statuses
+      .map((status) => String(bySource.get(String(status.id))?.source_revision_id || ''))
+      .filter(Boolean);
+    const { data: revisions, error: revisionsError } = revisionIds.length
+      ? await this.client
+          .from('article_source_revisions')
+          .select('id,source_hash')
+          .in('id', revisionIds)
+      : { data: [], error: null };
+    throwIfError(revisionsError);
+    const hashes = new Map(
+      rows(revisions).map((revision) => [String(revision.id), revision.source_hash]),
+    );
+    return statuses.filter((source) => {
+      const sourceId = String(source.id);
+      const publication = latest.get(sourceId);
+      const workingCopy = bySource.get(sourceId);
+      const revisionHash = stringValue(hashes.get(String(workingCopy?.source_revision_id)));
+      const publishedHash = stringValue(publication?.source_hash);
+      const hasPublishedCurrentRevision = Boolean(
+        publication &&
+        workingCopy &&
+        String(workingCopy.source_revision_id) === String(publication.source_revision_id) &&
+        revisionHash &&
+        revisionHash === publishedHash,
+      );
+      const hasActionableCandidate = actionable.has(sourceId);
+      if (view === 'active') return hasActionableCandidate || !hasPublishedCurrentRevision;
+      return !hasActionableCandidate && hasPublishedCurrentRevision;
+    });
   }
 
   async getSourceStatus(sourceId: string): Promise<DatabaseRecord | null> {
@@ -344,13 +434,20 @@ export class ContentJobService {
     return candidate;
   }
 
-  async listCandidateStatus(limit: number, articleId?: string): Promise<DatabaseRecord[]> {
+  async listCandidateStatus(
+    limit: number,
+    articleId?: string,
+    view: 'all' | 'active' | 'history' = 'all',
+  ): Promise<DatabaseRecord[]> {
     let query = this.client
       .from('publication_candidates')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(limit);
     if (articleId) query = query.eq('article_id', articleId);
+    if (view === 'active')
+      query = query.in('state', ['prepared', 'publishing', 'media_failed', 'ready_to_activate']);
+    if (view === 'history') query = query.in('state', ['published', 'superseded', 'cancelled']);
     const { data, error } = await query;
     throwIfError(error);
     return rows(data);
@@ -364,6 +461,31 @@ export class ContentJobService {
       .maybeSingle();
     throwIfError(error);
     return record(data);
+  }
+
+  async getJobStatus(jobId: string): Promise<DatabaseRecord | null> {
+    const { data, error } = await this.client
+      .from('content_jobs')
+      .select(
+        'id, job_type, candidate_id, state, attempts, max_attempts, run_after, locked_at, completed_at, last_error',
+      )
+      .eq('id', jobId)
+      .maybeSingle();
+    throwIfError(error);
+    const job = record(data);
+    if (!job) return null;
+    return {
+      id: job.id,
+      job_type: job.job_type,
+      candidate_id: job.candidate_id,
+      state: job.state,
+      attempts: Number(job.attempts) || 0,
+      max_attempts: Number(job.max_attempts) || 0,
+      run_after: job.run_after,
+      locked_at: job.locked_at,
+      completed_at: job.completed_at,
+      error: typeof job.last_error === 'string' ? job.last_error.slice(0, 500) : null,
+    };
   }
 
   async attestReview(
@@ -393,6 +515,7 @@ export class ContentJobService {
     candidateId: string,
     actorId: string,
     input: PublishRequest,
+    options: { immediate?: boolean } = {},
   ): Promise<DatabaseRecord> {
     const candidate = await this.getCandidateStatus(candidateId);
     if (!candidate) throw new Error('Publication candidate not found.');
@@ -405,17 +528,33 @@ export class ContentJobService {
         code: '409',
       });
     }
+    if (options.immediate) {
+      if (!['prepared', 'ready_to_activate'].includes(String(candidate.state))) {
+        throw Object.assign(
+          new Error('Only due prepared or ready-to-activate candidates can publish immediately.'),
+          { code: '409' },
+        );
+      }
+      const activationAt = Date.parse(String(candidate.activation_at));
+      if (!Number.isFinite(activationAt) || activationAt > Date.now()) {
+        throw Object.assign(
+          new Error('Scheduled publication cannot be published immediately before activation.'),
+          { code: '409' },
+        );
+      }
+    }
     const data = await this.enqueueJob({
       jobType: 'finalize_candidate',
       candidateId,
       dedupeKey: `finalize_candidate:${candidateId}:${input.idempotencyKey}`,
       payload: { requested_by: actorId, candidate_id: candidateId },
-      runAfter: candidate.activation_at || undefined,
+      runAfter: options.immediate ? undefined : candidate.activation_at || undefined,
       priority: 1,
     });
     return (
       data || {
         candidate_id: candidateId,
+        job_id: null,
         state: 'queued',
         run_after: candidate.activation_at,
       }
@@ -512,18 +651,35 @@ export class ContentJobService {
     if (job.job_type === 'sync_root') return this.syncRoot(job);
     if (job.job_type === 'sync_source') return this.syncSource(job);
     if (job.job_type === 'finalize_candidate')
-      return this.finalizeCandidate(String(job.candidate_id));
+      return this.finalizeCandidate(String(job.candidate_id), record(job.payload));
     throw new Error(`Unsupported content job type: ${String(job.job_type)}`);
   }
 
   private async syncRoot(job: DatabaseRecord): Promise<void> {
     const config = getNotionConfig();
     if (!config) throw new Error('Notion editorial integration is not configured.');
+    const requestedBy = stringValue(record(job.payload)?.requested_by);
+    if (!requestedBy) throw new Error('Content job is missing its requesting actor.');
     const childPages = await this.notionClient().listChildPages(config.rootPageId);
+    if (!childPages.length) return;
+    const { data: existingSources, error } = await this.client
+      .from('article_sources')
+      .select('id,external_id,configuration')
+      .eq('provider', 'notion')
+      .in(
+        'external_id',
+        childPages.map((page) => page.id),
+      );
+    throwIfError(error);
+    const byPageId = new Map(
+      rows(existingSources).map((source) => [String(source.external_id), source]),
+    );
     for (const page of childPages) {
+      const source = byPageId.get(page.id);
+      if (source && !shouldSyncNotionPage(source.configuration, page.lastEditedTime)) continue;
       await this.enqueueSourceSync({
         pageId: page.id,
-        actorId: 'worker',
+        actorId: requestedBy,
         idempotencyKey: `root:${String(job.id)}:${page.id}`,
       });
     }
@@ -615,6 +771,10 @@ export class ContentJobService {
       .from('article_sources')
       .update({
         source_url: snapshot.url,
+        configuration: mergeNotionSourceConfiguration(
+          source?.configuration,
+          snapshot.lastEditedTime,
+        ),
         state: snapshot.sourceState === 'archived' ? 'archived' : 'active',
         last_synced_at: new Date().toISOString(),
         last_error: null,
@@ -874,7 +1034,12 @@ export class ContentJobService {
     return withCollisionSuffix(base, index);
   }
 
-  private async finalizeCandidate(candidateId: string): Promise<void> {
+  private async finalizeCandidate(
+    candidateId: string,
+    payload: DatabaseRecord | null,
+  ): Promise<void> {
+    const actorId = stringValue(payload?.requested_by);
+    if (!actorId) throw new Error('Publication job is missing its requesting actor.');
     const candidate = await this.getCandidateStatus(candidateId);
     if (!candidate) throw new Error('Publication candidate not found.');
     const source = await this.getSourceStatus(String(candidate.source_id));
@@ -894,18 +1059,22 @@ export class ContentJobService {
       hashes.sourceHash !== candidate.source_hash ||
       hashes.renderHash !== candidate.render_hash
     ) {
-      await this.cancelStaleCandidate(candidateId, `source_changed:${hashes.sourceHash}`);
+      await this.cancelStaleCandidate(candidateId, `source_changed:${hashes.sourceHash}`, actorId);
       throw new Error('source_changed');
     }
     const { error } = await this.client.rpc('finalize_publication_candidate', {
       p_candidate_id: candidateId,
       p_expected_publication_version: Number(candidate.expected_publication_version),
-      p_actor_id: null,
+      p_actor_id: actorId,
     });
     throwIfError(error);
   }
 
-  private async cancelStaleCandidate(candidateId: string, reason: string): Promise<void> {
+  private async cancelStaleCandidate(
+    candidateId: string,
+    reason: string,
+    actorId: string,
+  ): Promise<void> {
     const { data: candidate, error: readError } = await this.client
       .from('publication_candidates')
       .select('source_id')
@@ -926,7 +1095,7 @@ export class ContentJobService {
     if (sourceId) {
       await this.enqueueSourceSync({
         sourceId,
-        actorId: 'worker',
+        actorId,
         idempotencyKey: `source-changed:${candidateId}:${reason}`,
       });
     }

@@ -77,6 +77,10 @@ textarea {
   line-height: 1.6;
 }
 button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
   padding: 0.68rem 1rem;
   border: 1px solid #315f46;
   border-radius: 0.55rem;
@@ -84,10 +88,34 @@ button {
   background: #315f46;
   font-weight: 750;
 }
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+.admin-button-spinner {
+  width: 0.92em;
+  height: 0.92em;
+  flex: 0 0 auto;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 999px;
+  animation: admin-spin 0.7s linear infinite;
+}
+button[data-loading='true'] {
+  cursor: wait;
+}
 button.secondary,
 .text-button {
   color: #315f46;
   background: transparent;
+}
+.publish-now {
+  border-color: #8b4b20;
+  background: #8b4b20;
+  box-shadow: 0 4px 12px rgb(107 54 25 / 0.16);
+}
+.publish-now:hover:not(:disabled) {
+  background: #743b18;
 }
 .admin-shell {
   min-height: 100vh;
@@ -145,6 +173,7 @@ button.secondary,
   box-shadow: 0 2px 8px rgb(20 40 27 / 0.06);
 }
 .admin-main {
+  min-width: 0;
   width: min(100%, 90rem);
   padding: clamp(1.2rem, 4vw, 3rem);
 }
@@ -168,6 +197,19 @@ button.secondary,
   gap: 0.65rem;
   margin-top: 2rem;
 }
+.admin-filter-tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+}
+.admin-filter-tabs button {
+  padding: 0.45rem 0.7rem;
+  font-size: 0.8rem;
+}
+.admin-filter-tabs button.active {
+  color: white;
+  background: #315f46;
+}
 .admin-list-item {
   display: flex;
   align-items: center;
@@ -179,11 +221,21 @@ button.secondary,
   text-align: left;
 }
 .admin-list-item span:first-child {
+  min-width: 0;
   display: grid;
   gap: 0.2rem;
 }
 .admin-list-item small {
   color: #728075;
+}
+.admin-breakable-text,
+.admin-breakable-id,
+.admin-candidate-detail,
+.admin-publication-diagnostic,
+.admin-publication-diagnostic p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .status {
   padding: 0.25rem 0.55rem;
@@ -443,14 +495,161 @@ legend {
   background: #e4eee5;
 }
 
+.admin-toast-region {
+  position: fixed;
+  z-index: 100;
+  top: 1rem;
+  right: 1rem;
+  width: min(26rem, calc(100vw - 2rem));
+  pointer-events: none;
+}
+.admin-toast {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: start;
+  padding: 0.9rem 0.85rem 0.9rem 1rem;
+  border: 1px solid;
+  border-radius: 0.8rem;
+  background: #fff;
+  box-shadow:
+    0 18px 48px rgb(21 36 25 / 0.2),
+    0 2px 8px rgb(21 36 25 / 0.08);
+  animation: admin-toast-in 180ms ease-out both;
+  pointer-events: auto;
+}
+.admin-toast p {
+  margin: 0.05rem 0 0;
+  color: #253129;
+  line-height: 1.45;
+}
+.admin-toast-mark {
+  display: grid;
+  width: 1.55rem;
+  height: 1.55rem;
+  place-items: center;
+  border-radius: 999px;
+  color: white;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+.admin-toast-success {
+  border-color: #a8c9b0;
+  box-shadow:
+    inset 3px 0 #2f7146,
+    0 18px 48px rgb(21 36 25 / 0.2),
+    0 2px 8px rgb(21 36 25 / 0.08);
+}
+.admin-toast-success .admin-toast-mark {
+  background: #2f7146;
+}
+.admin-toast-error {
+  border-color: #d8aaa2;
+  box-shadow:
+    inset 3px 0 #a34132,
+    0 18px 48px rgb(21 36 25 / 0.2),
+    0 2px 8px rgb(21 36 25 / 0.08);
+}
+.admin-toast-error .admin-toast-mark {
+  background: #a34132;
+}
+.admin-toast-close {
+  width: 1.8rem;
+  height: 1.8rem;
+  padding: 0;
+  border: 0;
+  color: #5e6b61;
+  background: transparent;
+  font-size: 1.3rem;
+  line-height: 1;
+}
+.admin-toast-close:hover {
+  color: #182019;
+  background: #eef1eb;
+}
+.admin-dialog-backdrop {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(24 32 25 / 0.42);
+  backdrop-filter: blur(4px);
+}
+.admin-dialog {
+  width: min(100%, 34rem);
+  padding: clamp(1.35rem, 4vw, 2rem);
+  border: 1px solid #d9dfd8;
+  border-radius: 1rem;
+  background: white;
+  box-shadow: 0 24px 80px rgb(20 40 27 / 0.24);
+}
+.admin-dialog h2 {
+  margin: 0.2rem 0 0.7rem;
+  font-family: Georgia, serif;
+  font-size: clamp(1.5rem, 4vw, 2.1rem);
+}
+.admin-dialog p:not(.admin-kicker) {
+  margin: 0;
+  color: #536057;
+  line-height: 1.7;
+}
+.admin-dialog-actions {
+  margin-top: 1.5rem;
+}
+.admin-upload-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #455c4b;
+}
+
+@keyframes admin-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes admin-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .admin-preview {
   max-height: 28rem;
   overflow: auto;
   margin-top: 1rem;
   padding: 1rem;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   background: #f5f7f3;
   border: 1px solid #d9dfd8;
+}
+.admin-publication-diagnostic {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid #d8aaa2;
+  border-left: 0.35rem solid #a34132;
+  border-radius: 0.65rem;
+  color: #6f2d24;
+  background: #fff6f4;
+}
+.admin-publication-diagnostic p {
+  margin: 0.35rem 0 0;
+}
+.admin-publication-success {
+  border-color: #a8c9b0;
+  border-left-color: #2f7146;
+  color: #205533;
+  background: #f1f8f2;
 }
 .admin-empty {
   padding: 2rem;
@@ -488,6 +687,38 @@ legend {
   .admin-login {
     gap: 2rem;
   }
+  .admin-main {
+    padding: 1rem;
+  }
+  .admin-title-row,
+  .button-row {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+  .admin-title-row > *,
+  .button-row > * {
+    max-width: 100%;
+  }
+  .admin-form-card {
+    min-width: 0;
+    padding: 1rem;
+  }
+  .admin-list-item {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+  }
+  .admin-list-item > span:last-child {
+    margin-left: auto;
+    text-align: right;
+  }
+  .admin-filter-tabs {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    padding-bottom: 0.25rem;
+    background: white;
+  }
   .admin-sidebar {
     position: sticky;
     z-index: 4;
@@ -508,5 +739,14 @@ legend {
   }
   .admin-account {
     gap: 0.45rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-toast {
+    animation: none;
+  }
+  .admin-button-spinner {
+    animation-duration: 1.4s;
   }
 }

@@ -48,6 +48,7 @@ export interface NotionBlock extends NotionObject {
 export interface NotionChildPage {
   id: string;
   title: string;
+  lastEditedTime: string | null;
 }
 
 export type NormalizedMark =
