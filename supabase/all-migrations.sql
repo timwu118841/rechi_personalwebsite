@@ -2110,3 +2110,16 @@ $$;
 revoke execute on function public.finalize_publication_candidate(uuid,bigint,uuid) from public, anon, authenticated;
 grant execute on function public.finalize_publication_candidate(uuid,bigint,uuid) to service_role;
 -- END supabase/migrations/202607170002_fix_publication_finalize_output_columns.sql
+
+-- BEGIN supabase/migrations/202607170003_add_manual_article_summary.sql
+-- Keep editorial summaries independent from Notion content.
+alter table public.article_working_copies
+  add column manual_summary text
+  check (
+    manual_summary is null
+    or char_length(btrim(manual_summary)) between 20 and 180
+  );
+
+comment on column public.article_working_copies.manual_summary is
+  'Admin-authored article summary. Notion synchronization must not populate or overwrite this field.';
+-- END supabase/migrations/202607170003_add_manual_article_summary.sql

@@ -429,6 +429,19 @@ button.admin-list-item[aria-pressed='true'] {
 .admin-source-sync-control button {
   justify-self: start;
 }
+.admin-source-summary-input {
+  display: grid;
+  gap: 0.3rem;
+}
+.admin-source-summary-input textarea {
+  min-height: 5.5rem;
+  resize: vertical;
+}
+.admin-source-summary-input small {
+  color: var(--admin-subtle);
+  font-size: 0.7rem;
+  text-align: right;
+}
 .admin-source-control-group button {
   white-space: nowrap;
 }

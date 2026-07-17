@@ -24,6 +24,7 @@ const WORKER_BUDGET_MS = 45_000;
 const JOB_LEASE_SECONDS = 120;
 const NOTION_LAST_EDITED_TIME_KEY = 'notion_last_edited_time';
 const NOTION_PAGE_TITLE_KEY = 'notion_page_title';
+const MANUAL_SUMMARY_PLACEHOLDER = '請先在管理後台設定文章摘要，再建立文章發布候選。';
 
 type DatabaseRecord = Record<string, any>;
 
@@ -106,24 +107,18 @@ export interface PromotedMedia {
 
 export function notionWorkingCopyText(snapshot: NotionSourceSnapshot): {
   title: string;
-  description: string;
   bodyMarkdown: string;
   tags: string[];
 } {
   const title = (snapshot.properties.title.trim() || '未命名 Notion 文章').slice(0, 120);
   const bodyMarkdown = renderNotionMarkdown(snapshot.document).trim() || title;
-  let description = snapshot.properties.description.trim().replace(/\s+/g, ' ');
-  if (description.length < 20)
-    description = snapshot.document.searchText.trim().replace(/\s+/g, ' ');
-  if (description.length < 20) description = `${title}的文章內容、實務重點與相關說明整理。`;
-  description = description.slice(0, 180);
   const tags = snapshot.properties.tags
     .map((tag) => tag.trim())
     .filter(
       (tag, index, values) => Boolean(tag) && tag.length <= 40 && values.indexOf(tag) === index,
     )
     .slice(0, 20);
-  return { title, description, bodyMarkdown, tags };
+  return { title, bodyMarkdown, tags };
 }
 
 export function buildNotionRevisionInsert(input: {
@@ -240,7 +235,7 @@ export class ContentJobService {
     if (!sources.length) return sources;
     const { data: workingCopies, error: workingError } = await this.client
       .from('article_working_copies')
-      .select('id,source_id,version,source_revision_id')
+      .select('id,source_id,version,source_revision_id,manual_summary')
       .in(
         'source_id',
         sources.map((source) => String(source.id)),
@@ -252,6 +247,7 @@ export class ContentJobService {
       page_title: record(source.configuration)?.[NOTION_PAGE_TITLE_KEY] ?? null,
       working_copy_id: bySource.get(String(source.id))?.id ?? null,
       working_copy_version: bySource.get(String(source.id))?.version ?? null,
+      manual_summary: bySource.get(String(source.id))?.manual_summary ?? null,
     }));
     if (view === 'all') return statuses;
     const { data: published, error: publishedError } = await this.client
@@ -321,6 +317,29 @@ export class ContentJobService {
       .maybeSingle();
     throwIfError(error);
     return record(data);
+  }
+
+  async updateSourceSummary(
+    sourceId: string,
+    expectedWorkingCopyVersion: number,
+    requestedSummary: string,
+  ): Promise<DatabaseRecord> {
+    const summary = requestedSummary.trim().replace(/\s+/g, ' ');
+    if (summary.length < 20 || summary.length > 180) {
+      throw Object.assign(new Error('文章摘要必須介於 20 到 180 個字元。'), { code: '400' });
+    }
+    const { data, error } = await this.client
+      .from('article_working_copies')
+      .update({ manual_summary: summary, description: summary })
+      .eq('source_id', sourceId)
+      .eq('version', expectedWorkingCopyVersion)
+      .select('id,source_id,version,manual_summary')
+      .maybeSingle();
+    throwIfError(error);
+    if (!data) {
+      throw Object.assign(new Error('摘要版本已變更，請重新整理後再試。'), { code: '409' });
+    }
+    return record(data) || {};
   }
 
   async bindSource(sourceId: string, articleId: string): Promise<DatabaseRecord> {
@@ -400,12 +419,18 @@ export class ContentJobService {
   ): Promise<unknown> {
     const { data: workingCopy, error: workingError } = await this.client
       .from('article_working_copies')
-      .select('id,version,article_id,slug')
+      .select('id,version,article_id,slug,description,manual_summary')
       .eq('source_id', sourceId)
       .maybeSingle();
     throwIfError(workingError);
     if (!workingCopy)
       throw new Error('Bind the source to an article before preparing a candidate.');
+    const manualSummary = stringValue(workingCopy.manual_summary)?.trim() || '';
+    if (manualSummary.length < 20 || manualSummary.length > 180) {
+      throw Object.assign(new Error('請先在管理後台設定 20 到 180 字的文章摘要。'), {
+        code: '400',
+      });
+    }
     if (requestedSlug !== undefined) {
       const slug = normalizeSlug(requestedSlug);
       const [{ data: articles, error: articleError }, { data: copies, error: copiesError }] =
@@ -986,7 +1011,10 @@ export class ContentJobService {
         .update({
           source_revision_id: revisionId,
           title: text.title,
-          description: text.description,
+          description:
+            stringValue(current.manual_summary) ||
+            stringValue(current.description) ||
+            MANUAL_SUMMARY_PLACEHOLDER,
           body_markdown: bodyMarkdown,
           body_json: null,
           body_html: null,
@@ -1018,7 +1046,7 @@ export class ContentJobService {
       article_id: articleId,
       slug,
       title: text.title,
-      description: text.description,
+      description: stringValue(article?.description) || MANUAL_SUMMARY_PLACEHOLDER,
       body_markdown: bodyMarkdown || text.bodyMarkdown,
       body_json: null,
       body_html: null,

@@ -51,6 +51,8 @@ interface NotionSourceStatus {
   article_id?: string | null;
   last_synced_at?: string | null;
   working_copy_id?: string | null;
+  working_copy_version?: number | null;
+  manual_summary?: string | null;
   name?: string | null;
   title?: string | null;
   page_title?: string | null;
@@ -839,6 +841,7 @@ function NotionEditorialPanel({
     bodyMarkdown: string;
   } | null>(null);
   const [slugForSource, setSlugForSource] = useState<Record<string, string>>({});
+  const [summaryForSource, setSummaryForSource] = useState<Record<string, string>>({});
   const [articleForSource, setArticleForSource] = useState<Record<string, string>>({});
   const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
   const [republishSourceId, setRepublishSourceId] = useState<string | null>(null);
@@ -879,6 +882,14 @@ function NotionEditorialPanel({
       ),
     ]);
     setSources(sourceData.sources);
+    setSummaryForSource((current) =>
+      Object.fromEntries(
+        sourceData.sources.map((source) => [
+          source.id,
+          current[source.id] ?? source.manual_summary ?? '',
+        ]),
+      ),
+    );
     setSourcesLoaded(true);
     setCandidates(candidateData.candidates);
     setSelected((current) =>
@@ -1133,7 +1144,36 @@ function NotionEditorialPanel({
     });
   };
 
+  const saveSummary = async (source: NotionSourceStatus) => {
+    const summary = (summaryForSource[source.id] || '').trim().replace(/\s+/g, ' ');
+    if (summary.length < 20 || summary.length > 180) {
+      showToast('error', '文章摘要必須介於 20 到 180 個字元。');
+      return;
+    }
+    if (!source.working_copy_version) {
+      showToast('error', '此來源目前沒有可編輯的文章版本。');
+      return;
+    }
+    await runAction(`summary-${source.id}`, async () => {
+      await api(`/api/admin/notion/sources/${source.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          summary,
+          expectedWorkingCopyVersion: source.working_copy_version,
+        }),
+      });
+      await refresh();
+      showToast('success', '文章摘要已儲存；後續 Notion 同步不會覆寫。');
+    });
+  };
+
   const prepare = async (sourceId: string) => {
+    const source = sources.find((item) => item.id === sourceId);
+    const savedSummary = source?.manual_summary?.trim() || '';
+    if (savedSummary.length < 20 || savedSummary.length > 180) {
+      showToast('error', '請先儲存 20 到 180 字的文章摘要。');
+      return;
+    }
     await runAction(`prepare-${sourceId}`, async () => {
       await api(`/api/admin/notion/sources/${sourceId}/candidate`, {
         method: 'POST',
@@ -1294,30 +1334,65 @@ function NotionEditorialPanel({
                       </div>
                     )}
                     {source.working_copy_id && (
-                      <div className="admin-source-control-group admin-source-slug-control">
-                        <label htmlFor={`source-slug-${source.id}`}>網址代稱</label>
-                        <input
-                          id={`source-slug-${source.id}`}
-                          value={slugForSource[source.id] || ''}
-                          onChange={(event) =>
-                            setSlugForSource((current) => ({
-                              ...current,
-                              [source.id]: event.target.value.normalize('NFC'),
-                            }))
-                          }
-                          maxLength={120}
-                          placeholder="依 Notion 設定或標題產生"
-                          aria-label="手動設定網址代稱"
-                        />
-                        <LoadingButton
-                          className="secondary"
-                          disabled={busy}
-                          loading={busyAction === `prepare-${source.id}`}
-                          onClick={() => void prepare(source.id)}
-                        >
-                          建立發布候選
-                        </LoadingButton>
-                      </div>
+                      <>
+                        <div className="admin-source-control-group admin-source-summary-control">
+                          <label htmlFor={`source-summary-${source.id}`}>文章摘要</label>
+                          <span className="admin-source-summary-input">
+                            <textarea
+                              id={`source-summary-${source.id}`}
+                              value={summaryForSource[source.id] || ''}
+                              onChange={(event) =>
+                                setSummaryForSource((current) => ({
+                                  ...current,
+                                  [source.id]: event.target.value,
+                                }))
+                              }
+                              rows={3}
+                              minLength={20}
+                              maxLength={180}
+                              placeholder="請手動輸入 20–180 字文章摘要"
+                              aria-label="文章摘要"
+                            />
+                            <small>{(summaryForSource[source.id] || '').trim().length}/180</small>
+                          </span>
+                          <LoadingButton
+                            className="secondary"
+                            disabled={busy}
+                            loading={busyAction === `summary-${source.id}`}
+                            onClick={() => void saveSummary(source)}
+                          >
+                            儲存摘要
+                          </LoadingButton>
+                        </div>
+                        <div className="admin-source-control-group admin-source-slug-control">
+                          <label htmlFor={`source-slug-${source.id}`}>網址代稱</label>
+                          <input
+                            id={`source-slug-${source.id}`}
+                            value={slugForSource[source.id] || ''}
+                            onChange={(event) =>
+                              setSlugForSource((current) => ({
+                                ...current,
+                                [source.id]: event.target.value.normalize('NFC'),
+                              }))
+                            }
+                            maxLength={120}
+                            placeholder="依 Notion 設定或標題產生"
+                            aria-label="手動設定網址代稱"
+                          />
+                          <LoadingButton
+                            className="secondary"
+                            disabled={
+                              busy ||
+                              (source.manual_summary?.trim().length || 0) < 20 ||
+                              (source.manual_summary?.trim().length || 0) > 180
+                            }
+                            loading={busyAction === `prepare-${source.id}`}
+                            onClick={() => void prepare(source.id)}
+                          >
+                            建立發布候選
+                          </LoadingButton>
+                        </div>
+                      </>
                     )}
                     {source.article_id && !source.working_copy_id && (
                       <p className="admin-source-note">此來源目前沒有可管理的草稿版本。</p>

@@ -5,6 +5,7 @@ import {
   parseLimit,
   parsePrepareRequest,
   parsePublishRequest,
+  parseSourceSummaryRequest,
   parseUnpublishRequest,
 } from './validation';
 
@@ -74,5 +75,20 @@ describe('content job request validation', () => {
       expectedWorkingCopyVersion: 2,
     });
     expect(() => parsePrepareRequest({ slug: '' })).toThrow(/slug/);
+  });
+
+  it('requires a manual source summary with a working-copy version', () => {
+    expect(
+      parseSourceSummaryRequest({
+        summary: '這是一段由管理者撰寫且符合長度要求的文章摘要。',
+        expectedWorkingCopyVersion: 4,
+      }),
+    ).toEqual({
+      summary: '這是一段由管理者撰寫且符合長度要求的文章摘要。',
+      expectedWorkingCopyVersion: 4,
+    });
+    expect(() => parseSourceSummaryRequest({ summary: '', expectedWorkingCopyVersion: 4 })).toThrow(
+      /summary/,
+    );
   });
 });

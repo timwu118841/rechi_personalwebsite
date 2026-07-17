@@ -1,6 +1,6 @@
 begin;
 
-select plan(68);
+select plan(69);
 
 select has_table('public', 'article_sources', 'Notion source table exists');
 select has_table('public', 'article_source_revisions', 'Immutable revision table exists');
@@ -12,6 +12,7 @@ select has_column('public', 'article_source_revisions', 'source_hash', 'Revision
 select has_column('public', 'article_source_revisions', 'render_hash', 'Revisions persist render hashes');
 select has_column('public', 'publication_candidates', 'candidate_hash', 'Candidates persist candidate hashes');
 select has_column('public', 'publication_candidates', 'publication_policy', 'Candidates persist their publication policy');
+select has_column('public', 'article_working_copies', 'manual_summary', 'Working copies keep an Admin-authored summary separate from Notion content');
 select has_function(
   'public',
   'save_article_with_policy',

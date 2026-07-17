@@ -87,6 +87,20 @@ export function parseBindRequest(value: unknown): { articleId: string } {
   return { articleId: requiredString(input.articleId, 'articleId', 128) };
 }
 
+export function parseSourceSummaryRequest(value: unknown): {
+  summary: string;
+  expectedWorkingCopyVersion: number;
+} {
+  const input = record(value);
+  return {
+    summary: requiredString(input.summary, 'summary', 180),
+    expectedWorkingCopyVersion: nonNegativeInteger(
+      input.expectedWorkingCopyVersion,
+      'expectedWorkingCopyVersion',
+    ),
+  };
+}
+
 export function parsePrepareRequest(value: unknown): {
   expectedWorkingCopyVersion?: number;
   expectedPublicationVersion?: number;

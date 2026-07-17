@@ -49,6 +49,8 @@ const activeSource = {
   state: 'active',
   article_id: publishedArticle.id,
   working_copy_id: 'working-copy-1',
+  working_copy_version: 3,
+  manual_summary: null as string | null,
   page_title: '勞動法實務筆記',
   last_synced_at: '2026-07-17T12:00:00.000Z',
 };
@@ -61,6 +63,7 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
         ? 'ready_to_activate'
         : activeCandidate.state,
     };
+    let source = { ...activeSource };
     let publishRequested = false;
     let articles = [
       publishedArticle,
@@ -78,8 +81,27 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
         body = { settings: { shortTitle: '測試站' } };
       else if (url.pathname === '/api/admin/taxonomies')
         body = { categories: [], contentTypes: [] };
-      else if (url.pathname === '/api/admin/notion/sources') body = { sources: [activeSource] };
-      else if (url.pathname === '/api/admin/notion/candidates') {
+      else if (url.pathname === '/api/admin/notion/sources') body = { sources: [source] };
+      else if (
+        url.pathname === `/api/admin/notion/sources/${activeSource.id}` &&
+        request.method() === 'PATCH'
+      ) {
+        const input = request.postDataJSON();
+        source = {
+          ...source,
+          manual_summary: input.summary,
+          working_copy_version: source.working_copy_version + 1,
+        };
+        requests.push(`SUMMARY ${JSON.stringify(input)}`);
+        body = {
+          workingCopy: {
+            id: source.working_copy_id,
+            source_id: source.id,
+            version: source.working_copy_version,
+            manual_summary: source.manual_summary,
+          },
+        };
+      } else if (url.pathname === '/api/admin/notion/candidates') {
         let candidates = [candidate];
         if (url.searchParams.get('view') === 'history') candidates = [historyCandidate];
         else if (publishRequested) candidates = [];
@@ -175,13 +197,24 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
 
     await page.getByRole('button', { name: '管理', exact: true }).click();
     await expect(page.getByLabel('手動設定網址代稱')).toBeVisible();
-    await expect(page.getByRole('button', { name: '建立發布候選' })).toBeVisible();
+    const prepareButton = page.getByRole('button', { name: '建立發布候選' });
+    await expect(prepareButton).toBeDisabled();
     await expect(page.getByRole('button', { name: '同步 Notion 最新內容' })).toBeVisible();
+    const summary = '這是一段由管理者手動撰寫的文章摘要，不會被 Notion 正文同步覆寫。';
+    await page.getByLabel('文章摘要').fill(summary);
+    await page.getByRole('button', { name: '儲存摘要' }).click();
+    await expect(page.getByRole('status')).toContainText('文章摘要已儲存');
+    await expect(prepareButton).toBeEnabled();
     await page.getByRole('button', { name: '收起' }).click();
     await expect(page.getByLabel('手動設定網址代稱')).toHaveCount(0);
 
     const requests = requestLogs.get(page) || [];
     expect(requests).toContain('GET /api/admin/notion/sources?view=all');
+    expect(
+      requests.some((entry) =>
+        entry.startsWith(`SUMMARY {"summary":"${summary}","expectedWorkingCopyVersion":3}`),
+      ),
+    ).toBe(true);
   });
 
   test('publishes an overdue prepared candidate and polls exact job/candidate endpoints', async ({
