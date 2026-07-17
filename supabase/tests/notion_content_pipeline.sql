@@ -1,6 +1,6 @@
 begin;
 
-select plan(63);
+select plan(69);
 
 select has_table('public', 'article_sources', 'Notion source table exists');
 select has_table('public', 'article_source_revisions', 'Immutable revision table exists');
@@ -12,6 +12,7 @@ select has_column('public', 'article_source_revisions', 'source_hash', 'Revision
 select has_column('public', 'article_source_revisions', 'render_hash', 'Revisions persist render hashes');
 select has_column('public', 'publication_candidates', 'candidate_hash', 'Candidates persist candidate hashes');
 select has_column('public', 'publication_candidates', 'publication_policy', 'Candidates persist their publication policy');
+select has_column('public', 'article_working_copies', 'manual_summary', 'Working copies keep an Admin-authored summary separate from Notion content');
 select has_function(
   'public',
   'save_article_with_policy',
@@ -424,8 +425,8 @@ insert into public.content_media_assets (
   'notion-file:block-manual', 'pending'
 );
 
-insert into public.content_media_references (candidate_id, asset_id, required)
-select id, '40000000-0000-0000-0000-000000000002', true
+insert into public.content_media_references (candidate_id, asset_id, reference_key, required)
+select id, '40000000-0000-0000-0000-000000000002', 'asset://notion/block-manual', true
 from public.publication_candidates
 where working_copy_id = '30000000-0000-0000-0000-000000000002';
 
@@ -604,6 +605,46 @@ select is(
   (select legal_reviewed from public.articles where slug = 'manual-review-defaults'),
   false,
   'Direct finalization leaves an existing false legal value unchanged'
+);
+
+select lives_ok(
+  $$select public.unpublish_article(
+    (select id from public.articles where slug = 'manual-review-defaults'),
+    1,
+    '90000000-0000-0000-0000-000000000003'
+  )$$,
+  'A published Notion-backed article can be unpublished'
+);
+
+select is(
+  (select status from public.articles where slug = 'manual-review-defaults'),
+  'unpublished',
+  'Unpublishing keeps the article as a manageable unpublished record'
+);
+
+select lives_ok(
+  $$select public.prepare_publication_candidate(
+    '30000000-0000-0000-0000-000000000003', 1, 2,
+    '90000000-0000-0000-0000-000000000001'
+  )$$,
+  'The retained Notion working copy can prepare a republish candidate'
+);
+
+select lives_ok(
+  $$select public.finalize_publication_candidate(
+    (select id from public.publication_candidates
+     where working_copy_id = '30000000-0000-0000-0000-000000000003'
+       and state = 'prepared'),
+    2,
+    '90000000-0000-0000-0000-000000000003'
+  )$$,
+  'An unpublished article can be republished from its Notion candidate'
+);
+
+select is(
+  (select status from public.articles where slug = 'manual-review-defaults'),
+  'published',
+  'Republishing restores the existing article without creating a replacement record'
 );
 
 select * from finish();

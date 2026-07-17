@@ -51,6 +51,9 @@ interface NotionSourceStatus {
   article_id?: string | null;
   last_synced_at?: string | null;
   working_copy_id?: string | null;
+  working_copy_version?: number | null;
+  manual_summary?: string | null;
+  slug?: string | null;
   name?: string | null;
   title?: string | null;
   page_title?: string | null;
@@ -99,6 +102,9 @@ interface ToastState {
 
 const statusLabels: Record<string, string> = {
   active: '已啟用',
+  onboarding: '設定中',
+  archived: '已封存',
+  error: '同步異常',
   draft: '草稿',
   prepared: '待發布',
   ready_to_activate: '可發布',
@@ -110,6 +116,7 @@ const statusLabels: Record<string, string> = {
   cancelled: '已取消',
   failed: '處理失敗',
   media_failed: '圖片處理失敗',
+  unknown: '狀態未知',
 };
 
 function StatusBadge({ state }: { state: string }) {
@@ -240,6 +247,14 @@ function sanitizedDiagnostic(value: unknown): string {
     })
     .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[憑證已隱藏]')
     .slice(0, 240);
+}
+
+function publicationFailureMessage(value: unknown): string {
+  const diagnostic = sanitizedDiagnostic(value);
+  if (/column reference .* is ambiguous/i.test(diagnostic)) {
+    return '發布服務的資料庫版本尚未更新，請套用最新 migration 後再試。';
+  }
+  return diagnostic ? `發布工作未完成：${diagnostic}` : '發布工作未完成，請重新整理後再試。';
 }
 
 /** Keep legacy/partially migrated rows from crashing the editor render. */
@@ -444,6 +459,7 @@ export function Dashboard({
   onSignOut: () => Promise<void>;
 }) {
   const [tab, setTab] = useState<Tab>('notion');
+  const [focusedNotionArticleId, setFocusedNotionArticleId] = useState<string | null>(null);
   const [articles, setArticles] = useState<AdminArticle[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [contentTypes, setContentTypes] = useState<ContentType[]>([]);
@@ -541,7 +557,7 @@ export function Dashboard({
           </button>
           <button className={tab === 'articles' ? 'active' : ''} onClick={() => setTab('articles')}>
             <span aria-hidden="true">▤</span>
-            已發布文章
+            文章管理
           </button>
           <p>網站設定</p>
           <button className={tab === 'site' ? 'active' : ''} onClick={() => setTab('site')}>
@@ -557,9 +573,24 @@ export function Dashboard({
           </button>
         </nav>
         <main className="admin-main">
-          {tab === 'notion' && <NotionEditorialPanel api={api} articles={articles} />}
+          {tab === 'notion' && (
+            <NotionEditorialPanel
+              api={api}
+              articles={articles}
+              focusedArticleId={focusedNotionArticleId}
+              onFocusHandled={() => setFocusedNotionArticleId(null)}
+            />
+          )}
           {tab === 'articles' && (
-            <PublishedArticlesPanel api={api} articles={articles} onReload={reload} />
+            <PublishedArticlesPanel
+              api={api}
+              articles={articles}
+              onReload={reload}
+              onRepublish={(articleId) => {
+                setFocusedNotionArticleId(articleId);
+                setTab('notion');
+              }}
+            />
           )}
           {tab === 'site' && settings && (
             <SiteSettingsPanel
@@ -607,20 +638,22 @@ function PublishedArticlesPanel({
   api,
   articles,
   onReload,
+  onRepublish,
 }: {
   api: DashboardApi;
   articles: AdminArticle[];
   onReload: () => Promise<void>;
+  onRepublish: (articleId: string) => void;
 }) {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<AdminArticle | null>(null);
   const [reason, setReason] = useState('');
   const [unpublishing, setUnpublishing] = useState(false);
   const { toast, showToast, dismissToast } = useToast();
-  const publishedArticles = useMemo(() => {
+  const managedArticles = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase('zh-TW');
     return articles
-      .filter((article) => article.status === 'published')
+      .filter((article) => article.status === 'published' || article.status === 'unpublished')
       .filter(
         (article) =>
           !normalizedQuery ||
@@ -647,7 +680,7 @@ function PublishedArticlesPanel({
       await onReload();
       setSelected(null);
       setReason('');
-      showToast('success', '文章已下架，公開頁面正在更新。');
+      showToast('success', '文章已下架；需要恢復時可從 Notion 同步最新內容後重新發布。');
     } catch (error) {
       showToast('error', error instanceof Error ? error.message : '文章下架失敗。');
     } finally {
@@ -661,12 +694,14 @@ function PublishedArticlesPanel({
       <div className="admin-title-row">
         <div>
           <p className="admin-kicker">文章管理</p>
-          <h1>已發布文章</h1>
-          <p className="admin-page-description">檢視網站上的文章，或將不再公開的內容安全下架。</p>
+          <h1>文章管理</h1>
+          <p className="admin-page-description">
+            管理公開與已下架文章；重新發布時會回到綁定的 Notion 來源同步最新內容。
+          </p>
         </div>
         <span className="admin-summary-badge">
-          <strong>{articles.filter((article) => article.status === 'published').length}</strong>
-          篇公開文章
+          <strong>{managedArticles.length}</strong>
+          篇可管理文章
         </span>
       </div>
 
@@ -680,15 +715,18 @@ function PublishedArticlesPanel({
             placeholder="輸入標題或網址代稱"
           />
         </label>
-        <p>文章內容請回到 Notion 編輯；此處只管理目前網站上的發布狀態。</p>
+        <p>文章內容以 Notion 為準；已下架文章仍保留，可同步最新內容後重新發布。</p>
       </div>
 
       <div className="admin-article-grid" aria-live="polite">
-        {publishedArticles.map((article) => (
+        {managedArticles.map((article) => (
           <article className="admin-article-card" key={article.id}>
             <div className="admin-article-card-topline">
               <StatusBadge state={article.status} />
-              <time dateTime={article.publishedAt}>{formatAdminDate(article.publishedAt)}</time>
+              <time dateTime={article.publishedAt}>
+                {article.status === 'published' ? '發布於 ' : '最後發布於 '}
+                {formatAdminDate(article.publishedAt)}
+              </time>
             </div>
             <div>
               <h2>{article.title}</h2>
@@ -699,25 +737,33 @@ function PublishedArticlesPanel({
               <strong>/articles/{article.slug}</strong>
             </div>
             <div className="admin-article-actions">
-              <a
-                className="admin-link-button"
-                href={`/articles/${encodeURIComponent(article.slug)}/`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                檢視文章
-              </a>
-              <button className="admin-danger-button" onClick={() => setSelected(article)}>
-                下架文章
-              </button>
+              {article.status === 'published' ? (
+                <>
+                  <a
+                    className="admin-link-button"
+                    href={`/articles/${encodeURIComponent(article.slug)}/`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    檢視文章
+                  </a>
+                  <button className="admin-danger-button" onClick={() => setSelected(article)}>
+                    下架文章
+                  </button>
+                </>
+              ) : (
+                <button type="button" onClick={() => onRepublish(article.id)}>
+                  從 Notion 重新發布
+                </button>
+              )}
             </div>
           </article>
         ))}
-        {!publishedArticles.length && (
+        {!managedArticles.length && (
           <div className="admin-form-card admin-empty admin-article-empty">
-            <strong>{query.trim() ? '找不到符合條件的文章' : '目前沒有已發布文章'}</strong>
+            <strong>{query.trim() ? '找不到符合條件的文章' : '目前沒有可管理文章'}</strong>
             <span>
-              {query.trim() ? '請嘗試其他標題或網址代稱。' : '完成發布後，文章會顯示在這裡。'}
+              {query.trim() ? '請嘗試其他標題或網址代稱。' : '完成首次發布後，文章會顯示在這裡。'}
             </span>
           </div>
         )}
@@ -775,7 +821,17 @@ function PublishedArticlesPanel({
   );
 }
 
-function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: AdminArticle[] }) {
+function NotionEditorialPanel({
+  api,
+  articles,
+  focusedArticleId,
+  onFocusHandled,
+}: {
+  api: DashboardApi;
+  articles: AdminArticle[];
+  focusedArticleId: string | null;
+  onFocusHandled: () => void;
+}) {
   const [pageId, setPageId] = useState('');
   const [sources, setSources] = useState<NotionSourceStatus[]>([]);
   const [candidates, setCandidates] = useState<PublicationCandidateStatus[]>([]);
@@ -786,7 +842,11 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
     bodyMarkdown: string;
   } | null>(null);
   const [slugForSource, setSlugForSource] = useState<Record<string, string>>({});
+  const [summaryForSource, setSummaryForSource] = useState<Record<string, string>>({});
   const [articleForSource, setArticleForSource] = useState<Record<string, string>>({});
+  const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
+  const [republishSourceId, setRepublishSourceId] = useState<string | null>(null);
+  const [sourcesLoaded, setSourcesLoaded] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [candidateFilter, setCandidateFilter] = useState<CandidateFilter>('active');
@@ -810,15 +870,28 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
       candidateFilter === 'history' ? history.has(candidate.state) : !history.has(candidate.state),
     );
   }, [candidateFilter, candidates]);
+  const articlesById = useMemo(
+    () => new Map(articles.map((article) => [article.id, article])),
+    [articles],
+  );
 
   const refresh = async (): Promise<void> => {
     const [sourceData, candidateData] = await Promise.all([
-      api<{ sources: NotionSourceStatus[] }>('/api/admin/notion/sources?view=active'),
+      api<{ sources: NotionSourceStatus[] }>('/api/admin/notion/sources?view=all'),
       api<{ candidates: PublicationCandidateStatus[] }>(
         `/api/admin/notion/candidates?view=${candidateFilter}`,
       ),
     ]);
     setSources(sourceData.sources);
+    setSummaryForSource((current) =>
+      Object.fromEntries(
+        sourceData.sources.map((source) => [
+          source.id,
+          current[source.id] ?? source.manual_summary ?? '',
+        ]),
+      ),
+    );
+    setSourcesLoaded(true);
     setCandidates(candidateData.candidates);
     setSelected((current) =>
       current ? candidateData.candidates.find((item) => item.id === current.id) || null : null,
@@ -828,6 +901,19 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
   useEffect(() => {
     void refresh().catch((error) => showToast('error', (error as Error).message));
   }, [candidateFilter]);
+
+  useEffect(() => {
+    if (!focusedArticleId || !sourcesLoaded) return;
+    const source = sources.find((item) => item.article_id === focusedArticleId);
+    if (source) {
+      setExpandedSourceId(source.id);
+      setRepublishSourceId(source.id);
+      showToast('success', '已找到原本的 Notion 來源；請先同步最新內容，再建立發布候選。');
+    } else {
+      showToast('error', '找不到這篇文章綁定的 Notion 來源，請先同步主要頁面。');
+    }
+    onFocusHandled();
+  }, [focusedArticleId, onFocusHandled, showToast, sources, sourcesLoaded]);
 
   useEffect(() => {
     if (!selected?.activation_at || canPublishImmediately) return;
@@ -916,6 +1002,12 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
             message: `候選已失效（${diagnosticState(candidate.state)}）。候選 ID：${candidateId}；工作 ID：${jobId}。`,
           };
         }
+        if (job.error && job.state !== 'succeeded') {
+          return {
+            kind: 'failure' as const,
+            message: publicationFailureMessage(job.error),
+          };
+        }
         if (['failed', 'cancelled'].includes(String(job.state))) {
           const error = sanitizedDiagnostic(job.error);
           return {
@@ -976,6 +1068,14 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
       { root: true, idempotencyKey: operationId() },
       'Root 直屬頁面',
       'sync-root',
+    );
+  };
+
+  const syncSource = async (sourceId: string) => {
+    await enqueueAndRun(
+      { sourceId, idempotencyKey: operationId() },
+      'Notion 最新內容',
+      `sync-source-${sourceId}`,
     );
   };
 
@@ -1045,7 +1145,36 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
     });
   };
 
+  const saveSummary = async (source: NotionSourceStatus) => {
+    const summary = (summaryForSource[source.id] || '').trim().replace(/\s+/g, ' ');
+    if (summary.length < 20 || summary.length > 180) {
+      showToast('error', '文章摘要必須介於 20 到 180 個字元。');
+      return;
+    }
+    if (!source.working_copy_version) {
+      showToast('error', '此來源目前沒有可編輯的文章版本。');
+      return;
+    }
+    await runAction(`summary-${source.id}`, async () => {
+      await api(`/api/admin/notion/sources/${source.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          summary,
+          expectedWorkingCopyVersion: source.working_copy_version,
+        }),
+      });
+      await refresh();
+      showToast('success', '文章摘要已儲存；後續 Notion 同步不會覆寫。');
+    });
+  };
+
   const prepare = async (sourceId: string) => {
+    const source = sources.find((item) => item.id === sourceId);
+    const savedSummary = source?.manual_summary?.trim() || '';
+    if (savedSummary.length < 20 || savedSummary.length > 180) {
+      showToast('error', '請先儲存 20 到 180 字的文章摘要。');
+      return;
+    }
     await runAction(`prepare-${sourceId}`, async () => {
       await api(`/api/admin/notion/sources/${sourceId}/candidate`, {
         method: 'POST',
@@ -1118,81 +1247,162 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
           <div className="admin-card-heading">
             <div>
               <p className="admin-section-label">已連接內容</p>
-              <h2>來源狀態</h2>
+              <h2>Root Page 來源</h2>
             </div>
             <span className="admin-count">{sources.length}</span>
           </div>
-          <div className="admin-list">
+          <p className="admin-source-list-description">
+            顯示 Root Page 已同步的全部文章，包括已發布與已下架內容。
+          </p>
+          <div className="admin-source-list">
             {sources.map((source) => (
-              <div className="admin-list-item" key={source.id}>
-                <span>
-                  <strong>
-                    {source.name ||
-                      source.title ||
-                      source.page_title ||
-                      (source.external_id === 'root' ? 'Root 直屬頁面' : 'Notion 頁面')}
-                  </strong>
-                  <small>最近同步：{formatAdminDate(source.last_synced_at)}</small>
-                </span>
-                <span className="admin-list-actions">
-                  <StatusBadge state={source.state} />
-                  {!source.article_id && (
-                    <span className="button-row">
-                      <select
-                        value={articleForSource[source.id] || ''}
-                        onChange={(event) =>
-                          setArticleForSource((current) => ({
-                            ...current,
-                            [source.id]: event.target.value,
-                          }))
-                        }
-                        aria-label="選擇要綁定的文章"
-                      >
-                        <option value="">選擇既有文章</option>
-                        {articles.map((article) => (
-                          <option value={article.id} key={article.id}>
-                            {article.title}
-                          </option>
-                        ))}
-                      </select>
+              <div className="admin-source-row" key={source.id}>
+                <div className="admin-source-summary">
+                  <span className="admin-source-name">
+                    <strong>
+                      {source.name ||
+                        source.title ||
+                        source.page_title ||
+                        (source.external_id === 'root' ? '主要頁面' : 'Notion 頁面')}
+                    </strong>
+                    <small className="admin-source-slug" title={source.slug || '尚未設定'}>
+                      Slug：{source.slug || '尚未設定'}
+                    </small>
+                    <small>最近同步：{formatAdminDate(source.last_synced_at)}</small>
+                  </span>
+                  <span className="admin-source-statuses">
+                    <StatusBadge state={source.state} />
+                    {source.article_id && articlesById.get(source.article_id) && (
+                      <StatusBadge state={articlesById.get(source.article_id)?.status || 'draft'} />
+                    )}
+                  </span>
+                  <button
+                    type="button"
+                    className="secondary admin-source-toggle"
+                    aria-expanded={expandedSourceId === source.id}
+                    aria-controls={`source-controls-${source.id}`}
+                    onClick={() =>
+                      setExpandedSourceId((current) => (current === source.id ? null : source.id))
+                    }
+                  >
+                    {expandedSourceId === source.id ? '收起' : '管理'}
+                  </button>
+                </div>
+                {expandedSourceId === source.id && (
+                  <div className="admin-source-controls" id={`source-controls-${source.id}`}>
+                    {republishSourceId === source.id && (
+                      <p className="admin-source-note">
+                        重新發布流程：先同步 Notion 最新內容，再建立候選、預覽並發布。
+                      </p>
+                    )}
+                    <div className="admin-source-control-group admin-source-sync-control">
+                      <span>Notion 內容</span>
                       <LoadingButton
                         className="secondary"
                         disabled={busy}
-                        loading={busyAction === `bind-${source.id}`}
-                        onClick={() => void bind(source.id)}
+                        loading={busyAction === `sync-source-${source.id}`}
+                        onClick={() => void syncSource(source.id)}
                       >
-                        綁定
+                        同步 Notion 最新內容
                       </LoadingButton>
-                    </span>
-                  )}
-                  {source.working_copy_id && (
-                    <span className="button-row admin-slug-row">
-                      <label className="admin-inline-field">
-                        <span>網址代稱</span>
-                        <input
-                          value={slugForSource[source.id] || ''}
+                    </div>
+                    {!source.article_id && (
+                      <div className="admin-source-control-group">
+                        <label htmlFor={`source-article-${source.id}`}>綁定既有文章</label>
+                        <select
+                          id={`source-article-${source.id}`}
+                          value={articleForSource[source.id] || ''}
                           onChange={(event) =>
-                            setSlugForSource((current) => ({
+                            setArticleForSource((current) => ({
                               ...current,
-                              [source.id]: event.target.value.normalize('NFC'),
+                              [source.id]: event.target.value,
                             }))
                           }
-                          maxLength={120}
-                          placeholder="依 Notion 設定或標題產生"
-                          aria-label="手動設定網址代稱"
-                        />
-                      </label>
-                      <LoadingButton
-                        className="secondary"
-                        disabled={busy}
-                        loading={busyAction === `prepare-${source.id}`}
-                        onClick={() => void prepare(source.id)}
-                      >
-                        建立發布候選
-                      </LoadingButton>
-                    </span>
-                  )}
-                </span>
+                          aria-label="選擇要綁定的文章"
+                        >
+                          <option value="">選擇既有文章</option>
+                          {articles.map((article) => (
+                            <option value={article.id} key={article.id}>
+                              {article.title}
+                            </option>
+                          ))}
+                        </select>
+                        <LoadingButton
+                          className="secondary"
+                          disabled={busy}
+                          loading={busyAction === `bind-${source.id}`}
+                          onClick={() => void bind(source.id)}
+                        >
+                          綁定
+                        </LoadingButton>
+                      </div>
+                    )}
+                    {source.working_copy_id && (
+                      <>
+                        <div className="admin-source-control-group admin-source-summary-control">
+                          <label htmlFor={`source-summary-${source.id}`}>文章摘要</label>
+                          <span className="admin-source-summary-input">
+                            <textarea
+                              id={`source-summary-${source.id}`}
+                              value={summaryForSource[source.id] || ''}
+                              onChange={(event) =>
+                                setSummaryForSource((current) => ({
+                                  ...current,
+                                  [source.id]: event.target.value,
+                                }))
+                              }
+                              rows={3}
+                              minLength={20}
+                              maxLength={180}
+                              placeholder="請手動輸入 20–180 字文章摘要"
+                              aria-label="文章摘要"
+                            />
+                            <small>{(summaryForSource[source.id] || '').trim().length}/180</small>
+                          </span>
+                          <LoadingButton
+                            className="secondary"
+                            disabled={busy}
+                            loading={busyAction === `summary-${source.id}`}
+                            onClick={() => void saveSummary(source)}
+                          >
+                            儲存摘要
+                          </LoadingButton>
+                        </div>
+                        <div className="admin-source-control-group admin-source-slug-control">
+                          <label htmlFor={`source-slug-${source.id}`}>網址代稱</label>
+                          <input
+                            id={`source-slug-${source.id}`}
+                            value={slugForSource[source.id] || ''}
+                            onChange={(event) =>
+                              setSlugForSource((current) => ({
+                                ...current,
+                                [source.id]: event.target.value.normalize('NFC'),
+                              }))
+                            }
+                            maxLength={120}
+                            placeholder="依 Notion 設定或標題產生"
+                            aria-label="手動設定網址代稱"
+                          />
+                          <LoadingButton
+                            className="secondary"
+                            disabled={
+                              busy ||
+                              (source.manual_summary?.trim().length || 0) < 20 ||
+                              (source.manual_summary?.trim().length || 0) > 180
+                            }
+                            loading={busyAction === `prepare-${source.id}`}
+                            onClick={() => void prepare(source.id)}
+                          >
+                            建立發布候選
+                          </LoadingButton>
+                        </div>
+                      </>
+                    )}
+                    {source.article_id && !source.working_copy_id && (
+                      <p className="admin-source-note">此來源目前沒有可管理的草稿版本。</p>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
             {!sources.length && <p className="admin-empty">尚未綁定 Notion 來源。</p>}

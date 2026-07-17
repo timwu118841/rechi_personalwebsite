@@ -86,6 +86,7 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
       source_id: source.id,
       version: 1,
       source_revision_id: `revision-${index + 1}`,
+      slug: `${source.id}-slug`,
     }));
     const publications = sourceRows.map((source, index) => ({
       source_id: source.id,
@@ -151,7 +152,7 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
     const service = new ContentJobService(clientWith({ from }));
 
     await expect(service.listSourceStatus(25, undefined, 'active')).resolves.toEqual([
-      expect.objectContaining({ id: 'open' }),
+      expect.objectContaining({ id: 'open', slug: 'open-slug' }),
       expect.objectContaining({ id: 'changed' }),
     ]);
     await expect(service.listSourceStatus(25, undefined, 'history')).resolves.toEqual([
@@ -258,7 +259,14 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
       return {
         select: () => ({
           eq: () => ({
-            maybeSingle: async () => ({ data: { id: 'working-copy-id' }, error: null }),
+            maybeSingle: async () => ({
+              data: {
+                id: 'working-copy-id',
+                description: '這是一段由管理者手動設定且符合長度限制的文章摘要。',
+                manual_summary: '這是一段由管理者手動設定且符合長度限制的文章摘要。',
+              },
+              error: null,
+            }),
           }),
         }),
         update(value: Record<string, unknown>) {
@@ -293,6 +301,9 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
       'source-update',
     ]);
     expect(events[0]?.value).not.toHaveProperty('configuration');
+    expect(events[1]?.value).toMatchObject({
+      description: '這是一段由管理者手動設定且符合長度限制的文章摘要。',
+    });
     expect(events[2]?.value).toMatchObject({
       configuration: {
         editorial_mode: 'shadow',
@@ -368,7 +379,12 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
         select: () => ({
           eq: () => ({
             maybeSingle: async () => ({
-              data: { id: 'working-copy-id', version: 3, article_id: null },
+              data: {
+                id: 'working-copy-id',
+                version: 3,
+                article_id: null,
+                manual_summary: '這是一段由管理者手動設定且符合長度限制的文章摘要。',
+              },
               error: null,
             }),
           }),
@@ -389,6 +405,71 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
     });
   });
 
+  it('stores a normalized Admin summary with working-copy compare-and-swap protection', async () => {
+    const updates: unknown[] = [];
+    const from = vi.fn((table: string) => {
+      expect(table).toBe('article_working_copies');
+      return {
+        update(value: unknown) {
+          updates.push(value);
+          return {
+            eq: () => ({
+              eq: () => ({
+                select: () => ({
+                  maybeSingle: async () => ({
+                    data: {
+                      id: 'copy-id',
+                      source_id: 'source-id',
+                      version: 5,
+                      manual_summary: '這是一段由管理者手動設定且符合長度限制的文章摘要。',
+                    },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        },
+      };
+    });
+    const service = new ContentJobService(clientWith({ from }));
+
+    await expect(
+      service.updateSourceSummary(
+        'source-id',
+        4,
+        '  這是一段由管理者手動設定且符合長度限制的文章摘要。  ',
+      ),
+    ).resolves.toMatchObject({ version: 5 });
+    expect(updates).toEqual([
+      {
+        manual_summary: '這是一段由管理者手動設定且符合長度限制的文章摘要。',
+        description: '這是一段由管理者手動設定且符合長度限制的文章摘要。',
+      },
+    ]);
+  });
+
+  it('refuses candidate preparation until an Admin summary has been saved', async () => {
+    const from = vi.fn((table: string) => {
+      expect(table).toBe('article_working_copies');
+      return {
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({
+              data: { id: 'working-copy-id', version: 3, article_id: null, manual_summary: null },
+              error: null,
+            }),
+          }),
+        }),
+      };
+    });
+    const service = new ContentJobService(clientWith({ from }));
+
+    await expect(service.prepareCandidate('source-id', 'admin-id')).rejects.toThrow(
+      '請先在管理後台設定',
+    );
+  });
+
   it('normalizes and persists a non-colliding manual slug before preparing', async () => {
     const rpc = vi.fn(async () => ({ data: [{ id: 'candidate-id' }], error: null }));
     const updates: unknown[] = [];
@@ -398,7 +479,13 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
           select: () => ({
             eq: () => ({
               maybeSingle: async () => ({
-                data: { id: 'copy-id', version: 3, article_id: null, slug: 'old-slug' },
+                data: {
+                  id: 'copy-id',
+                  version: 3,
+                  article_id: null,
+                  slug: 'old-slug',
+                  manual_summary: '這是一段由管理者手動設定且符合長度限制的文章摘要。',
+                },
                 error: null,
               }),
             }),
@@ -449,7 +536,12 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
           select: () => ({
             eq: () => ({
               maybeSingle: async () => ({
-                data: { id: 'working-copy-id', version: 1, article_id: null },
+                data: {
+                  id: 'working-copy-id',
+                  version: 1,
+                  article_id: null,
+                  manual_summary: '這是一段由管理者手動設定且符合長度限制的文章摘要。',
+                },
                 error: null,
               }),
             }),
@@ -500,7 +592,7 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
     ]);
   });
 
-  it('derives valid metadata for a new working copy when optional Notion fields are empty', () => {
+  it('derives title, body, and tags without deriving a summary from Notion content', () => {
     expect(
       notionWorkingCopyText({
         pageId: 'page-1',
@@ -520,8 +612,28 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
       title: '新文章',
       tags: ['法律'],
       bodyMarkdown: '新文章',
-      description: expect.stringMatching(/^.{20,180}$/u),
     });
+    expect(
+      notionWorkingCopyText({
+        pageId: 'page-1',
+        sourceState: 'active',
+        lastEditedTime: null,
+        url: null,
+        properties: {
+          title: '新文章',
+          description: 'Notion property summary must be ignored',
+          tags: [],
+          slug: null,
+          values: {},
+        },
+        document: {
+          version: 1,
+          blocks: [],
+          searchText: '正文也不能被自動截取成摘要',
+          mediaSourceRefs: [],
+        },
+      }),
+    ).not.toHaveProperty('description');
   });
 
   it('builds a complete immutable revision before insertion and dedupes by render content', () => {
