@@ -23,6 +23,7 @@ const WORKER_JOB_LIMIT = 5;
 const WORKER_BUDGET_MS = 45_000;
 const JOB_LEASE_SECONDS = 120;
 const NOTION_LAST_EDITED_TIME_KEY = 'notion_last_edited_time';
+const NOTION_PAGE_TITLE_KEY = 'notion_page_title';
 
 type DatabaseRecord = Record<string, any>;
 
@@ -68,11 +69,14 @@ function validNotionTimestamp(value: unknown): value is string {
 export function mergeNotionSourceConfiguration(
   configuration: unknown,
   lastEditedTime: string | null,
+  pageTitle?: string | null,
 ): DatabaseRecord {
   const current = record(configuration) ?? {};
-  return validNotionTimestamp(lastEditedTime)
+  const next = validNotionTimestamp(lastEditedTime)
     ? { ...current, [NOTION_LAST_EDITED_TIME_KEY]: lastEditedTime }
     : current;
+  const normalizedTitle = typeof pageTitle === 'string' ? pageTitle.trim().slice(0, 120) : '';
+  return normalizedTitle ? { ...next, [NOTION_PAGE_TITLE_KEY]: normalizedTitle } : next;
 }
 
 export function shouldSyncNotionPage(
@@ -774,6 +778,7 @@ export class ContentJobService {
         configuration: mergeNotionSourceConfiguration(
           source?.configuration,
           snapshot.lastEditedTime,
+          snapshot.properties.title,
         ),
         state: snapshot.sourceState === 'archived' ? 'archived' : 'active',
         last_synced_at: new Date().toISOString(),
