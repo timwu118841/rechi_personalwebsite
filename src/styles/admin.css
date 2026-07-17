@@ -27,8 +27,12 @@ select {
 }
 button {
   cursor: pointer;
-  transition: transform 180ms ease, background-color 180ms ease, border-color 180ms ease,
-    box-shadow 180ms ease, color 180ms ease;
+  transition:
+    transform 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease;
 }
 button:hover:not(:disabled) {
   transform: translateY(-1px);
