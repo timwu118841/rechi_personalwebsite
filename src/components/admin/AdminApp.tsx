@@ -53,6 +53,7 @@ interface NotionSourceStatus {
   working_copy_id?: string | null;
   working_copy_version?: number | null;
   manual_summary?: string | null;
+  slug?: string | null;
   name?: string | null;
   title?: string | null;
   page_title?: string | null;
@@ -1264,6 +1265,9 @@ function NotionEditorialPanel({
                         source.page_title ||
                         (source.external_id === 'root' ? '主要頁面' : 'Notion 頁面')}
                     </strong>
+                    <small className="admin-source-slug" title={source.slug || '尚未設定'}>
+                      Slug：{source.slug || '尚未設定'}
+                    </small>
                     <small>最近同步：{formatAdminDate(source.last_synced_at)}</small>
                   </span>
                   <span className="admin-source-statuses">

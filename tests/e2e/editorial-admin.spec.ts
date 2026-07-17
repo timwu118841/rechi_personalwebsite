@@ -51,6 +51,7 @@ const activeSource = {
   working_copy_id: 'working-copy-1',
   working_copy_version: 3,
   manual_summary: null as string | null,
+  slug: 'published-article',
   page_title: '勞動法實務筆記',
   last_synced_at: '2026-07-17T12:00:00.000Z',
 };
@@ -192,6 +193,7 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     const sourceRow = page.locator('.admin-source-row');
     await expect(sourceRow).toHaveCount(1);
     await expect(sourceRow).toContainText(activeSource.page_title);
+    await expect(sourceRow).toContainText(`Slug：${activeSource.slug}`);
     await expect(page.getByLabel('狀態：已啟用')).toBeVisible();
     await expect(page.getByLabel('手動設定網址代稱')).toHaveCount(0);
 

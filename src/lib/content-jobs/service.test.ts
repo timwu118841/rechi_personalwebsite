@@ -86,6 +86,7 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
       source_id: source.id,
       version: 1,
       source_revision_id: `revision-${index + 1}`,
+      slug: `${source.id}-slug`,
     }));
     const publications = sourceRows.map((source, index) => ({
       source_id: source.id,
@@ -151,7 +152,7 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
     const service = new ContentJobService(clientWith({ from }));
 
     await expect(service.listSourceStatus(25, undefined, 'active')).resolves.toEqual([
-      expect.objectContaining({ id: 'open' }),
+      expect.objectContaining({ id: 'open', slug: 'open-slug' }),
       expect.objectContaining({ id: 'changed' }),
     ]);
     await expect(service.listSourceStatus(25, undefined, 'history')).resolves.toEqual([

@@ -392,6 +392,11 @@ button.admin-list-item[aria-pressed='true'] {
   color: var(--admin-subtle);
   font-size: 0.72rem;
 }
+.admin-source-name .admin-source-slug {
+  color: #59647d;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 700;
+}
 .admin-source-toggle {
   min-width: 3.8rem;
   padding: 0.48rem 0.7rem;

@@ -235,7 +235,7 @@ export class ContentJobService {
     if (!sources.length) return sources;
     const { data: workingCopies, error: workingError } = await this.client
       .from('article_working_copies')
-      .select('id,source_id,version,source_revision_id,manual_summary')
+      .select('id,source_id,version,source_revision_id,manual_summary,slug')
       .in(
         'source_id',
         sources.map((source) => String(source.id)),
@@ -248,6 +248,7 @@ export class ContentJobService {
       working_copy_id: bySource.get(String(source.id))?.id ?? null,
       working_copy_version: bySource.get(String(source.id))?.version ?? null,
       manual_summary: bySource.get(String(source.id))?.manual_summary ?? null,
+      slug: bySource.get(String(source.id))?.slug ?? null,
     }));
     if (view === 'all') return statuses;
     const { data: published, error: publishedError } = await this.client
