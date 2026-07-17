@@ -27,8 +27,12 @@ select {
 }
 button {
   cursor: pointer;
-  transition: transform 180ms ease, background-color 180ms ease, border-color 180ms ease,
-    box-shadow 180ms ease, color 180ms ease;
+  transition:
+    transform 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease;
 }
 button:hover:not(:disabled) {
   transform: translateY(-1px);
@@ -350,7 +354,7 @@ button.secondary,
 }
 .tiptap-editor .ProseMirror:focus {
   border-color: var(--admin-accent);
-  box-shadow: 0 0 0 2px rgb(49 95 70 / 0.12);
+  box-shadow: 0 0 0 2px rgb(37 99 235 / 0.16);
 }
 .tiptap-canvas {
   position: relative;
