@@ -26,6 +26,7 @@ interface AdminArticle {
   body: string;
   bodyJson?: unknown;
   status: 'draft' | 'published' | 'unpublished';
+  publicationVersion?: number;
   publishedAt: string;
   contentType: string;
   category: string;
@@ -39,7 +40,7 @@ interface AdminArticle {
   legalReviewed: boolean;
 }
 
-type Tab = 'notion' | 'site' | 'taxonomies';
+type Tab = 'notion' | 'articles' | 'site' | 'taxonomies';
 
 type DashboardApi = <T>(path: string, init?: RequestInit) => Promise<T>;
 
@@ -254,6 +255,8 @@ export function normalizeAdminArticle(article: Partial<AdminArticle>): AdminArti
       bodyJson?.type === 'doc' && Array.isArray(bodyJson.content) ? article.bodyJson : undefined,
     status:
       article.status === 'published' || article.status === 'unpublished' ? article.status : 'draft',
+    publicationVersion:
+      typeof article.publicationVersion === 'number' ? article.publicationVersion : 0,
     publishedAt: localDateTime(article.publishedAt),
     contentType: typeof article.contentType === 'string' ? article.contentType : '',
     category: typeof article.category === 'string' ? article.category : '',
@@ -536,6 +539,10 @@ export function Dashboard({
             <span aria-hidden="true">↗</span>
             Notion 發布
           </button>
+          <button className={tab === 'articles' ? 'active' : ''} onClick={() => setTab('articles')}>
+            <span aria-hidden="true">▤</span>
+            已發布文章
+          </button>
           <p>網站設定</p>
           <button className={tab === 'site' ? 'active' : ''} onClick={() => setTab('site')}>
             <span aria-hidden="true">◇</span>
@@ -551,6 +558,9 @@ export function Dashboard({
         </nav>
         <main className="admin-main">
           {tab === 'notion' && <NotionEditorialPanel api={api} articles={articles} />}
+          {tab === 'articles' && (
+            <PublishedArticlesPanel api={api} articles={articles} onReload={reload} />
+          )}
           {tab === 'site' && settings && (
             <SiteSettingsPanel
               settings={settings}
@@ -590,6 +600,178 @@ export function Dashboard({
         </main>
       </div>
     </div>
+  );
+}
+
+function PublishedArticlesPanel({
+  api,
+  articles,
+  onReload,
+}: {
+  api: DashboardApi;
+  articles: AdminArticle[];
+  onReload: () => Promise<void>;
+}) {
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<AdminArticle | null>(null);
+  const [reason, setReason] = useState('');
+  const [unpublishing, setUnpublishing] = useState(false);
+  const { toast, showToast, dismissToast } = useToast();
+  const publishedArticles = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase('zh-TW');
+    return articles
+      .filter((article) => article.status === 'published')
+      .filter(
+        (article) =>
+          !normalizedQuery ||
+          article.title.toLocaleLowerCase('zh-TW').includes(normalizedQuery) ||
+          article.slug.toLocaleLowerCase('zh-TW').includes(normalizedQuery),
+      );
+  }, [articles, query]);
+
+  const unpublish = async () => {
+    if (!selected) return;
+    setUnpublishing(true);
+    try {
+      await api(`/api/admin/notion/articles/${selected.id}/unpublish`, {
+        method: 'POST',
+        body: JSON.stringify({
+          expectedPublicationVersion: selected.publicationVersion || 0,
+          reason: reason.trim() || null,
+          idempotencyKey:
+            typeof crypto !== 'undefined' && 'randomUUID' in crypto
+              ? crypto.randomUUID()
+              : String(Date.now()),
+        }),
+      });
+      await onReload();
+      setSelected(null);
+      setReason('');
+      showToast('success', '文章已下架，公開頁面正在更新。');
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : '文章下架失敗。');
+    } finally {
+      setUnpublishing(false);
+    }
+  };
+
+  return (
+    <section>
+      <Toast toast={toast} onDismiss={dismissToast} />
+      <div className="admin-title-row">
+        <div>
+          <p className="admin-kicker">文章管理</p>
+          <h1>已發布文章</h1>
+          <p className="admin-page-description">檢視網站上的文章，或將不再公開的內容安全下架。</p>
+        </div>
+        <span className="admin-summary-badge">
+          <strong>{articles.filter((article) => article.status === 'published').length}</strong>
+          篇公開文章
+        </span>
+      </div>
+
+      <div className="admin-form-card admin-article-toolbar">
+        <label className="admin-search-field">
+          <span>搜尋文章</span>
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="輸入標題或網址代稱"
+          />
+        </label>
+        <p>文章內容請回到 Notion 編輯；此處只管理目前網站上的發布狀態。</p>
+      </div>
+
+      <div className="admin-article-grid" aria-live="polite">
+        {publishedArticles.map((article) => (
+          <article className="admin-article-card" key={article.id}>
+            <div className="admin-article-card-topline">
+              <StatusBadge state={article.status} />
+              <time dateTime={article.publishedAt}>{formatAdminDate(article.publishedAt)}</time>
+            </div>
+            <div>
+              <h2>{article.title}</h2>
+              <p>{article.description || '尚未設定文章摘要。'}</p>
+            </div>
+            <div className="admin-article-meta">
+              <span>網址</span>
+              <strong>/articles/{article.slug}</strong>
+            </div>
+            <div className="admin-article-actions">
+              <a
+                className="admin-link-button"
+                href={`/articles/${encodeURIComponent(article.slug)}/`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                檢視文章
+              </a>
+              <button className="admin-danger-button" onClick={() => setSelected(article)}>
+                下架文章
+              </button>
+            </div>
+          </article>
+        ))}
+        {!publishedArticles.length && (
+          <div className="admin-form-card admin-empty admin-article-empty">
+            <strong>{query.trim() ? '找不到符合條件的文章' : '目前沒有已發布文章'}</strong>
+            <span>
+              {query.trim() ? '請嘗試其他標題或網址代稱。' : '完成發布後，文章會顯示在這裡。'}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {selected && (
+        <div className="admin-dialog-backdrop" role="presentation">
+          <section
+            className="admin-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="unpublish-confirm-title"
+            aria-describedby="unpublish-confirm-description"
+          >
+            <p className="admin-kicker">文章下架</p>
+            <h2 id="unpublish-confirm-title">確定要下架這篇文章？</h2>
+            <p id="unpublish-confirm-description">
+              「{selected.title}」將不再出現在公開網站，但內容與 Notion 來源都會保留。
+            </p>
+            <label className="admin-dialog-field">
+              <span>備註（選填）</span>
+              <textarea
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                rows={3}
+                maxLength={1000}
+                placeholder="例如：內容需要更新"
+              />
+            </label>
+            <div className="button-row admin-dialog-actions">
+              <button
+                type="button"
+                className="secondary"
+                disabled={unpublishing}
+                onClick={() => {
+                  setSelected(null);
+                  setReason('');
+                }}
+              >
+                取消
+              </button>
+              <LoadingButton
+                type="button"
+                className="admin-danger-button"
+                loading={unpublishing}
+                onClick={() => void unpublish()}
+              >
+                確認下架
+              </LoadingButton>
+            </div>
+          </section>
+        </div>
+      )}
+    </section>
   );
 }
 

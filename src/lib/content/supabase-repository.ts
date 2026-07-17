@@ -94,6 +94,7 @@ export function articleFromRow(
     bodyJson: row.body_json || undefined,
     bodyHtml: row.body_html || undefined,
     status: row.status,
+    publicationVersion: Number(row.publication_version || 0),
     publishedAt: date(row.published_at),
     updatedAt: optionalDate(row.updated_at),
     contentType: String(row.content_type_slug),
