@@ -23,6 +23,7 @@ const WORKER_JOB_LIMIT = 5;
 const WORKER_BUDGET_MS = 45_000;
 const JOB_LEASE_SECONDS = 120;
 const NOTION_LAST_EDITED_TIME_KEY = 'notion_last_edited_time';
+const NOTION_PAGE_TITLE_KEY = 'notion_page_title';
 
 type DatabaseRecord = Record<string, any>;
 
@@ -68,21 +69,30 @@ function validNotionTimestamp(value: unknown): value is string {
 export function mergeNotionSourceConfiguration(
   configuration: unknown,
   lastEditedTime: string | null,
+  pageTitle?: string | null,
 ): DatabaseRecord {
   const current = record(configuration) ?? {};
-  return validNotionTimestamp(lastEditedTime)
+  const next = validNotionTimestamp(lastEditedTime)
     ? { ...current, [NOTION_LAST_EDITED_TIME_KEY]: lastEditedTime }
     : current;
+  const normalizedTitle = typeof pageTitle === 'string' ? pageTitle.trim().slice(0, 120) : '';
+  return normalizedTitle ? { ...next, [NOTION_PAGE_TITLE_KEY]: normalizedTitle } : next;
 }
 
 export function shouldSyncNotionPage(
   configuration: unknown,
   lastEditedTime: string | null,
+  pageTitle?: string | null,
 ): boolean {
   // Missing, malformed, or unavailable timestamps fail open: a source is synced
   // rather than risking stale content due to incomplete metadata.
   if (!validNotionTimestamp(lastEditedTime)) return true;
-  const current = record(configuration)?.[NOTION_LAST_EDITED_TIME_KEY];
+  const normalizedTitle = typeof pageTitle === 'string' ? pageTitle.trim().slice(0, 120) : '';
+  const currentConfiguration = record(configuration);
+  if (normalizedTitle && currentConfiguration?.[NOTION_PAGE_TITLE_KEY] !== normalizedTitle) {
+    return true;
+  }
+  const current = currentConfiguration?.[NOTION_LAST_EDITED_TIME_KEY];
   return !validNotionTimestamp(current) || current !== lastEditedTime;
 }
 
@@ -239,6 +249,7 @@ export class ContentJobService {
     const bySource = new Map(rows(workingCopies).map((copy) => [String(copy.source_id), copy]));
     const statuses: DatabaseRecord[] = sources.map((source) => ({
       ...source,
+      page_title: record(source.configuration)?.[NOTION_PAGE_TITLE_KEY] ?? null,
       working_copy_id: bySource.get(String(source.id))?.id ?? null,
       working_copy_version: bySource.get(String(source.id))?.version ?? null,
     }));
@@ -385,15 +396,45 @@ export class ContentJobService {
     actorId: string,
     expectedWorkingCopyVersion?: number,
     expectedPublicationVersion?: number,
+    requestedSlug?: string,
   ): Promise<unknown> {
     const { data: workingCopy, error: workingError } = await this.client
       .from('article_working_copies')
-      .select('id,version,article_id')
+      .select('id,version,article_id,slug')
       .eq('source_id', sourceId)
       .maybeSingle();
     throwIfError(workingError);
     if (!workingCopy)
       throw new Error('Bind the source to an article before preparing a candidate.');
+    if (requestedSlug !== undefined) {
+      const slug = normalizeSlug(requestedSlug);
+      const [{ data: articles, error: articleError }, { data: copies, error: copiesError }] =
+        await Promise.all([
+          this.client.from('articles').select('slug').eq('slug', slug),
+          this.client.from('article_working_copies').select('id,slug').eq('slug', slug),
+        ]);
+      throwIfError(articleError);
+      throwIfError(copiesError);
+      const articleTaken = rows(articles).length > 0;
+      const copyTaken = rows(copies).some((copy) => String(copy.id) !== String(workingCopy.id));
+      if (articleTaken || copyTaken) throw new Error('網址代稱已被使用。');
+      if (String(workingCopy.slug || '') !== slug) {
+        const { error: slugError } = await this.client
+          .from('article_working_copies')
+          .update({ slug })
+          .eq('id', workingCopy.id)
+          .eq('version', expectedWorkingCopyVersion ?? Number(workingCopy.version));
+        throwIfError(slugError);
+        const { data: refreshedWorkingCopy, error: refreshError } = await this.client
+          .from('article_working_copies')
+          .select('id,version,article_id,slug')
+          .eq('id', workingCopy.id)
+          .maybeSingle();
+        throwIfError(refreshError);
+        if (!refreshedWorkingCopy) throw new Error('Working copy changed while setting slug.');
+        workingCopy.version = Number(refreshedWorkingCopy.version);
+      }
+    }
     let publicationVersion = expectedPublicationVersion;
     if (publicationVersion === undefined && workingCopy.article_id) {
       const { data: article, error } = await this.client
@@ -676,7 +717,8 @@ export class ContentJobService {
     );
     for (const page of childPages) {
       const source = byPageId.get(page.id);
-      if (source && !shouldSyncNotionPage(source.configuration, page.lastEditedTime)) continue;
+      if (source && !shouldSyncNotionPage(source.configuration, page.lastEditedTime, page.title))
+        continue;
       await this.enqueueSourceSync({
         pageId: page.id,
         actorId: requestedBy,
@@ -774,6 +816,7 @@ export class ContentJobService {
         configuration: mergeNotionSourceConfiguration(
           source?.configuration,
           snapshot.lastEditedTime,
+          snapshot.properties.title,
         ),
         state: snapshot.sourceState === 'archived' ? 'archived' : 'active',
         last_synced_at: new Date().toISOString(),

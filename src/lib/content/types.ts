@@ -32,6 +32,8 @@ export interface Article {
   /** Sanitized HTML generated on the server from bodyJson. */
   bodyHtml?: string;
   status: ArticleStatus;
+  /** Optimistic concurrency version for publish/unpublish operations. */
+  publicationVersion?: number;
   publishedAt: Date;
   updatedAt?: Date;
   contentType: string;

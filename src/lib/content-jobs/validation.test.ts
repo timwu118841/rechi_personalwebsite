@@ -3,6 +3,7 @@ import {
   parseAttestationRequest,
   parseEnqueueRequest,
   parseLimit,
+  parsePrepareRequest,
   parsePublishRequest,
   parseUnpublishRequest,
 } from './validation';
@@ -65,5 +66,13 @@ describe('content job request validation', () => {
     expect(
       parseUnpublishRequest({ expectedPublicationVersion: 3, idempotencyKey: 'unpublish-1' }),
     ).toMatchObject({ expectedPublicationVersion: 3 });
+  });
+
+  it('accepts an optional manual slug for candidate preparation', () => {
+    expect(parsePrepareRequest({ slug: '  legal-note  ', expectedWorkingCopyVersion: 2 })).toEqual({
+      slug: '  legal-note  ',
+      expectedWorkingCopyVersion: 2,
+    });
+    expect(() => parsePrepareRequest({ slug: '' })).toThrow(/slug/);
   });
 });

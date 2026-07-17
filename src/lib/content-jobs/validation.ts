@@ -90,6 +90,7 @@ export function parseBindRequest(value: unknown): { articleId: string } {
 export function parsePrepareRequest(value: unknown): {
   expectedWorkingCopyVersion?: number;
   expectedPublicationVersion?: number;
+  slug?: string;
 } {
   const input = record(value);
   const parseOptional = (name: string) =>
@@ -97,6 +98,10 @@ export function parsePrepareRequest(value: unknown): {
   return {
     expectedWorkingCopyVersion: parseOptional('expectedWorkingCopyVersion'),
     expectedPublicationVersion: parseOptional('expectedPublicationVersion'),
+    slug:
+      input.slug === undefined || input.slug === null
+        ? undefined
+        : requiredString(input.slug, 'slug', 120),
   };
 }
 

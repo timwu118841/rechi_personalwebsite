@@ -25,6 +25,14 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
       notion_last_edited_time: '2026-07-15T00:00:00.000Z',
     };
     expect(shouldSyncNotionPage(configuration, '2026-07-15T00:00:00.000Z')).toBe(false);
+    expect(shouldSyncNotionPage(configuration, '2026-07-15T00:00:00.000Z', '新頁面')).toBe(true);
+    expect(
+      shouldSyncNotionPage(
+        { ...configuration, notion_page_title: '新頁面' },
+        '2026-07-15T00:00:00.000Z',
+        '新頁面',
+      ),
+    ).toBe(false);
     expect(shouldSyncNotionPage(configuration, '2026-07-15T00:00:01.000Z')).toBe(true);
     expect(shouldSyncNotionPage({}, '2026-07-15T00:00:00.000Z')).toBe(true);
     expect(shouldSyncNotionPage(configuration, null)).toBe(true);
@@ -53,6 +61,17 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
     ).toEqual({
       editorial_mode: 'shadow',
       notion_last_edited_time: '2026-07-15T00:00:00.000Z',
+    });
+    expect(
+      mergeNotionSourceConfiguration(
+        { editorial_mode: 'shadow' },
+        '2026-07-15T00:00:00.000Z',
+        '  Notion page title  ',
+      ),
+    ).toEqual({
+      editorial_mode: 'shadow',
+      notion_last_edited_time: '2026-07-15T00:00:00.000Z',
+      notion_page_title: 'Notion page title',
     });
   });
 
@@ -368,6 +387,54 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
       p_expected_publication_version: 0,
       p_prepared_by: 'admin-id',
     });
+  });
+
+  it('normalizes and persists a non-colliding manual slug before preparing', async () => {
+    const rpc = vi.fn(async () => ({ data: [{ id: 'candidate-id' }], error: null }));
+    const updates: unknown[] = [];
+    const from = vi.fn((table: string) => {
+      if (table === 'article_working_copies') {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: { id: 'copy-id', version: 3, article_id: null, slug: 'old-slug' },
+                error: null,
+              }),
+            }),
+          }),
+          update: (value: unknown) => {
+            updates.push(value);
+            return { eq: () => ({ eq: async () => ({ error: null }) }) };
+          },
+        };
+      }
+      if (table === 'articles') {
+        return { select: () => ({ eq: async () => ({ data: [], error: null }) }) };
+      }
+      if (table === 'article_source_revisions') {
+        return {
+          select: () => ({
+            eq: () => ({
+              single: async () => ({ data: { normalized_payload: {} }, error: null }),
+            }),
+          }),
+        };
+      }
+      if (table === 'publication_candidates') {
+        return { update: () => ({ eq: async () => ({ error: null }) }) };
+      }
+      throw new Error(`unexpected table ${table}`);
+    });
+    const service = new ContentJobService(clientWith({ from, rpc }));
+
+    await service.prepareCandidate('source-id', 'admin-id', undefined, undefined, '  new slug  ');
+
+    expect(updates).toEqual([{ slug: 'new-slug' }]);
+    expect(rpc).toHaveBeenCalledWith(
+      'prepare_publication_candidate',
+      expect.objectContaining({ p_working_copy_id: 'copy-id', p_expected_working_copy_version: 3 }),
+    );
   });
 
   it('upserts promoted media references by candidate and logical reference key', async () => {

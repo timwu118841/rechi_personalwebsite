@@ -27,6 +27,22 @@ const historyCandidate = {
   state: 'published',
   title: '歷史文章',
 };
+const publishedArticle = {
+  id: 'article-published-1',
+  slug: 'published-article',
+  title: '已發布的法律文章',
+  description: '這是一篇已經公開在網站上的文章。',
+  body: '文章內容',
+  status: 'published',
+  publicationVersion: 3,
+  publishedAt: '2026-07-15T08:00:00.000Z',
+  contentType: 'legal',
+  category: 'practice',
+  tags: [],
+  featured: false,
+  privacyReviewed: true,
+  legalReviewed: true,
+};
 
 test.describe('受保護的 Notion 編輯發布後台', () => {
   test.beforeEach(async ({ page }, testInfo) => {
@@ -37,6 +53,10 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
         : activeCandidate.state,
     };
     let publishRequested = false;
+    let articles = [
+      publishedArticle,
+      { ...publishedArticle, id: 'article-draft-1', title: '尚未發布的草稿', status: 'draft' },
+    ];
     const requests: string[] = [];
     requestLogs.set(page, requests);
     await page.route('**/api/admin/**', async (route) => {
@@ -44,7 +64,7 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
       const url = new URL(request.url());
       requests.push(`${request.method()} ${url.pathname}${url.search}`);
       let body: unknown;
-      if (url.pathname === '/api/admin/articles') body = { articles: [] };
+      if (url.pathname === '/api/admin/articles') body = { articles };
       else if (url.pathname === '/api/admin/settings')
         body = { settings: { shortTitle: '測試站' } };
       else if (url.pathname === '/api/admin/taxonomies')
@@ -92,6 +112,13 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
             state: 'succeeded',
           },
         };
+      } else if (url.pathname === `/api/admin/notion/articles/${publishedArticle.id}/unpublish`) {
+        const input = request.postDataJSON();
+        requests.push(`UNPUBLISH ${JSON.stringify(input)}`);
+        articles = articles.map((article) =>
+          article.id === publishedArticle.id ? { ...article, status: 'unpublished' } : article,
+        );
+        body = { publication: { article_id: publishedArticle.id, publication_version: 4 } };
       } else {
         body = { ok: true };
       }
@@ -109,8 +136,11 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     page,
   }) => {
     await expect(page.getByText(longTitle)).toBeVisible();
+    await expect(page.getByLabel('狀態：待發布')).toBeVisible();
     await expect(page.getByText('歷史文章')).toHaveCount(0);
     await expect(page.getByText(/隱私審查|法律審查|privacyReviewed|legalReviewed/i)).toHaveCount(0);
+    await page.getByRole('button', { name: new RegExp(longTitle.slice(0, 12)) }).click();
+    await expect(page.getByText(/候選 hash|candidate-hash-1/i)).toHaveCount(0);
     await page.getByRole('tab', { name: '歷史紀錄' }).click();
     await expect(page.getByText('歷史文章')).toBeVisible();
     await expect(page.getByText(longTitle)).toHaveCount(0);
@@ -179,9 +209,36 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
   test('keeps the dashboard within the viewport on desktop and mobile', async ({ page }) => {
     await page.getByRole('button', { name: new RegExp(longTitle.slice(0, 12)) }).click();
     await page.getByRole('button', { name: '載入預覽' }).click();
-    await expect(page.locator('.admin-preview')).toContainText(longContent);
+    await expect(page.locator('.admin-preview-content')).toContainText(longTitle);
+    await expect(page.locator('.admin-preview-dialog')).toHaveAttribute('role', 'dialog');
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+  });
+
+  test('lists only published articles and safely unpublishes a selected article', async ({
+    page,
+  }) => {
+    await page.getByRole('button', { name: '已發布文章' }).click();
+    await expect(page.getByRole('heading', { name: '已發布文章' })).toBeVisible();
+    await expect(page.getByText(publishedArticle.title)).toBeVisible();
+    await expect(page.getByText('尚未發布的草稿')).toHaveCount(0);
+    await expect(page.getByLabel('狀態：已發布')).toBeVisible();
+
+    await page.getByRole('button', { name: '下架文章' }).click();
+    await expect(page.getByRole('dialog', { name: '確定要下架這篇文章？' })).toBeVisible();
+    await page.getByLabel('備註（選填）').fill('內容需要更新');
+    await page.getByRole('button', { name: '確認下架' }).click();
+
+    await expect(page.getByText('目前沒有已發布文章')).toBeVisible();
+    const requests = requestLogs.get(page) || [];
+    expect(requests).toContain(`POST /api/admin/notion/articles/${publishedArticle.id}/unpublish`);
+    expect(
+      requests.some((entry) =>
+        entry.startsWith(
+          'UNPUBLISH {"expectedPublicationVersion":3,"reason":"內容需要更新","idempotencyKey":',
+        ),
+      ),
     ).toBe(true);
   });
 });
