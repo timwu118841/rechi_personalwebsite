@@ -17,6 +17,7 @@ export const POST: APIRoute = async ({ request, params }) => {
       admin.id,
       input.expectedWorkingCopyVersion,
       input.expectedPublicationVersion,
+      input.slug,
     );
     return json({ candidate }, { status: 201 });
   } catch (error) {
