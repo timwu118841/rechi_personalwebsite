@@ -47,7 +47,7 @@ const activeSource = {
   id: 'source-active-1',
   external_id: 'notion-page-1',
   state: 'active',
-  article_id: null,
+  article_id: publishedArticle.id,
   working_copy_id: 'working-copy-1',
   page_title: '勞動法實務筆記',
   last_synced_at: '2026-07-17T12:00:00.000Z',
@@ -113,6 +113,10 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
           accepted: true,
           result: { claimed: 1, completed: 1, failed: 0, exhaustedBudget: false },
         };
+      } else if (url.pathname === '/api/admin/notion/sync' && request.method() === 'POST') {
+        const input = request.postDataJSON();
+        requests.push(`SYNC ${JSON.stringify({ sourceId: input.sourceId })}`);
+        body = { accepted: true, job: { id: 'sync-job-1', state: 'queued' } };
       } else if (url.pathname === `/api/admin/notion/jobs/${jobId}`) {
         body = {
           job: {
@@ -169,11 +173,15 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     await expect(page.getByLabel('狀態：已啟用')).toBeVisible();
     await expect(page.getByLabel('手動設定網址代稱')).toHaveCount(0);
 
-    await page.getByRole('button', { name: '管理' }).click();
+    await page.getByRole('button', { name: '管理', exact: true }).click();
     await expect(page.getByLabel('手動設定網址代稱')).toBeVisible();
     await expect(page.getByRole('button', { name: '建立發布候選' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '同步 Notion 最新內容' })).toBeVisible();
     await page.getByRole('button', { name: '收起' }).click();
     await expect(page.getByLabel('手動設定網址代稱')).toHaveCount(0);
+
+    const requests = requestLogs.get(page) || [];
+    expect(requests).toContain('GET /api/admin/notion/sources?view=all');
   });
 
   test('publishes an overdue prepared candidate and polls exact job/candidate endpoints', async ({
@@ -255,11 +263,11 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     ).toBe(true);
   });
 
-  test('lists only published articles and safely unpublishes a selected article', async ({
+  test('keeps an unpublished article manageable and directs republishing through fresh Notion sync', async ({
     page,
   }) => {
-    await page.getByRole('button', { name: '已發布文章' }).click();
-    await expect(page.getByRole('heading', { name: '已發布文章' })).toBeVisible();
+    await page.getByRole('button', { name: '文章管理' }).click();
+    await expect(page.getByRole('heading', { name: '文章管理' })).toBeVisible();
     await expect(page.getByText(publishedArticle.title)).toBeVisible();
     await expect(page.getByText('尚未發布的草稿')).toHaveCount(0);
     await expect(page.getByLabel('狀態：已發布')).toBeVisible();
@@ -269,9 +277,19 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     await page.getByLabel('備註（選填）').fill('內容需要更新');
     await page.getByRole('button', { name: '確認下架' }).click();
 
-    await expect(page.getByText('目前沒有已發布文章')).toBeVisible();
+    await expect(page.getByRole('dialog', { name: '確定要下架這篇文章？' })).toBeHidden();
+    await expect(page.getByRole('heading', { name: publishedArticle.title })).toBeVisible();
+    await expect(page.getByLabel('狀態：已下架')).toBeVisible();
+    await page.getByRole('button', { name: '從 Notion 重新發布' }).click();
+    await expect(page.getByRole('heading', { name: 'Notion 文章發布' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '同步 Notion 最新內容' })).toBeVisible();
+    await page.getByRole('button', { name: '同步 Notion 最新內容' }).click();
+    await expect(page.getByRole('status')).toContainText('Notion 最新內容同步完成');
+
     const requests = requestLogs.get(page) || [];
     expect(requests).toContain(`POST /api/admin/notion/articles/${publishedArticle.id}/unpublish`);
+    expect(requests).toContain('POST /api/admin/notion/sync');
+    expect(requests.some((entry) => entry === 'SYNC {"sourceId":"source-active-1"}')).toBe(true);
     expect(
       requests.some((entry) =>
         entry.startsWith(

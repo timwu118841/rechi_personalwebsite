@@ -352,6 +352,11 @@ button.admin-list-item[aria-pressed='true'] {
   border: 1px solid var(--admin-line);
   border-radius: 0.85rem;
 }
+.admin-source-list-description {
+  margin: 0.65rem 0 0;
+  color: var(--admin-muted);
+  font-size: 0.82rem;
+}
 .admin-source-row {
   min-width: 0;
   border-bottom: 1px solid var(--admin-line);
@@ -392,6 +397,12 @@ button.admin-list-item[aria-pressed='true'] {
   padding: 0.48rem 0.7rem;
   font-size: 0.78rem;
 }
+.admin-source-statuses {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
 .admin-source-controls {
   display: grid;
   gap: 0.75rem;
@@ -409,6 +420,14 @@ button.admin-list-item[aria-pressed='true'] {
   color: var(--admin-muted);
   font-size: 0.76rem;
   font-weight: 800;
+}
+.admin-source-sync-control > span {
+  color: var(--admin-muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+.admin-source-sync-control button {
+  justify-self: start;
 }
 .admin-source-control-group button {
   white-space: nowrap;

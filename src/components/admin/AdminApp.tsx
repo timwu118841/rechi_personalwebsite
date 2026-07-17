@@ -456,6 +456,7 @@ export function Dashboard({
   onSignOut: () => Promise<void>;
 }) {
   const [tab, setTab] = useState<Tab>('notion');
+  const [focusedNotionArticleId, setFocusedNotionArticleId] = useState<string | null>(null);
   const [articles, setArticles] = useState<AdminArticle[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [contentTypes, setContentTypes] = useState<ContentType[]>([]);
@@ -553,7 +554,7 @@ export function Dashboard({
           </button>
           <button className={tab === 'articles' ? 'active' : ''} onClick={() => setTab('articles')}>
             <span aria-hidden="true">▤</span>
-            已發布文章
+            文章管理
           </button>
           <p>網站設定</p>
           <button className={tab === 'site' ? 'active' : ''} onClick={() => setTab('site')}>
@@ -569,9 +570,24 @@ export function Dashboard({
           </button>
         </nav>
         <main className="admin-main">
-          {tab === 'notion' && <NotionEditorialPanel api={api} articles={articles} />}
+          {tab === 'notion' && (
+            <NotionEditorialPanel
+              api={api}
+              articles={articles}
+              focusedArticleId={focusedNotionArticleId}
+              onFocusHandled={() => setFocusedNotionArticleId(null)}
+            />
+          )}
           {tab === 'articles' && (
-            <PublishedArticlesPanel api={api} articles={articles} onReload={reload} />
+            <PublishedArticlesPanel
+              api={api}
+              articles={articles}
+              onReload={reload}
+              onRepublish={(articleId) => {
+                setFocusedNotionArticleId(articleId);
+                setTab('notion');
+              }}
+            />
           )}
           {tab === 'site' && settings && (
             <SiteSettingsPanel
@@ -619,20 +635,22 @@ function PublishedArticlesPanel({
   api,
   articles,
   onReload,
+  onRepublish,
 }: {
   api: DashboardApi;
   articles: AdminArticle[];
   onReload: () => Promise<void>;
+  onRepublish: (articleId: string) => void;
 }) {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<AdminArticle | null>(null);
   const [reason, setReason] = useState('');
   const [unpublishing, setUnpublishing] = useState(false);
   const { toast, showToast, dismissToast } = useToast();
-  const publishedArticles = useMemo(() => {
+  const managedArticles = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase('zh-TW');
     return articles
-      .filter((article) => article.status === 'published')
+      .filter((article) => article.status === 'published' || article.status === 'unpublished')
       .filter(
         (article) =>
           !normalizedQuery ||
@@ -659,7 +677,7 @@ function PublishedArticlesPanel({
       await onReload();
       setSelected(null);
       setReason('');
-      showToast('success', '文章已下架，公開頁面正在更新。');
+      showToast('success', '文章已下架；需要恢復時可從 Notion 同步最新內容後重新發布。');
     } catch (error) {
       showToast('error', error instanceof Error ? error.message : '文章下架失敗。');
     } finally {
@@ -673,12 +691,14 @@ function PublishedArticlesPanel({
       <div className="admin-title-row">
         <div>
           <p className="admin-kicker">文章管理</p>
-          <h1>已發布文章</h1>
-          <p className="admin-page-description">檢視網站上的文章，或將不再公開的內容安全下架。</p>
+          <h1>文章管理</h1>
+          <p className="admin-page-description">
+            管理公開與已下架文章；重新發布時會回到綁定的 Notion 來源同步最新內容。
+          </p>
         </div>
         <span className="admin-summary-badge">
-          <strong>{articles.filter((article) => article.status === 'published').length}</strong>
-          篇公開文章
+          <strong>{managedArticles.length}</strong>
+          篇可管理文章
         </span>
       </div>
 
@@ -692,15 +712,18 @@ function PublishedArticlesPanel({
             placeholder="輸入標題或網址代稱"
           />
         </label>
-        <p>文章內容請回到 Notion 編輯；此處只管理目前網站上的發布狀態。</p>
+        <p>文章內容以 Notion 為準；已下架文章仍保留，可同步最新內容後重新發布。</p>
       </div>
 
       <div className="admin-article-grid" aria-live="polite">
-        {publishedArticles.map((article) => (
+        {managedArticles.map((article) => (
           <article className="admin-article-card" key={article.id}>
             <div className="admin-article-card-topline">
               <StatusBadge state={article.status} />
-              <time dateTime={article.publishedAt}>{formatAdminDate(article.publishedAt)}</time>
+              <time dateTime={article.publishedAt}>
+                {article.status === 'published' ? '發布於 ' : '最後發布於 '}
+                {formatAdminDate(article.publishedAt)}
+              </time>
             </div>
             <div>
               <h2>{article.title}</h2>
@@ -711,25 +734,33 @@ function PublishedArticlesPanel({
               <strong>/articles/{article.slug}</strong>
             </div>
             <div className="admin-article-actions">
-              <a
-                className="admin-link-button"
-                href={`/articles/${encodeURIComponent(article.slug)}/`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                檢視文章
-              </a>
-              <button className="admin-danger-button" onClick={() => setSelected(article)}>
-                下架文章
-              </button>
+              {article.status === 'published' ? (
+                <>
+                  <a
+                    className="admin-link-button"
+                    href={`/articles/${encodeURIComponent(article.slug)}/`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    檢視文章
+                  </a>
+                  <button className="admin-danger-button" onClick={() => setSelected(article)}>
+                    下架文章
+                  </button>
+                </>
+              ) : (
+                <button type="button" onClick={() => onRepublish(article.id)}>
+                  從 Notion 重新發布
+                </button>
+              )}
             </div>
           </article>
         ))}
-        {!publishedArticles.length && (
+        {!managedArticles.length && (
           <div className="admin-form-card admin-empty admin-article-empty">
-            <strong>{query.trim() ? '找不到符合條件的文章' : '目前沒有已發布文章'}</strong>
+            <strong>{query.trim() ? '找不到符合條件的文章' : '目前沒有可管理文章'}</strong>
             <span>
-              {query.trim() ? '請嘗試其他標題或網址代稱。' : '完成發布後，文章會顯示在這裡。'}
+              {query.trim() ? '請嘗試其他標題或網址代稱。' : '完成首次發布後，文章會顯示在這裡。'}
             </span>
           </div>
         )}
@@ -787,7 +818,17 @@ function PublishedArticlesPanel({
   );
 }
 
-function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: AdminArticle[] }) {
+function NotionEditorialPanel({
+  api,
+  articles,
+  focusedArticleId,
+  onFocusHandled,
+}: {
+  api: DashboardApi;
+  articles: AdminArticle[];
+  focusedArticleId: string | null;
+  onFocusHandled: () => void;
+}) {
   const [pageId, setPageId] = useState('');
   const [sources, setSources] = useState<NotionSourceStatus[]>([]);
   const [candidates, setCandidates] = useState<PublicationCandidateStatus[]>([]);
@@ -800,6 +841,8 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
   const [slugForSource, setSlugForSource] = useState<Record<string, string>>({});
   const [articleForSource, setArticleForSource] = useState<Record<string, string>>({});
   const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
+  const [republishSourceId, setRepublishSourceId] = useState<string | null>(null);
+  const [sourcesLoaded, setSourcesLoaded] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [candidateFilter, setCandidateFilter] = useState<CandidateFilter>('active');
@@ -823,15 +866,20 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
       candidateFilter === 'history' ? history.has(candidate.state) : !history.has(candidate.state),
     );
   }, [candidateFilter, candidates]);
+  const articlesById = useMemo(
+    () => new Map(articles.map((article) => [article.id, article])),
+    [articles],
+  );
 
   const refresh = async (): Promise<void> => {
     const [sourceData, candidateData] = await Promise.all([
-      api<{ sources: NotionSourceStatus[] }>('/api/admin/notion/sources?view=active'),
+      api<{ sources: NotionSourceStatus[] }>('/api/admin/notion/sources?view=all'),
       api<{ candidates: PublicationCandidateStatus[] }>(
         `/api/admin/notion/candidates?view=${candidateFilter}`,
       ),
     ]);
     setSources(sourceData.sources);
+    setSourcesLoaded(true);
     setCandidates(candidateData.candidates);
     setSelected((current) =>
       current ? candidateData.candidates.find((item) => item.id === current.id) || null : null,
@@ -841,6 +889,19 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
   useEffect(() => {
     void refresh().catch((error) => showToast('error', (error as Error).message));
   }, [candidateFilter]);
+
+  useEffect(() => {
+    if (!focusedArticleId || !sourcesLoaded) return;
+    const source = sources.find((item) => item.article_id === focusedArticleId);
+    if (source) {
+      setExpandedSourceId(source.id);
+      setRepublishSourceId(source.id);
+      showToast('success', '已找到原本的 Notion 來源；請先同步最新內容，再建立發布候選。');
+    } else {
+      showToast('error', '找不到這篇文章綁定的 Notion 來源，請先同步主要頁面。');
+    }
+    onFocusHandled();
+  }, [focusedArticleId, onFocusHandled, showToast, sources, sourcesLoaded]);
 
   useEffect(() => {
     if (!selected?.activation_at || canPublishImmediately) return;
@@ -998,6 +1059,14 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
     );
   };
 
+  const syncSource = async (sourceId: string) => {
+    await enqueueAndRun(
+      { sourceId, idempotencyKey: operationId() },
+      'Notion 最新內容',
+      `sync-source-${sourceId}`,
+    );
+  };
+
   const publish = async (immediate = false) => {
     if (!selected) return;
     const candidate = selected;
@@ -1137,10 +1206,13 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
           <div className="admin-card-heading">
             <div>
               <p className="admin-section-label">已連接內容</p>
-              <h2>來源狀態</h2>
+              <h2>Root Page 來源</h2>
             </div>
             <span className="admin-count">{sources.length}</span>
           </div>
+          <p className="admin-source-list-description">
+            顯示 Root Page 已同步的全部文章，包括已發布與已下架內容。
+          </p>
           <div className="admin-source-list">
             {sources.map((source) => (
               <div className="admin-source-row" key={source.id}>
@@ -1154,7 +1226,12 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
                     </strong>
                     <small>最近同步：{formatAdminDate(source.last_synced_at)}</small>
                   </span>
-                  <StatusBadge state={source.state} />
+                  <span className="admin-source-statuses">
+                    <StatusBadge state={source.state} />
+                    {source.article_id && articlesById.get(source.article_id) && (
+                      <StatusBadge state={articlesById.get(source.article_id)?.status || 'draft'} />
+                    )}
+                  </span>
                   <button
                     type="button"
                     className="secondary admin-source-toggle"
@@ -1169,6 +1246,22 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
                 </div>
                 {expandedSourceId === source.id && (
                   <div className="admin-source-controls" id={`source-controls-${source.id}`}>
+                    {republishSourceId === source.id && (
+                      <p className="admin-source-note">
+                        重新發布流程：先同步 Notion 最新內容，再建立候選、預覽並發布。
+                      </p>
+                    )}
+                    <div className="admin-source-control-group admin-source-sync-control">
+                      <span>Notion 內容</span>
+                      <LoadingButton
+                        className="secondary"
+                        disabled={busy}
+                        loading={busyAction === `sync-source-${source.id}`}
+                        onClick={() => void syncSource(source.id)}
+                      >
+                        同步 Notion 最新內容
+                      </LoadingButton>
+                    </div>
                     {!source.article_id && (
                       <div className="admin-source-control-group">
                         <label htmlFor={`source-article-${source.id}`}>綁定既有文章</label>
