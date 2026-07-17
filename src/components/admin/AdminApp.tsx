@@ -1,7 +1,6 @@
 import { createClient, type Session } from '@supabase/supabase-js';
 import {
   lazy,
-  Suspense,
   type ButtonHTMLAttributes,
   type SyntheticEvent,
   useCallback,
@@ -11,11 +10,8 @@ import {
   useState,
 } from 'react';
 import type { Category, ContentType, MediaAsset, SiteSettings } from '@/lib/content/types';
-import type { JSONContent } from '@tiptap/react';
 import '@/styles/admin.css';
-import { slugFromTitle } from '@/lib/content/slug';
-
-const MarkdownTiptapEditor = lazy(() => import('./MarkdownTiptapEditor'));
+import { renderMarkdown } from '@/lib/content/markdown';
 
 interface Props {
   supabaseUrl?: string;
@@ -44,7 +40,7 @@ interface AdminArticle {
   legalReviewed: boolean;
 }
 
-type Tab = 'notion' | 'articles' | 'site' | 'taxonomies';
+type Tab = 'notion' | 'site' | 'taxonomies';
 
 type DashboardApi = <T>(path: string, init?: RequestInit) => Promise<T>;
 
@@ -55,6 +51,9 @@ interface NotionSourceStatus {
   article_id?: string | null;
   last_synced_at?: string | null;
   working_copy_id?: string | null;
+  name?: string | null;
+  title?: string | null;
+  page_title?: string | null;
 }
 
 interface PublicationCandidateStatus {
@@ -242,24 +241,6 @@ async function imageDimensions(file: File) {
   return dimensions;
 }
 
-function emptyArticle(categories: Category[], contentTypes: ContentType[]): AdminArticle {
-  return {
-    id: '',
-    slug: '',
-    title: '',
-    description: '',
-    body: '',
-    status: 'draft',
-    publishedAt: localDateTime(),
-    contentType: contentTypes[0]?.slug || '',
-    category: categories[0]?.slug || '',
-    tags: [],
-    featured: false,
-    privacyReviewed: false,
-    legalReviewed: false,
-  };
-}
-
 export default function AdminApp({
   supabaseUrl,
   supabasePublishableKey,
@@ -425,7 +406,6 @@ export function Dashboard({
   const [categories, setCategories] = useState<Category[]>([]);
   const [contentTypes, setContentTypes] = useState<ContentType[]>([]);
   const [settings, setSettings] = useState<SiteSettings | null>(null);
-  const [editing, setEditing] = useState<AdminArticle | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const { toast, showToast, dismissToast } = useToast();
 
@@ -511,9 +491,6 @@ export function Dashboard({
           <button className={tab === 'notion' ? 'active' : ''} onClick={() => setTab('notion')}>
             Notion 發布
           </button>
-          <button className={tab === 'articles' ? 'active' : ''} onClick={() => setTab('articles')}>
-            舊文章管理
-          </button>
           <p>網站設定</p>
           <button className={tab === 'site' ? 'active' : ''} onClick={() => setTab('site')}>
             網站與作者
@@ -527,35 +504,6 @@ export function Dashboard({
         </nav>
         <main className="admin-main">
           {tab === 'notion' && <NotionEditorialPanel api={api} articles={articles} />}
-          {tab === 'articles' && (
-            <ArticlesPanel
-              articles={articles}
-              categories={categories}
-              contentTypes={contentTypes}
-              editing={editing}
-              setEditing={setEditing}
-              upload={upload}
-              onSave={async (article) => {
-                try {
-                  const path = article.id
-                    ? `/api/admin/articles/${article.id}`
-                    : '/api/admin/articles';
-                  await api(path, {
-                    method: article.id ? 'PUT' : 'POST',
-                    body: JSON.stringify({
-                      ...article,
-                      publishedAt: new Date(article.publishedAt).toISOString(),
-                    }),
-                  });
-                  setEditing(null);
-                  await reload();
-                  showToast('success', '文章已儲存，公開快取正在更新。');
-                } catch (error) {
-                  showToast('error', (error as Error).message);
-                }
-              }}
-            />
-          )}
           {tab === 'site' && settings && (
             <SiteSettingsPanel
               settings={settings}
@@ -603,7 +551,11 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
   const [sources, setSources] = useState<NotionSourceStatus[]>([]);
   const [candidates, setCandidates] = useState<PublicationCandidateStatus[]>([]);
   const [selected, setSelected] = useState<PublicationCandidateStatus | null>(null);
-  const [preview, setPreview] = useState('');
+  const [preview, setPreview] = useState<{
+    title: string;
+    description: string;
+    bodyMarkdown: string;
+  } | null>(null);
   const [articleForSource, setArticleForSource] = useState<Record<string, string>>({});
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
@@ -842,9 +794,7 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
       const result = await api<{
         preview: { title: string; description: string; bodyMarkdown: string };
       }>(`/api/admin/notion/candidates/${selected.id}/preview`);
-      setPreview(
-        `${result.preview.title}\n\n${result.preview.description}\n\n${result.preview.bodyMarkdown}`,
-      );
+      setPreview(result.preview);
       showToast('success', '候選版本預覽已載入。');
     });
   };
@@ -935,7 +885,10 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
             {sources.map((source) => (
               <div className="admin-list-item" key={source.id}>
                 <span>
-                  <strong>{source.external_id}</strong>
+                  <strong>
+                    {source.name || source.title || source.page_title ||
+                      (source.external_id === 'root' ? 'Root 直屬頁面' : 'Notion 頁面')}
+                  </strong>
                   <small>{source.last_synced_at || '尚未同步'}</small>
                 </span>
                 <span>
@@ -1066,7 +1019,36 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
               載入預覽
             </LoadingButton>
           </div>
-          {preview && <pre className="admin-preview">{preview}</pre>}
+          {preview && (
+            <div className="admin-dialog-backdrop" role="presentation">
+              <section
+                className="admin-dialog admin-preview-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="admin-preview-title"
+              >
+                <div className="admin-title-row">
+                  <p className="admin-kicker">Publication preview</p>
+                  <button
+                    type="button"
+                    className="secondary admin-dialog-close"
+                    onClick={() => setPreview(null)}
+                    aria-label="關閉預覽"
+                  >
+                    關閉
+                  </button>
+                </div>
+                <article className="admin-preview-content">
+                  <h2 id="admin-preview-title">{preview.title}</h2>
+                  <p className="admin-preview-description">{preview.description}</p>
+                  <div
+                    className="admin-preview-body"
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(preview.bodyMarkdown) }}
+                  />
+                </article>
+              </section>
+            </div>
+          )}
         </div>
       )}
       {publicationDiagnostic && (
@@ -1118,335 +1100,6 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
         </div>
       )}
     </section>
-  );
-}
-
-function ArticlesPanel({
-  articles,
-  categories,
-  contentTypes,
-  editing,
-  setEditing,
-  upload,
-  onSave,
-}: {
-  articles: AdminArticle[];
-  categories: Category[];
-  contentTypes: ContentType[];
-  editing: AdminArticle | null;
-  setEditing: (article: AdminArticle | null) => void;
-  upload: (file: File, alt: string) => Promise<MediaAsset>;
-  onSave: (article: AdminArticle) => Promise<void>;
-}) {
-  if (editing) {
-    return (
-      <ArticleEditor
-        key={editing.id || 'new-article'}
-        article={editing}
-        categories={categories}
-        contentTypes={contentTypes}
-        upload={upload}
-        onCancel={() => setEditing(null)}
-        onSave={onSave}
-      />
-    );
-  }
-  return (
-    <section>
-      <div className="admin-title-row">
-        <div>
-          <p className="admin-kicker">Content</p>
-          <h1>文章管理</h1>
-        </div>
-        <button onClick={() => setEditing(emptyArticle(categories, contentTypes))}>新增文章</button>
-      </div>
-      <div className="admin-list">
-        {articles.map((article) => (
-          <button
-            className="admin-list-item"
-            key={article.id}
-            onClick={() => setEditing(normalizeAdminArticle(article))}
-          >
-            <span>
-              <strong>{article.title}</strong>
-              <small>/{article.slug}</small>
-            </span>
-            <span className={`status status-${article.status}`}>
-              {article.status === 'published'
-                ? '已發布'
-                : article.status === 'draft'
-                  ? '草稿'
-                  : '已下架'}
-            </span>
-          </button>
-        ))}
-        {!articles.length && <p className="admin-empty">還沒有文章，從右上角新增第一篇。</p>}
-      </div>
-    </section>
-  );
-}
-
-function ArticleEditor({
-  article,
-  categories,
-  contentTypes,
-  upload,
-  onCancel,
-  onSave,
-}: {
-  article: AdminArticle;
-  categories: Category[];
-  contentTypes: ContentType[];
-  upload: (file: File, alt: string) => Promise<MediaAsset>;
-  onCancel: () => void;
-  onSave: (article: AdminArticle) => Promise<void>;
-}) {
-  const [value, setValue] = useState(article);
-  const [uploading, setUploading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const { toast, showToast, dismissToast } = useToast();
-  const set = <K extends keyof AdminArticle>(key: K, next: AdminArticle[K]) =>
-    setValue((current) => ({ ...current, [key]: next }));
-  return (
-    <form
-      className="admin-form"
-      onSubmit={async (event) => {
-        event.preventDefault();
-        setSaving(true);
-        try {
-          await onSave(value);
-        } finally {
-          setSaving(false);
-        }
-      }}
-    >
-      <Toast toast={toast} onDismiss={dismissToast} />
-      <div className="admin-title-row">
-        <div>
-          <p className="admin-kicker">Article editor</p>
-          <h1>{value.id ? '編輯文章' : '新增文章'}</h1>
-        </div>
-        <div className="button-row">
-          <button type="button" className="secondary" onClick={onCancel}>
-            取消
-          </button>
-          <LoadingButton loading={saving} disabled={saving || uploading}>
-            儲存文章
-          </LoadingButton>
-        </div>
-      </div>
-      <div className="admin-two-columns">
-        <div className="admin-form-card admin-form-main">
-          <label>
-            文章標題
-            <input
-              value={value.title}
-              onChange={(event) => set('title', event.target.value)}
-              required
-              maxLength={120}
-            />
-          </label>
-          <label>
-            網址代稱
-            <input
-              value={value.slug}
-              onChange={(event) => set('slug', event.target.value.normalize('NFC'))}
-              maxLength={120}
-            />
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => set('slug', slugFromTitle(value.title))}
-            >
-              {value.slug ? '重新產生網址代稱' : '依標題產生網址代稱'}
-            </button>
-          </label>
-          <label>
-            文章摘要
-            <textarea
-              rows={3}
-              value={value.description}
-              onChange={(event) => set('description', event.target.value)}
-              required
-              minLength={20}
-              maxLength={180}
-            />
-          </label>
-          <label>
-            文章內容
-            <Suspense fallback={<div className="tiptap-editor-loading">正在載入編輯器…</div>}>
-              <MarkdownTiptapEditor
-                value={value.body}
-                bodyJson={value.bodyJson}
-                onChange={(body) =>
-                  setValue((current) => ({ ...current, body, bodyJson: undefined }))
-                }
-                onDocumentChange={(document: JSONContent) => set('bodyJson', document)}
-                onUpload={upload}
-              />
-            </Suspense>
-          </label>
-        </div>
-        <aside className="admin-form-card admin-form-side">
-          <label>
-            狀態
-            <select
-              value={value.status}
-              onChange={(event) => set('status', event.target.value as AdminArticle['status'])}
-            >
-              <option value="draft">草稿</option>
-              <option value="published">已發布</option>
-              <option value="unpublished">已下架</option>
-            </select>
-          </label>
-          <label>
-            發布時間
-            <input
-              type="datetime-local"
-              value={value.publishedAt}
-              onChange={(event) => set('publishedAt', event.target.value)}
-              required
-            />
-          </label>
-          <label>
-            內容類型
-            <select
-              value={value.contentType}
-              onChange={(event) => set('contentType', event.target.value)}
-              required
-            >
-              {contentTypes.map((item) => (
-                <option value={item.slug} key={item.slug}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            文章分類
-            <select
-              value={value.category}
-              onChange={(event) => set('category', event.target.value)}
-              required
-            >
-              {categories.map((item) => (
-                <option value={item.slug} key={item.slug}>
-                  {item.name}
-                  {item.visible ? '' : '（隱藏）'}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            標籤（逗號分隔）
-            <input
-              value={value.tags.join(', ')}
-              onChange={(event) =>
-                set(
-                  'tags',
-                  event.target.value
-                    .split(',')
-                    .map((tag) => tag.trim())
-                    .filter(Boolean),
-                )
-              }
-            />
-          </label>
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={value.featured}
-              onChange={(event) => set('featured', event.target.checked)}
-            />
-            首頁精選
-          </label>
-          <fieldset>
-            <legend>文章封面</legend>
-            {value.cover && (
-              <img className="admin-cover-preview" src={value.cover.url} alt={value.cover.alt} />
-            )}
-            <label>
-              替代文字
-              <input id="cover-alt" defaultValue={value.cover?.alt || ''} />
-            </label>
-            <label className="file-label">
-              選擇圖片
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/avif"
-                onChange={async (event) => {
-                  const file = event.target.files?.[0];
-                  const altInput = document.querySelector<HTMLInputElement>('#cover-alt');
-                  if (!file || !altInput?.value.trim()) return;
-                  setUploading(true);
-                  try {
-                    set('cover', await upload(file, altInput.value.trim()));
-                    showToast('success', '文章封面已上傳。');
-                  } catch (error) {
-                    showToast(
-                      'error',
-                      error instanceof Error ? error.message : '圖片上傳失敗，請再試一次。',
-                    );
-                  } finally {
-                    event.target.value = '';
-                    setUploading(false);
-                  }
-                }}
-              />
-            </label>
-            {uploading && (
-              <small className="admin-upload-progress" role="status">
-                <span className="admin-button-spinner" aria-hidden="true" /> 圖片上傳中…
-              </small>
-            )}
-          </fieldset>
-          <label>
-            SEO 標題
-            <input
-              value={value.seoTitle || ''}
-              onChange={(event) => set('seoTitle', event.target.value)}
-              maxLength={70}
-            />
-          </label>
-          <label>
-            SEO 描述
-            <textarea
-              rows={3}
-              value={value.seoDescription || ''}
-              onChange={(event) => set('seoDescription', event.target.value)}
-              maxLength={180}
-            />
-          </label>
-          <label>
-            Canonical URL
-            <input
-              type="url"
-              value={value.canonicalUrl || ''}
-              onChange={(event) => set('canonicalUrl', event.target.value)}
-            />
-          </label>
-          <fieldset>
-            <legend>發布檢查</legend>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={value.privacyReviewed}
-                onChange={(event) => set('privacyReviewed', event.target.checked)}
-              />
-              已確認移除可識別個資
-            </label>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={value.legalReviewed}
-                onChange={(event) => set('legalReviewed', event.target.checked)}
-              />
-              已確認不構成個案法律意見
-            </label>
-          </fieldset>
-        </aside>
-      </div>
-    </form>
   );
 }
 
