@@ -27,6 +27,12 @@ select {
 }
 button {
   cursor: pointer;
+  transition: transform 180ms ease, background-color 180ms ease, border-color 180ms ease,
+    box-shadow 180ms ease, color 180ms ease;
+}
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgb(24 24 27 / 0.1);
 }
 .admin-kicker {
   margin: 0 0 0.35rem;
@@ -120,12 +126,12 @@ button.secondary,
   background: transparent;
 }
 .publish-now {
-  border-color: #8b4b20;
-  background: #8b4b20;
-  box-shadow: 0 4px 12px rgb(107 54 25 / 0.16);
+  border-color: #1d4ed8;
+  background: #1d4ed8;
+  box-shadow: 0 4px 12px rgb(37 99 235 / 0.18);
 }
 .publish-now:hover:not(:disabled) {
-  background: #743b18;
+  background: #1e40af;
 }
 .admin-shell {
   min-height: 100vh;
@@ -732,7 +738,7 @@ legend {
   .admin-sidebar {
     position: sticky;
     z-index: 4;
-    top: 4.5rem;
+    top: 7rem;
     flex-direction: row;
     overflow-x: auto;
     border-right: 0;
@@ -757,6 +763,6 @@ legend {
     animation: none;
   }
   .admin-button-spinner {
-    animation-duration: 1.4s;
+    animation: none;
   }
 }
