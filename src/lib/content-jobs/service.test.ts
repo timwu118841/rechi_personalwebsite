@@ -54,6 +54,17 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
       editorial_mode: 'shadow',
       notion_last_edited_time: '2026-07-15T00:00:00.000Z',
     });
+    expect(
+      mergeNotionSourceConfiguration(
+        { editorial_mode: 'shadow' },
+        '2026-07-15T00:00:00.000Z',
+        '  Notion page title  ',
+      ),
+    ).toEqual({
+      editorial_mode: 'shadow',
+      notion_last_edited_time: '2026-07-15T00:00:00.000Z',
+      notion_page_title: 'Notion page title',
+    });
   });
 
   it('uses revision source hashes for source views and keeps actionable candidates active', async () => {
