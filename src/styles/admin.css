@@ -642,16 +642,52 @@ legend {
   }
 }
 
-.admin-preview {
-  max-height: 28rem;
+.admin-preview-dialog {
+  width: min(100%, 56rem);
+  max-height: min(90vh, 52rem);
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.admin-dialog-close {
+  padding: 0.45rem 0.7rem;
+}
+.admin-preview-content {
+  min-height: 0;
   overflow: auto;
-  margin-top: 1rem;
-  padding: 1rem;
-  white-space: pre-wrap;
+  padding: 0.5rem clamp(0.25rem, 2vw, 1rem) 1rem;
+  color: #27272a;
+  font-family: Georgia, 'Times New Roman', serif;
+  line-height: 1.75;
+}
+.admin-preview-content h2 {
+  margin: 0 0 0.6rem;
+  color: var(--admin-ink);
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  line-height: 1.15;
+}
+.admin-preview-description {
+  margin: 0 0 1.5rem;
+  color: var(--admin-muted);
+  font-size: 1.05rem;
+}
+.admin-preview-body {
   overflow-wrap: anywhere;
-  word-break: break-word;
+}
+.admin-preview-body :first-child {
+  margin-top: 0;
+}
+.admin-preview-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.45rem;
+}
+.admin-preview-body pre {
+  overflow: auto;
+  padding: 0.8rem;
+  border-radius: 0.45rem;
   background: #f4f4f5;
-  border: 1px solid var(--admin-line);
+  font-family: ui-monospace, SFMono-Regular, monospace;
 }
 .admin-publication-diagnostic {
   margin-top: 1rem;

@@ -1,6 +1,5 @@
 import { createClient, type Session } from '@supabase/supabase-js';
 import {
-  lazy,
   type ButtonHTMLAttributes,
   type SyntheticEvent,
   useCallback,
