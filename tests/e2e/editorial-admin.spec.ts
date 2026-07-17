@@ -43,6 +43,15 @@ const publishedArticle = {
   privacyReviewed: true,
   legalReviewed: true,
 };
+const activeSource = {
+  id: 'source-active-1',
+  external_id: 'notion-page-1',
+  state: 'active',
+  article_id: null,
+  working_copy_id: 'working-copy-1',
+  page_title: '勞動法實務筆記',
+  last_synced_at: '2026-07-17T12:00:00.000Z',
+};
 
 test.describe('受保護的 Notion 編輯發布後台', () => {
   test.beforeEach(async ({ page }, testInfo) => {
@@ -69,7 +78,7 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
         body = { settings: { shortTitle: '測試站' } };
       else if (url.pathname === '/api/admin/taxonomies')
         body = { categories: [], contentTypes: [] };
-      else if (url.pathname === '/api/admin/notion/sources') body = { sources: [] };
+      else if (url.pathname === '/api/admin/notion/sources') body = { sources: [activeSource] };
       else if (url.pathname === '/api/admin/notion/candidates') {
         let candidates = [candidate];
         if (url.searchParams.get('view') === 'history') candidates = [historyCandidate];
@@ -81,14 +90,16 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
         url.pathname === `/api/admin/notion/candidates/${candidateId}` &&
         request.method() === 'GET'
       ) {
-        candidate = testInfo.title.includes('media failure')
-          ? {
-              ...candidate,
-              state: 'media_failed',
-              failure_reason:
-                'download failed https://media.example/image.png?token=fixture-secret token=fixture-secret',
-            }
-          : { ...candidate, state: 'published' };
+        candidate = testInfo.title.includes('database function failure')
+          ? candidate
+          : testInfo.title.includes('media failure')
+            ? {
+                ...candidate,
+                state: 'media_failed',
+                failure_reason:
+                  'download failed https://media.example/image.png?token=fixture-secret token=fixture-secret',
+              }
+            : { ...candidate, state: 'published' };
         body = { candidate };
       } else if (url.pathname === `/api/admin/notion/candidates/${candidateId}/publish`) {
         publishRequested = true;
@@ -109,7 +120,10 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
             candidate_id: testInfo.title.includes('mismatched job')
               ? 'different-candidate'
               : candidateId,
-            state: 'succeeded',
+            state: testInfo.title.includes('database function failure') ? 'queued' : 'succeeded',
+            error: testInfo.title.includes('database function failure')
+              ? 'column reference "publication_version" is ambiguous'
+              : null,
           },
         };
       } else if (url.pathname === `/api/admin/notion/articles/${publishedArticle.id}/unpublish`) {
@@ -146,6 +160,20 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     await expect(page.getByText(longTitle)).toHaveCount(0);
     await page.getByRole('tab', { name: '進行中' }).click();
     await expect(page.getByText(longTitle)).toBeVisible();
+  });
+
+  test('keeps sources compact and reveals controls only for the selected row', async ({ page }) => {
+    const sourceRow = page.locator('.admin-source-row');
+    await expect(sourceRow).toHaveCount(1);
+    await expect(sourceRow).toContainText(activeSource.page_title);
+    await expect(page.getByLabel('狀態：已啟用')).toBeVisible();
+    await expect(page.getByLabel('手動設定網址代稱')).toHaveCount(0);
+
+    await page.getByRole('button', { name: '管理' }).click();
+    await expect(page.getByLabel('手動設定網址代稱')).toBeVisible();
+    await expect(page.getByRole('button', { name: '建立發布候選' })).toBeVisible();
+    await page.getByRole('button', { name: '收起' }).click();
+    await expect(page.getByLabel('手動設定網址代稱')).toHaveCount(0);
   });
 
   test('publishes an overdue prepared candidate and polls exact job/candidate endpoints', async ({
@@ -190,6 +218,17 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     await expect(diagnostic).toContainText('工作與候選不符');
     await expect(diagnostic).toContainText(candidateId);
     await expect(diagnostic).toContainText(jobId);
+  });
+
+  test('reports a database function failure immediately instead of timing out', async ({
+    page,
+  }) => {
+    await page.getByRole('button', { name: new RegExp(longTitle.slice(0, 12)) }).click();
+    await page.getByRole('button', { name: '立即發布' }).click();
+    await page.getByRole('button', { name: '確認立即發布' }).click();
+    const diagnostic = page.locator('.admin-publication-diagnostic[role="alert"]');
+    await expect(diagnostic).toContainText('資料庫版本尚未更新');
+    await expect(diagnostic).not.toContainText('等待發布結果逾時');
   });
 
   test('shows accessible feedback for a deterministic sync and worker transition', async ({

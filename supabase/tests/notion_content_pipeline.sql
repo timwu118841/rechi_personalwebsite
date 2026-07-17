@@ -424,8 +424,8 @@ insert into public.content_media_assets (
   'notion-file:block-manual', 'pending'
 );
 
-insert into public.content_media_references (candidate_id, asset_id, required)
-select id, '40000000-0000-0000-0000-000000000002', true
+insert into public.content_media_references (candidate_id, asset_id, reference_key, required)
+select id, '40000000-0000-0000-0000-000000000002', 'asset://notion/block-manual', true
 from public.publication_candidates
 where working_copy_id = '30000000-0000-0000-0000-000000000002';
 

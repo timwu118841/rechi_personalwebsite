@@ -99,6 +99,9 @@ interface ToastState {
 
 const statusLabels: Record<string, string> = {
   active: '已啟用',
+  onboarding: '設定中',
+  archived: '已封存',
+  error: '同步異常',
   draft: '草稿',
   prepared: '待發布',
   ready_to_activate: '可發布',
@@ -110,6 +113,7 @@ const statusLabels: Record<string, string> = {
   cancelled: '已取消',
   failed: '處理失敗',
   media_failed: '圖片處理失敗',
+  unknown: '狀態未知',
 };
 
 function StatusBadge({ state }: { state: string }) {
@@ -240,6 +244,14 @@ function sanitizedDiagnostic(value: unknown): string {
     })
     .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[憑證已隱藏]')
     .slice(0, 240);
+}
+
+function publicationFailureMessage(value: unknown): string {
+  const diagnostic = sanitizedDiagnostic(value);
+  if (/column reference .* is ambiguous/i.test(diagnostic)) {
+    return '發布服務的資料庫版本尚未更新，請套用最新 migration 後再試。';
+  }
+  return diagnostic ? `發布工作未完成：${diagnostic}` : '發布工作未完成，請重新整理後再試。';
 }
 
 /** Keep legacy/partially migrated rows from crashing the editor render. */
@@ -787,6 +799,7 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
   } | null>(null);
   const [slugForSource, setSlugForSource] = useState<Record<string, string>>({});
   const [articleForSource, setArticleForSource] = useState<Record<string, string>>({});
+  const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [candidateFilter, setCandidateFilter] = useState<CandidateFilter>('active');
@@ -914,6 +927,12 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
           return {
             kind: 'stale' as const,
             message: `候選已失效（${diagnosticState(candidate.state)}）。候選 ID：${candidateId}；工作 ID：${jobId}。`,
+          };
+        }
+        if (job.error && job.state !== 'succeeded') {
+          return {
+            kind: 'failure' as const,
+            message: publicationFailureMessage(job.error),
           };
         }
         if (['failed', 'cancelled'].includes(String(job.state))) {
@@ -1122,54 +1141,70 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
             </div>
             <span className="admin-count">{sources.length}</span>
           </div>
-          <div className="admin-list">
+          <div className="admin-source-list">
             {sources.map((source) => (
-              <div className="admin-list-item" key={source.id}>
-                <span>
-                  <strong>
-                    {source.name ||
-                      source.title ||
-                      source.page_title ||
-                      (source.external_id === 'root' ? 'Root 直屬頁面' : 'Notion 頁面')}
-                  </strong>
-                  <small>最近同步：{formatAdminDate(source.last_synced_at)}</small>
-                </span>
-                <span className="admin-list-actions">
+              <div className="admin-source-row" key={source.id}>
+                <div className="admin-source-summary">
+                  <span className="admin-source-name">
+                    <strong>
+                      {source.name ||
+                        source.title ||
+                        source.page_title ||
+                        (source.external_id === 'root' ? '主要頁面' : 'Notion 頁面')}
+                    </strong>
+                    <small>最近同步：{formatAdminDate(source.last_synced_at)}</small>
+                  </span>
                   <StatusBadge state={source.state} />
-                  {!source.article_id && (
-                    <span className="button-row">
-                      <select
-                        value={articleForSource[source.id] || ''}
-                        onChange={(event) =>
-                          setArticleForSource((current) => ({
-                            ...current,
-                            [source.id]: event.target.value,
-                          }))
-                        }
-                        aria-label="選擇要綁定的文章"
-                      >
-                        <option value="">選擇既有文章</option>
-                        {articles.map((article) => (
-                          <option value={article.id} key={article.id}>
-                            {article.title}
-                          </option>
-                        ))}
-                      </select>
-                      <LoadingButton
-                        className="secondary"
-                        disabled={busy}
-                        loading={busyAction === `bind-${source.id}`}
-                        onClick={() => void bind(source.id)}
-                      >
-                        綁定
-                      </LoadingButton>
-                    </span>
-                  )}
-                  {source.working_copy_id && (
-                    <span className="button-row admin-slug-row">
-                      <label className="admin-inline-field">
-                        <span>網址代稱</span>
+                  <button
+                    type="button"
+                    className="secondary admin-source-toggle"
+                    aria-expanded={expandedSourceId === source.id}
+                    aria-controls={`source-controls-${source.id}`}
+                    onClick={() =>
+                      setExpandedSourceId((current) => (current === source.id ? null : source.id))
+                    }
+                  >
+                    {expandedSourceId === source.id ? '收起' : '管理'}
+                  </button>
+                </div>
+                {expandedSourceId === source.id && (
+                  <div className="admin-source-controls" id={`source-controls-${source.id}`}>
+                    {!source.article_id && (
+                      <div className="admin-source-control-group">
+                        <label htmlFor={`source-article-${source.id}`}>綁定既有文章</label>
+                        <select
+                          id={`source-article-${source.id}`}
+                          value={articleForSource[source.id] || ''}
+                          onChange={(event) =>
+                            setArticleForSource((current) => ({
+                              ...current,
+                              [source.id]: event.target.value,
+                            }))
+                          }
+                          aria-label="選擇要綁定的文章"
+                        >
+                          <option value="">選擇既有文章</option>
+                          {articles.map((article) => (
+                            <option value={article.id} key={article.id}>
+                              {article.title}
+                            </option>
+                          ))}
+                        </select>
+                        <LoadingButton
+                          className="secondary"
+                          disabled={busy}
+                          loading={busyAction === `bind-${source.id}`}
+                          onClick={() => void bind(source.id)}
+                        >
+                          綁定
+                        </LoadingButton>
+                      </div>
+                    )}
+                    {source.working_copy_id && (
+                      <div className="admin-source-control-group admin-source-slug-control">
+                        <label htmlFor={`source-slug-${source.id}`}>網址代稱</label>
                         <input
+                          id={`source-slug-${source.id}`}
                           value={slugForSource[source.id] || ''}
                           onChange={(event) =>
                             setSlugForSource((current) => ({
@@ -1181,18 +1216,21 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
                           placeholder="依 Notion 設定或標題產生"
                           aria-label="手動設定網址代稱"
                         />
-                      </label>
-                      <LoadingButton
-                        className="secondary"
-                        disabled={busy}
-                        loading={busyAction === `prepare-${source.id}`}
-                        onClick={() => void prepare(source.id)}
-                      >
-                        建立發布候選
-                      </LoadingButton>
-                    </span>
-                  )}
-                </span>
+                        <LoadingButton
+                          className="secondary"
+                          disabled={busy}
+                          loading={busyAction === `prepare-${source.id}`}
+                          onClick={() => void prepare(source.id)}
+                        >
+                          建立發布候選
+                        </LoadingButton>
+                      </div>
+                    )}
+                    {source.article_id && !source.working_copy_id && (
+                      <p className="admin-source-note">此來源目前沒有可管理的草稿版本。</p>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
             {!sources.length && <p className="admin-empty">尚未綁定 Notion 來源。</p>}
