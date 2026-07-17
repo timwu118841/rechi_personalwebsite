@@ -109,8 +109,11 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     page,
   }) => {
     await expect(page.getByText(longTitle)).toBeVisible();
+    await expect(page.getByLabel('狀態：待發布')).toBeVisible();
     await expect(page.getByText('歷史文章')).toHaveCount(0);
     await expect(page.getByText(/隱私審查|法律審查|privacyReviewed|legalReviewed/i)).toHaveCount(0);
+    await page.getByRole('button', { name: new RegExp(longTitle.slice(0, 12)) }).click();
+    await expect(page.getByText(/候選 hash|candidate-hash-1/i)).toHaveCount(0);
     await page.getByRole('tab', { name: '歷史紀錄' }).click();
     await expect(page.getByText('歷史文章')).toBeVisible();
     await expect(page.getByText(longTitle)).toHaveCount(0);

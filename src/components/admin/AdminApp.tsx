@@ -96,6 +96,46 @@ interface ToastState {
   message: string;
 }
 
+const statusLabels: Record<string, string> = {
+  active: '已啟用',
+  draft: '草稿',
+  prepared: '待發布',
+  ready_to_activate: '可發布',
+  queued: '處理中',
+  processing: '處理中',
+  published: '已發布',
+  unpublished: '已下架',
+  superseded: '已更新',
+  cancelled: '已取消',
+  failed: '處理失敗',
+  media_failed: '圖片處理失敗',
+};
+
+function StatusBadge({ state }: { state: string }) {
+  const normalizedState = diagnosticState(state);
+  return (
+    <span
+      className={`status status-${normalizedState}`}
+      aria-label={`狀態：${statusLabels[state] || state}`}
+    >
+      {statusLabels[state] || state}
+    </span>
+  );
+}
+
+function formatAdminDate(value?: string | null, fallback = '尚未同步') {
+  if (!value) return fallback;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  return new Intl.DateTimeFormat('zh-TW', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
 function useToast() {
   const [toast, setToast] = useState<ToastState | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -460,12 +500,17 @@ export function Dashboard({
     <div className="admin-shell">
       <Toast toast={toast} onDismiss={dismissToast} />
       <header className="admin-header">
-        <div>
-          <p className="admin-kicker">即時內容管理</p>
-          <strong>{settings?.shortTitle || '內容管理'}</strong>
+        <div className="admin-brand">
+          <span className="admin-brand-mark" aria-hidden="true">
+            R
+          </span>
+          <div>
+            <p className="admin-kicker">內容工作台</p>
+            <strong>{settings?.shortTitle || '內容管理'}</strong>
+          </div>
         </div>
         <div className="admin-account">
-          <span>{session.user.email}</span>
+          <span className="admin-account-email">{session.user.email}</span>
           <a href="/" target="_blank" rel="noreferrer">
             檢視網站
           </a>
@@ -486,18 +531,21 @@ export function Dashboard({
       </header>
       <div className="admin-workspace">
         <nav className="admin-sidebar" aria-label="後台導覽">
-          <p>內容</p>
+          <p>發布管理</p>
           <button className={tab === 'notion' ? 'active' : ''} onClick={() => setTab('notion')}>
+            <span aria-hidden="true">↗</span>
             Notion 發布
           </button>
           <p>網站設定</p>
           <button className={tab === 'site' ? 'active' : ''} onClick={() => setTab('site')}>
+            <span aria-hidden="true">◇</span>
             網站與作者
           </button>
           <button
             className={tab === 'taxonomies' ? 'active' : ''}
             onClick={() => setTab('taxonomies')}
           >
+            <span aria-hidden="true">⌘</span>
             分類與內容類型
           </button>
         </nav>
@@ -831,8 +879,9 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
       <Toast toast={toast} onDismiss={dismissToast} />
       <div className="admin-title-row">
         <div>
-          <p className="admin-kicker">Editorial source</p>
+          <p className="admin-kicker">發布管理</p>
           <h1>Notion 文章發布</h1>
+          <p className="admin-page-description">同步內容、檢查預覽並安全發布到網站。</p>
         </div>
         <LoadingButton
           className="secondary"
@@ -848,25 +897,29 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
           重新整理
         </LoadingButton>
       </div>
-      <p className="admin-message">
-        正文只在 Notion 編輯；這裡只負責同步、預覽候選版本與發布。同步不會改變目前公開文章。
-      </p>
-      <div className="admin-form-card">
-        <h2>同步 Notion 頁面</h2>
-        <p>可同步設定的 root page 直屬頁面，或單獨貼上 page ID。</p>
-        <div className="button-row">
+      <div className="admin-message" role="note">
+        <strong>安心同步</strong>
+        <span>正文維持在 Notion 編輯；同步與預覽都不會更動目前公開的文章。</span>
+      </div>
+      <div className="admin-form-card admin-sync-card">
+        <div>
+          <p className="admin-section-label">內容來源</p>
+          <h2>同步 Notion 頁面</h2>
+          <p>同步主要頁面下的文章，或指定單一 Notion 頁面。</p>
+        </div>
+        <div className="button-row admin-sync-actions">
           <LoadingButton
             className="secondary"
             onClick={() => void syncRoot()}
             disabled={busy}
             loading={busyAction === 'sync-root'}
           >
-            立即同步 Root 直屬頁面
+            同步主要頁面
           </LoadingButton>
           <input
             value={pageId}
             onChange={(event) => setPageId(event.target.value)}
-            placeholder="Notion page ID"
+            placeholder="貼上 Notion 頁面 ID"
             aria-label="Notion page ID"
           />
           <LoadingButton
@@ -880,7 +933,13 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
       </div>
       <div className="admin-two-columns">
         <div className="admin-form-card">
-          <h2>來源狀態</h2>
+          <div className="admin-card-heading">
+            <div>
+              <p className="admin-section-label">已連接內容</p>
+              <h2>來源狀態</h2>
+            </div>
+            <span className="admin-count">{sources.length}</span>
+          </div>
           <div className="admin-list">
             {sources.map((source) => (
               <div className="admin-list-item" key={source.id}>
@@ -891,10 +950,10 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
                       source.page_title ||
                       (source.external_id === 'root' ? 'Root 直屬頁面' : 'Notion 頁面')}
                   </strong>
-                  <small>{source.last_synced_at || '尚未同步'}</small>
+                  <small>最近同步：{formatAdminDate(source.last_synced_at)}</small>
                 </span>
-                <span>
-                  <span className={`status status-${source.state}`}>{source.state}</span>
+                <span className="admin-list-actions">
+                  <StatusBadge state={source.state} />
                   {!source.article_id && (
                     <span className="button-row">
                       <select
@@ -958,7 +1017,13 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
           </div>
         </div>
         <div className="admin-form-card">
-          <h2>發布候選</h2>
+          <div className="admin-card-heading">
+            <div>
+              <p className="admin-section-label">準備發布</p>
+              <h2>發布候選</h2>
+            </div>
+            <span className="admin-count">{visibleCandidates.length}</span>
+          </div>
           <div className="admin-list">
             <div className="admin-filter-tabs" role="tablist" aria-label="候選版本篩選">
               {(['active', 'history'] as const).map((filter) => (
@@ -984,10 +1049,12 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
                 <span>
                   <strong className="admin-breakable-text">{candidate.title}</strong>
                   <small className="admin-breakable-text">
-                    {candidate.activation_at || '立即發布'}
+                    {candidate.activation_at
+                      ? `預定：${formatAdminDate(candidate.activation_at, '立即發布')}`
+                      : '可立即發布'}
                   </small>
                 </span>
-                <span className={`status status-${candidate.state}`}>{candidate.state}</span>
+                <StatusBadge state={candidate.state} />
               </button>
             ))}
             {!visibleCandidates.length && (
@@ -1002,8 +1069,13 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
       </div>
       {selected && (
         <div className="admin-form-card admin-candidate-detail">
-          <h2 className="admin-breakable-text">發布候選：{selected.title}</h2>
-          <p className="admin-breakable-id">候選 hash：{selected.candidate_hash}</p>
+          <div className="admin-card-heading">
+            <div>
+              <p className="admin-section-label">候選版本</p>
+              <h2 className="admin-breakable-text">{selected.title}</h2>
+            </div>
+            <StatusBadge state={selected.state} />
+          </div>
           <div className="button-row">
             <LoadingButton
               disabled={
@@ -1047,7 +1119,7 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
                 aria-labelledby="admin-preview-title"
               >
                 <div className="admin-title-row">
-                  <p className="admin-kicker">Publication preview</p>
+                  <p className="admin-kicker">文章預覽</p>
                   <button
                     type="button"
                     className="secondary admin-dialog-close"
@@ -1089,7 +1161,7 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
             aria-labelledby="publish-confirm-title"
             aria-describedby="publish-confirm-description"
           >
-            <p className="admin-kicker">Ready to publish</p>
+            <p className="admin-kicker">準備發布</p>
             <h2 id="publish-confirm-title">立即發布這個候選版本？</h2>
             <p id="publish-confirm-description">
               「{selected.title}」已到發布時間。送出後仍會重新檢查 Notion
