@@ -885,7 +885,9 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
               <div className="admin-list-item" key={source.id}>
                 <span>
                   <strong>
-                    {source.name || source.title || source.page_title ||
+                    {source.name ||
+                      source.title ||
+                      source.page_title ||
                       (source.external_id === 'root' ? 'Root 直屬頁面' : 'Notion 頁面')}
                   </strong>
                   <small>{source.last_synced_at || '尚未同步'}</small>
