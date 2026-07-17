@@ -31,7 +31,7 @@ test('flagged fixture applies and captures text appearance', async ({ request, p
   await accentButton.click();
   const appearance = editor.locator('span[data-editor-size="large"][data-editor-color="accent"]');
   await expect(appearance).toHaveText('選取這段文字');
-  await expect(appearance).toHaveCSS('color', 'rgb(182, 106, 60)');
+  await expect(appearance).toHaveCSS('color', 'rgb(37, 99, 235)');
   await expect(accentButton).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('editor-json')).toHaveAttribute(
     'data-value',

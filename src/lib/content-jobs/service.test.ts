@@ -25,6 +25,14 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
       notion_last_edited_time: '2026-07-15T00:00:00.000Z',
     };
     expect(shouldSyncNotionPage(configuration, '2026-07-15T00:00:00.000Z')).toBe(false);
+    expect(shouldSyncNotionPage(configuration, '2026-07-15T00:00:00.000Z', '新頁面')).toBe(true);
+    expect(
+      shouldSyncNotionPage(
+        { ...configuration, notion_page_title: '新頁面' },
+        '2026-07-15T00:00:00.000Z',
+        '新頁面',
+      ),
+    ).toBe(false);
     expect(shouldSyncNotionPage(configuration, '2026-07-15T00:00:01.000Z')).toBe(true);
     expect(shouldSyncNotionPage({}, '2026-07-15T00:00:00.000Z')).toBe(true);
     expect(shouldSyncNotionPage(configuration, null)).toBe(true);

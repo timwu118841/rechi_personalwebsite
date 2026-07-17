@@ -82,11 +82,17 @@ export function mergeNotionSourceConfiguration(
 export function shouldSyncNotionPage(
   configuration: unknown,
   lastEditedTime: string | null,
+  pageTitle?: string | null,
 ): boolean {
   // Missing, malformed, or unavailable timestamps fail open: a source is synced
   // rather than risking stale content due to incomplete metadata.
   if (!validNotionTimestamp(lastEditedTime)) return true;
-  const current = record(configuration)?.[NOTION_LAST_EDITED_TIME_KEY];
+  const normalizedTitle = typeof pageTitle === 'string' ? pageTitle.trim().slice(0, 120) : '';
+  const currentConfiguration = record(configuration);
+  if (normalizedTitle && currentConfiguration?.[NOTION_PAGE_TITLE_KEY] !== normalizedTitle) {
+    return true;
+  }
+  const current = currentConfiguration?.[NOTION_LAST_EDITED_TIME_KEY];
   return !validNotionTimestamp(current) || current !== lastEditedTime;
 }
 
@@ -243,6 +249,7 @@ export class ContentJobService {
     const bySource = new Map(rows(workingCopies).map((copy) => [String(copy.source_id), copy]));
     const statuses: DatabaseRecord[] = sources.map((source) => ({
       ...source,
+      page_title: record(source.configuration)?.[NOTION_PAGE_TITLE_KEY] ?? null,
       working_copy_id: bySource.get(String(source.id))?.id ?? null,
       working_copy_version: bySource.get(String(source.id))?.version ?? null,
     }));
@@ -418,6 +425,14 @@ export class ContentJobService {
           .eq('id', workingCopy.id)
           .eq('version', expectedWorkingCopyVersion ?? Number(workingCopy.version));
         throwIfError(slugError);
+        const { data: refreshedWorkingCopy, error: refreshError } = await this.client
+          .from('article_working_copies')
+          .select('id,version,article_id,slug')
+          .eq('id', workingCopy.id)
+          .maybeSingle();
+        throwIfError(refreshError);
+        if (!refreshedWorkingCopy) throw new Error('Working copy changed while setting slug.');
+        workingCopy.version = Number(refreshedWorkingCopy.version);
       }
     }
     let publicationVersion = expectedPublicationVersion;
@@ -702,7 +717,8 @@ export class ContentJobService {
     );
     for (const page of childPages) {
       const source = byPageId.get(page.id);
-      if (source && !shouldSyncNotionPage(source.configuration, page.lastEditedTime)) continue;
+      if (source && !shouldSyncNotionPage(source.configuration, page.lastEditedTime, page.title))
+        continue;
       await this.enqueueSourceSync({
         pageId: page.id,
         actorId: requestedBy,

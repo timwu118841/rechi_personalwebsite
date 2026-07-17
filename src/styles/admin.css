@@ -689,6 +689,21 @@ legend {
   background: #f4f4f5;
   font-family: ui-monospace, SFMono-Regular, monospace;
 }
+.admin-slug-row {
+  align-items: end;
+}
+.admin-inline-field {
+  display: grid;
+  gap: 0.35rem;
+  min-width: min(100%, 18rem);
+  color: var(--admin-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.admin-inline-field input {
+  min-width: 12rem;
+}
 .admin-publication-diagnostic {
   margin-top: 1rem;
   padding: 1rem;

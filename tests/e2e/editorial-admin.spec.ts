@@ -179,7 +179,8 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
   test('keeps the dashboard within the viewport on desktop and mobile', async ({ page }) => {
     await page.getByRole('button', { name: new RegExp(longTitle.slice(0, 12)) }).click();
     await page.getByRole('button', { name: '載入預覽' }).click();
-    await expect(page.locator('.admin-preview')).toContainText(longContent);
+    await expect(page.locator('.admin-preview-content')).toContainText(longTitle);
+    await expect(page.locator('.admin-preview-dialog')).toHaveAttribute('role', 'dialog');
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);

@@ -555,6 +555,7 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
     description: string;
     bodyMarkdown: string;
   } | null>(null);
+  const [slugForSource, setSlugForSource] = useState<Record<string, string>>({});
   const [articleForSource, setArticleForSource] = useState<Record<string, string>>({});
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
@@ -818,7 +819,7 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
     await runAction(`prepare-${sourceId}`, async () => {
       await api(`/api/admin/notion/sources/${sourceId}/candidate`, {
         method: 'POST',
-        body: JSON.stringify({}),
+        body: JSON.stringify({ slug: slugForSource[sourceId]?.trim() || undefined }),
       });
       showToast('success', '已建立不可變發布候選，可在到期後立即發布。');
       await refresh();
@@ -924,14 +925,31 @@ function NotionEditorialPanel({ api, articles }: { api: DashboardApi; articles: 
                     </span>
                   )}
                   {source.working_copy_id && (
-                    <LoadingButton
-                      className="secondary"
-                      disabled={busy}
-                      loading={busyAction === `prepare-${source.id}`}
-                      onClick={() => void prepare(source.id)}
-                    >
-                      建立發布候選
-                    </LoadingButton>
+                    <span className="button-row admin-slug-row">
+                      <label className="admin-inline-field">
+                        <span>網址代稱</span>
+                        <input
+                          value={slugForSource[source.id] || ''}
+                          onChange={(event) =>
+                            setSlugForSource((current) => ({
+                              ...current,
+                              [source.id]: event.target.value.normalize('NFC'),
+                            }))
+                          }
+                          maxLength={120}
+                          placeholder="依 Notion 設定或標題產生"
+                          aria-label="手動設定網址代稱"
+                        />
+                      </label>
+                      <LoadingButton
+                        className="secondary"
+                        disabled={busy}
+                        loading={busyAction === `prepare-${source.id}`}
+                        onClick={() => void prepare(source.id)}
+                      >
+                        建立發布候選
+                      </LoadingButton>
+                    </span>
                   )}
                 </span>
               </div>
