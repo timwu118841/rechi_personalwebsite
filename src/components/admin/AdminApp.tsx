@@ -60,6 +60,7 @@ interface NotionSourceStatus {
   name?: string | null;
   title?: string | null;
   page_title?: string | null;
+  last_error?: string | null;
 }
 
 interface PublicationCandidateStatus {
@@ -86,10 +87,25 @@ interface PublicationJob {
   candidate_id?: string | null;
   state?: string;
   error?: string | null;
+  job_type?: string;
+  related?: {
+    total: number;
+    queued: number;
+    running: number;
+    succeeded: number;
+    failed: number;
+    cancelled: number;
+    errors: Array<{ id: string; state: string; error: string }>;
+  };
 }
 
 interface PublicationDiagnostic {
   kind: 'success' | 'media' | 'stale' | 'failure' | 'timeout';
+  message: string;
+}
+
+interface SyncDiagnostic {
+  kind: 'success' | 'pending' | 'failure';
   message: string;
 }
 
@@ -104,8 +120,8 @@ interface ToastState {
 }
 
 const statusLabels: Record<string, string> = {
-  active: '已啟用',
-  onboarding: '設定中',
+  active: '同步完成',
+  onboarding: '等待同步',
   archived: '已封存',
   error: '同步異常',
   draft: '草稿',
@@ -275,6 +291,52 @@ function publicationFailureMessage(value: unknown): string {
     return '發布服務的資料庫版本尚未更新，請套用最新 migration 後再試。';
   }
   return diagnostic ? `發布工作未完成：${diagnostic}` : '發布工作未完成，請重新整理後再試。';
+}
+
+export function syncJobDiagnostic(label: string, job: PublicationJob): SyncDiagnostic {
+  const state = diagnosticState(job.state);
+  const error = sanitizedDiagnostic(job.error);
+  if (state === 'failed' || state === 'cancelled') {
+    return {
+      kind: 'failure',
+      message: `${label}同步失敗${error ? `：${error}` : '，請重新執行同步。'}`,
+    };
+  }
+  if (state === 'queued' || state === 'running') {
+    return {
+      kind: 'pending',
+      message: error
+        ? `${label}同步尚未完成，系統將自動重試：${error}`
+        : `${label}同步已排入背景處理，請稍後重新整理同步狀態。`,
+    };
+  }
+  if (job.job_type !== 'sync_root') {
+    return { kind: 'success', message: `${label}同步完成：本次工作已成功完成。` };
+  }
+
+  const related = job.related;
+  if (!related?.total) {
+    return { kind: 'success', message: `${label}同步完成：沒有需要更新的文章。` };
+  }
+  const pending = related.queued + related.running;
+  const failed = related.failed + related.cancelled;
+  const firstError = sanitizedDiagnostic(related.errors[0]?.error);
+  if (failed > 0) {
+    return {
+      kind: 'failure',
+      message: `${label}同步部分失敗：本次文章同步 ${related.succeeded}/${related.total} 篇成功，${failed} 篇失敗${firstError ? `：${firstError}` : '。'}`,
+    };
+  }
+  if (pending > 0) {
+    return {
+      kind: 'pending',
+      message: `${label}同步仍在處理：本次文章同步 ${related.succeeded}/${related.total} 篇成功，${pending} 篇等待背景處理。`,
+    };
+  }
+  return {
+    kind: 'success',
+    message: `${label}同步完成：本次文章同步 ${related.succeeded}/${related.total} 篇成功。`,
+  };
 }
 
 /** Keep legacy/partially migrated rows from crashing the editor render. */
@@ -1082,6 +1144,7 @@ function NotionEditorialPanel({
   const [publicationDiagnostic, setPublicationDiagnostic] = useState<PublicationDiagnostic | null>(
     null,
   );
+  const [syncDiagnostic, setSyncDiagnostic] = useState<SyncDiagnostic | null>(null);
   const busy = busyAction !== null;
   const canPublish = Boolean(
     selected?.state === 'prepared' || selected?.state === 'ready_to_activate',
@@ -1157,11 +1220,6 @@ function NotionEditorialPanel({
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
       : String(Date.now());
-
-  const workerSummary = ({ claimed, completed, failed, exhaustedBudget }: WorkerResult) => {
-    const remaining = exhaustedBudget ? '，仍有工作待處理' : '';
-    return `處理 ${completed}/${claimed} 個工作，失敗 ${failed} 個${remaining}`;
-  };
 
   const runWorkerNow = async (): Promise<WorkerResult> => {
     const result = await api<{ accepted: true; result: WorkerResult }>('/api/admin/notion/worker', {
@@ -1249,16 +1307,19 @@ function NotionEditorialPanel({
 
   const enqueueAndRun = async (body: Record<string, unknown>, label: string, action: string) => {
     await runAction(action, async () => {
-      await api('/api/admin/notion/sync', {
+      setSyncDiagnostic(null);
+      const { job: enqueuedJob } = await api<{ job: PublicationJob }>('/api/admin/notion/sync', {
         method: 'POST',
         body: JSON.stringify(body),
       });
-      const result = await runWorkerNow();
+      const jobId = enqueuedJob?.id;
+      if (!jobId) throw new Error('同步工作未回傳可追蹤的工作 ID。');
+      await runWorkerNow();
+      const { job } = await api<{ job: PublicationJob }>(`/api/admin/notion/jobs/${jobId}`);
+      const diagnostic = syncJobDiagnostic(label, job);
+      setSyncDiagnostic(diagnostic);
       await refresh();
-      showToast(
-        result.failed > 0 ? 'error' : 'success',
-        `${label}同步完成：${workerSummary(result)}。`,
-      );
+      showToast(diagnostic.kind === 'failure' ? 'error' : 'success', diagnostic.message);
     });
   };
 
@@ -1488,6 +1549,22 @@ function NotionEditorialPanel({
               立即同步
             </LoadingButton>
           </div>
+          {syncDiagnostic && (
+            <div
+              className={`admin-sync-diagnostic admin-sync-diagnostic-${syncDiagnostic.kind}`}
+              role={syncDiagnostic.kind === 'failure' ? 'alert' : undefined}
+              aria-live={syncDiagnostic.kind === 'failure' ? 'assertive' : 'polite'}
+            >
+              <strong>
+                {syncDiagnostic.kind === 'success'
+                  ? '本次同步完成'
+                  : syncDiagnostic.kind === 'pending'
+                    ? '本次同步仍在處理'
+                    : '本次同步需要處理'}
+              </strong>
+              <p>{syncDiagnostic.message}</p>
+            </div>
+          )}
         </div>
       </section>
 
@@ -1560,6 +1637,16 @@ function NotionEditorialPanel({
                     {expandedSourceId === source.id ? '收起' : '管理'}
                   </button>
                 </div>
+                {(source.state === 'onboarding' || source.last_error) && (
+                  <p
+                    className={`admin-source-sync-detail${source.last_error ? ' admin-source-sync-error' : ''}`}
+                    role={source.last_error ? 'alert' : 'status'}
+                  >
+                    {source.last_error
+                      ? `最近同步錯誤：${sanitizedDiagnostic(source.last_error)}`
+                      : '文章來源已建立，正文仍在等待背景同步。'}
+                  </p>
+                )}
                 {expandedSourceId === source.id && (
                   <div className="admin-source-controls" id={`source-controls-${source.id}`}>
                     {republishSourceId === source.id && (

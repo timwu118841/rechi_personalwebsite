@@ -381,6 +381,78 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
         p_job_type: 'sync_root',
         p_dedupe_key: 'sync_root:database-operation',
         p_payload: { requested_by: 'admin-id' },
+        p_priority: 10,
+      }),
+    );
+  });
+
+  it('links discovered source jobs to the requested root job and summarizes only those jobs', async () => {
+    const rpc = vi.fn(async () => ({ data: { id: 'child-job' }, error: null }));
+    let query = 0;
+    const from = vi.fn(() => {
+      query += 1;
+      if (query === 1) {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: {
+                  id: 'root-job',
+                  job_type: 'sync_root',
+                  state: 'succeeded',
+                  attempts: 1,
+                  max_attempts: 5,
+                  last_error: null,
+                },
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
+      return {
+        select: () => ({
+          eq: (column: string, value: string) => {
+            expect(column).toBe('payload->>parent_job_id');
+            expect(value).toBe('root-job');
+            return {
+              order: async () => ({
+                data: [
+                  { id: 'child-1', state: 'succeeded', last_error: null },
+                  { id: 'child-2', state: 'failed', last_error: 'Notion request failed' },
+                ],
+                error: null,
+              }),
+            };
+          },
+        }),
+      };
+    });
+    const service = new ContentJobService(clientWith({ from, rpc }));
+
+    await service.enqueueSourceSync({
+      pageId: 'page-id',
+      actorId: 'admin-id',
+      idempotencyKey: 'child-operation',
+      parentJobId: 'root-job',
+    });
+    await expect(service.getJobStatus('root-job')).resolves.toMatchObject({
+      id: 'root-job',
+      state: 'succeeded',
+      related: {
+        total: 2,
+        succeeded: 1,
+        failed: 1,
+        queued: 0,
+        errors: [{ id: 'child-2', state: 'failed', error: 'Notion request failed' }],
+      },
+    });
+    expect(rpc).toHaveBeenCalledWith(
+      'enqueue_content_job',
+      expect.objectContaining({
+        p_job_type: 'sync_source',
+        p_priority: 20,
+        p_payload: expect.objectContaining({ parent_job_id: 'root-job' }),
       }),
     );
   });
@@ -487,11 +559,13 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
       pageId: 'changed-page',
       actorId: 'admin-id',
       idempotencyKey: 'root:root-job:changed-page',
+      parentJobId: 'root-job',
     });
     expect(enqueueSourceSync).toHaveBeenNthCalledWith(2, {
       pageId: 'new-page',
       actorId: 'admin-id',
       idempotencyKey: 'root:root-job:new-page',
+      parentJobId: 'root-job',
     });
   });
 

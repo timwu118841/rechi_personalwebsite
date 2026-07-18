@@ -58,6 +58,11 @@ const activeSource = {
   page_title: '勞動法實務筆記',
   last_synced_at: '2026-07-17T12:00:00.000Z',
 };
+type FixtureSource = Omit<typeof activeSource, 'working_copy_id' | 'working_copy_version'> & {
+  working_copy_id: string | null;
+  working_copy_version: number | null;
+  last_error: string | null;
+};
 const legalCategory = {
   slug: 'legal-practice',
   name: '法律實務',
@@ -79,7 +84,15 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
         ? 'ready_to_activate'
         : activeCandidate.state,
     };
-    let source = { ...activeSource };
+    let source: FixtureSource = testInfo.title.includes('onboarding source')
+      ? {
+          ...activeSource,
+          state: 'onboarding',
+          working_copy_id: null,
+          working_copy_version: null,
+          last_error: null,
+        }
+      : { ...activeSource, last_error: null as string | null };
     let categories = [{ ...legalCategory }];
     let publishRequested = false;
     let articles = [
@@ -120,7 +133,7 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
         source = {
           ...source,
           manual_summary: input.summary,
-          working_copy_version: source.working_copy_version + 1,
+          working_copy_version: (source.working_copy_version ?? 0) + 1,
         };
         requests.push(`SUMMARY ${JSON.stringify(input)}`);
         body = {
@@ -140,7 +153,7 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
           ...source,
           category_slug: input.category,
           tags: input.tags,
-          working_copy_version: source.working_copy_version + 1,
+          working_copy_version: (source.working_copy_version ?? 0) + 1,
         };
         requests.push(`SOURCE_CLASSIFICATION ${JSON.stringify(input)}`);
         body = {
@@ -178,7 +191,9 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
       } else if (url.pathname === '/api/admin/notion/worker') {
         body = {
           accepted: true,
-          result: { claimed: 1, completed: 1, failed: 0, exhaustedBudget: false },
+          result: testInfo.title.includes('shared worker failures')
+            ? { claimed: 5, completed: 2, failed: 3, exhaustedBudget: false }
+            : { claimed: 1, completed: 1, failed: 0, exhaustedBudget: false },
         };
       } else if (url.pathname === '/api/admin/notion/sync' && request.method() === 'POST') {
         const input = request.postDataJSON();
@@ -186,6 +201,53 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
           `SYNC ${JSON.stringify({ sourceId: input.sourceId, dataSource: input.dataSource })}`,
         );
         body = { accepted: true, job: { id: 'sync-job-1', state: 'queued' } };
+      } else if (url.pathname === '/api/admin/notion/jobs/sync-job-1') {
+        body = {
+          job: testInfo.title.includes('shared worker failures')
+            ? {
+                id: 'sync-job-1',
+                job_type: 'sync_root',
+                state: 'succeeded',
+                error: null,
+                related: {
+                  total: 2,
+                  queued: 0,
+                  running: 0,
+                  succeeded: 2,
+                  failed: 0,
+                  cancelled: 0,
+                  errors: [],
+                },
+              }
+            : testInfo.title.includes('tracked article failure')
+              ? {
+                  id: 'sync-job-1',
+                  job_type: 'sync_root',
+                  state: 'succeeded',
+                  error: null,
+                  related: {
+                    total: 2,
+                    queued: 0,
+                    running: 0,
+                    succeeded: 1,
+                    failed: 1,
+                    cancelled: 0,
+                    errors: [
+                      {
+                        id: 'child-failed',
+                        state: 'failed',
+                        error: 'Notion image download failed with 403.',
+                      },
+                    ],
+                  },
+                }
+              : {
+                  id: 'sync-job-1',
+                  job_type: 'sync_source',
+                  state: 'succeeded',
+                  error: null,
+                },
+        };
       } else if (url.pathname === `/api/admin/notion/jobs/${jobId}`) {
         body = {
           job: {
@@ -299,7 +361,7 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     await expect(sourceRow).toHaveCount(1);
     await expect(sourceRow).toContainText(activeSource.page_title);
     await expect(sourceRow).toContainText(`Slug：${activeSource.slug}`);
-    await expect(page.getByLabel('狀態：已啟用')).toBeVisible();
+    await expect(page.getByLabel('狀態：同步完成')).toBeVisible();
     await expect(page.getByLabel('手動設定網址代稱')).toHaveCount(0);
 
     await page.getByRole('button', { name: '管理', exact: true }).click();
@@ -382,8 +444,40 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
   }) => {
     await page.getByLabel('Notion page ID').fill('page-fixture-1');
     await page.getByRole('button', { name: '立即同步', exact: true }).click();
-    await expect(page.getByRole('status')).toContainText('Notion 頁面同步完成');
-    await expect(page.getByRole('status')).toContainText('處理 1/1 個工作，失敗 0 個');
+    const diagnostic = page.locator('.admin-sync-diagnostic');
+    await expect(diagnostic).toContainText('Notion 頁面同步完成');
+    await expect(diagnostic).toContainText('本次工作已成功完成');
+  });
+
+  test('attributes sync feedback to the requested job instead of shared worker failures', async ({
+    page,
+  }) => {
+    await page.getByRole('button', { name: '同步文章資料庫' }).click();
+
+    const status = page.locator('.admin-sync-diagnostic');
+    await expect(status).toContainText('Notion 文章資料庫同步完成');
+    await expect(status).toContainText('本次文章同步 2/2 篇成功');
+    await expect(status).not.toContainText('失敗 3 個');
+    expect(requestLogs.get(page)).toContain('GET /api/admin/notion/jobs/sync-job-1');
+  });
+
+  test('shows the tracked article failure reason instead of an aggregate worker count', async ({
+    page,
+  }) => {
+    await page.getByRole('button', { name: '同步文章資料庫' }).click();
+
+    const diagnostic = page.locator('.admin-sync-diagnostic[role="alert"]');
+    await expect(diagnostic).toContainText('本次文章同步 1/2 篇成功，1 篇失敗');
+    await expect(diagnostic).toContainText('Notion image download failed with 403');
+  });
+
+  test('explains that an onboarding source is waiting for content synchronization', async ({
+    page,
+  }) => {
+    const sourceRow = page.locator('.admin-source-row');
+    await expect(sourceRow.getByLabel('狀態：等待同步')).toBeVisible();
+    await expect(sourceRow).toContainText('文章來源已建立，正文仍在等待背景同步');
+    await expect(sourceRow).not.toContainText('設定中');
   });
 
   test('allows an overdue ready_to_activate candidate to publish immediately', async ({ page }) => {
