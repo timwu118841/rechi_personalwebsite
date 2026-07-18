@@ -122,6 +122,36 @@ test.describe('公開即時閱讀體驗', () => {
     expect(bodyImageBox?.width).toBeLessThanOrEqual(608);
   });
 
+  test('首頁文章卡片圖片等高對齊且裝飾線不與文字重疊', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/');
+
+    const artworkLinks = page.locator('.article-card:not(.article-card-featured) .card-image');
+    const boxes = await artworkLinks.evaluateAll((elements) =>
+      elements.slice(0, 3).map((element) => {
+        const box = element.getBoundingClientRect();
+        return { y: box.y, height: box.height };
+      }),
+    );
+    expect(boxes).toHaveLength(3);
+    expect(
+      Math.max(...boxes.map((box) => box.y)) - Math.min(...boxes.map((box) => box.y)),
+    ).toBeLessThanOrEqual(1);
+    expect(
+      Math.max(...boxes.map((box) => box.height)) - Math.min(...boxes.map((box) => box.height)),
+    ).toBeLessThanOrEqual(1);
+
+    const firstArtwork = artworkLinks.first();
+    await expect(firstArtwork).toHaveCSS('text-decoration-line', 'none');
+    const [copyBox, ruleBox] = await Promise.all([
+      firstArtwork.locator('.default-artwork-copy').boundingBox(),
+      firstArtwork.locator('.default-artwork-rule').boundingBox(),
+    ]);
+    expect((ruleBox?.y || 0) - ((copyBox?.y || 0) + (copyBox?.height || 0))).toBeGreaterThanOrEqual(
+      8,
+    );
+  });
+
   test('文章分享列與頁尾之間保留清楚的收尾留白', async ({ page }) => {
     await page.goto(welcomeArticlePath);
     const [shareBox, footerBox] = await Promise.all([

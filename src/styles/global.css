@@ -1208,9 +1208,13 @@ main,
 }
 
 .card-image {
+  display: block;
+  width: 100%;
+  flex: 0 0 auto;
   margin-top: 0.75rem;
   border-radius: var(--radius-sm);
   filter: saturate(0.82) contrast(1.02);
+  text-decoration: none;
 }
 
 .card-image-fallback {
@@ -1332,6 +1336,7 @@ main,
 
 .default-artwork-compact {
   min-height: 0;
+  grid-template-rows: auto auto auto;
   padding: clamp(1rem, 3.5vw, 2.25rem);
 }
 
