@@ -714,6 +714,7 @@ function PublishedArticlesPanel({
   const [selected, setSelected] = useState<AdminArticle | null>(null);
   const [reason, setReason] = useState('');
   const [unpublishing, setUnpublishing] = useState(false);
+  const [featuredArticleId, setFeaturedArticleId] = useState<string | null>(null);
   const managedArticles = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase('zh-TW');
     return articles
@@ -752,6 +753,26 @@ function PublishedArticlesPanel({
     }
   };
 
+  const updateFeatured = async (article: AdminArticle) => {
+    const featured = !article.featured;
+    setFeaturedArticleId(article.id);
+    try {
+      await api(`/api/admin/articles/${article.id}/featured`, {
+        method: 'PATCH',
+        body: JSON.stringify({ featured }),
+      });
+      await onReload();
+      showToast(
+        'success',
+        featured ? `「${article.title}」已設為首頁精選文章。` : '已取消首頁精選文章。',
+      );
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : '精選文章設定失敗。');
+    } finally {
+      setFeaturedArticleId(null);
+    }
+  };
+
   return (
     <section
       id="published-articles"
@@ -784,9 +805,15 @@ function PublishedArticlesPanel({
 
       <div className="admin-article-grid" aria-live="polite">
         {managedArticles.map((article) => (
-          <article className="admin-article-card" key={article.id}>
+          <article
+            className={`admin-article-card${article.featured ? ' admin-article-card-featured' : ''}`}
+            key={article.id}
+          >
             <div className="admin-article-card-topline">
-              <StatusBadge state={article.status} />
+              <div className="admin-article-badges">
+                <StatusBadge state={article.status} />
+                {article.featured && <span className="admin-featured-badge">精選文章</span>}
+              </div>
               <time dateTime={article.publishedAt}>
                 {article.status === 'published' ? '發布於 ' : '最後發布於 '}
                 {formatAdminDate(article.publishedAt)}
@@ -800,6 +827,18 @@ function PublishedArticlesPanel({
               <span>網址</span>
               <strong>/articles/{article.slug}</strong>
             </div>
+            {article.status === 'published' && (
+              <LoadingButton
+                type="button"
+                className={`admin-featured-control${article.featured ? ' active' : ''}`}
+                loading={featuredArticleId === article.id}
+                disabled={featuredArticleId !== null && featuredArticleId !== article.id}
+                aria-pressed={article.featured}
+                onClick={() => void updateFeatured(article)}
+              >
+                {article.featured ? '取消精選文章' : '設為精選文章'}
+              </LoadingButton>
+            )}
             <div className="admin-article-actions">
               {article.status === 'published' ? (
                 <>

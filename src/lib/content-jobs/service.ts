@@ -218,6 +218,28 @@ export class ContentJobService {
     });
   }
 
+  async setFeaturedArticle(
+    articleId: string,
+    featured: boolean,
+    actorId: string,
+  ): Promise<DatabaseRecord> {
+    const { data, error } = await this.client.rpc('set_featured_article', {
+      p_article_id: articleId,
+      p_featured: featured,
+      p_actor_id: actorId,
+    });
+    if (error?.code === 'PGRST202') {
+      throw Object.assign(
+        new Error('精選文章資料庫函式尚未套用，請執行最新 Supabase migration。'),
+        { code: error.code },
+      );
+    }
+    throwIfError(error);
+    const article = rpcRecord(data);
+    if (!article) throw new Error('Featured article update returned no article.');
+    return article;
+  }
+
   async listSourceStatus(
     limit: number,
     articleId?: string,

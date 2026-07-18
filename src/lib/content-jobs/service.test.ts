@@ -19,6 +19,38 @@ function clientWith(overrides: {
 }
 
 describe('ContentJobService idempotency and unbound-source behavior', () => {
+  it('changes the single featured article through the database RPC', async () => {
+    const rpc = vi.fn(async () => ({
+      data: { id: 'article-id', slug: 'featured-article', featured: true },
+      error: null,
+    }));
+    const service = new ContentJobService(clientWith({ rpc }));
+
+    await expect(service.setFeaturedArticle('article-id', true, 'admin-id')).resolves.toMatchObject(
+      {
+        id: 'article-id',
+        featured: true,
+      },
+    );
+    expect(rpc).toHaveBeenCalledWith('set_featured_article', {
+      p_article_id: 'article-id',
+      p_featured: true,
+      p_actor_id: 'admin-id',
+    });
+  });
+
+  it('explains when the featured article migration is missing from PostgREST', async () => {
+    const rpc = vi.fn(async () => ({
+      data: null,
+      error: { code: 'PGRST202', message: 'function missing from schema cache' },
+    }));
+    const service = new ContentJobService(clientWith({ rpc }));
+
+    await expect(service.setFeaturedArticle('article-id', true, 'admin-id')).rejects.toThrow(
+      '尚未套用',
+    );
+  });
+
   it('skips unchanged canonical Notion timestamps but fails open for missing or malformed metadata', () => {
     const configuration = {
       editorial_mode: 'shadow',
