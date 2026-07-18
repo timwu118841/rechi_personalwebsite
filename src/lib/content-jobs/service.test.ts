@@ -366,20 +366,133 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
     });
   });
 
-  it('enqueues a dedicated root sync job without exposing the configured root page id', async () => {
+  it('enqueues a dedicated data-source sync job without exposing its configured id', async () => {
     const rpc = vi.fn(async () => ({ data: null, error: null }));
     const service = new ContentJobService(clientWith({ rpc }));
 
-    await service.enqueueRootSync({ actorId: 'admin-id', idempotencyKey: 'root-operation' });
+    await service.enqueueDataSourceSync({
+      actorId: 'admin-id',
+      idempotencyKey: 'database-operation',
+    });
 
     expect(rpc).toHaveBeenCalledWith(
       'enqueue_content_job',
       expect.objectContaining({
         p_job_type: 'sync_root',
-        p_dedupe_key: 'sync_root:root-operation',
+        p_dedupe_key: 'sync_root:database-operation',
         p_payload: { requested_by: 'admin-id' },
       }),
     );
+  });
+
+  it('discovers article pages from the configured Notion data source', async () => {
+    const previousEnabled = process.env.NOTION_EDITORIAL_ENABLED;
+    const previousToken = process.env.NOTION_TOKEN;
+    const previousDataSourceId = process.env.NOTION_DATA_SOURCE_ID;
+    process.env.NOTION_EDITORIAL_ENABLED = 'true';
+    process.env.NOTION_TOKEN = 'token';
+    process.env.NOTION_DATA_SOURCE_ID = 'data-source-id';
+    const queryDataSource = vi.fn(async () => [
+      {
+        object: 'page' as const,
+        id: 'unchanged-page',
+        last_edited_time: '2026-07-15T00:00:00.000Z',
+        properties: {
+          Name: {
+            id: 'title',
+            type: 'title',
+            title: [{ type: 'text', plain_text: '未變更文章' }],
+          },
+        },
+      },
+      {
+        object: 'page' as const,
+        id: 'changed-page',
+        last_edited_time: '2026-07-16T00:00:00.000Z',
+        properties: {
+          Name: {
+            id: 'title',
+            type: 'title',
+            title: [{ type: 'text', plain_text: '已更新文章' }],
+          },
+        },
+      },
+      {
+        object: 'page' as const,
+        id: 'new-page',
+        last_edited_time: '2026-07-17T00:00:00.000Z',
+        properties: {
+          Name: {
+            id: 'title',
+            type: 'title',
+            title: [{ type: 'text', plain_text: '新文章' }],
+          },
+        },
+      },
+    ]);
+    const from = vi.fn((table: string) => {
+      expect(table).toBe('article_sources');
+      return {
+        select: () => ({
+          eq: () => ({
+            in: async () => ({
+              data: [
+                {
+                  id: 'unchanged-source',
+                  external_id: 'unchanged-page',
+                  configuration: {
+                    notion_last_edited_time: '2026-07-15T00:00:00.000Z',
+                    notion_page_title: '未變更文章',
+                  },
+                },
+                {
+                  id: 'changed-source',
+                  external_id: 'changed-page',
+                  configuration: {
+                    notion_last_edited_time: '2026-07-15T00:00:00.000Z',
+                    notion_page_title: '已更新文章',
+                  },
+                },
+              ],
+              error: null,
+            }),
+          }),
+        }),
+      };
+    });
+    const service = new ContentJobService(clientWith({ from }));
+    Object.defineProperty(service, 'notionClient', {
+      value: () => ({ queryDataSource }),
+    });
+    const enqueueSourceSync = vi.spyOn(service, 'enqueueSourceSync').mockResolvedValue(null);
+
+    try {
+      await (
+        service as unknown as {
+          syncDataSource(job: Record<string, unknown>): Promise<void>;
+        }
+      ).syncDataSource({ id: 'root-job', payload: { requested_by: 'admin-id' } });
+    } finally {
+      if (previousEnabled === undefined) delete process.env.NOTION_EDITORIAL_ENABLED;
+      else process.env.NOTION_EDITORIAL_ENABLED = previousEnabled;
+      if (previousToken === undefined) delete process.env.NOTION_TOKEN;
+      else process.env.NOTION_TOKEN = previousToken;
+      if (previousDataSourceId === undefined) delete process.env.NOTION_DATA_SOURCE_ID;
+      else process.env.NOTION_DATA_SOURCE_ID = previousDataSourceId;
+    }
+
+    expect(queryDataSource).toHaveBeenCalledWith('data-source-id');
+    expect(enqueueSourceSync).toHaveBeenCalledTimes(2);
+    expect(enqueueSourceSync).toHaveBeenNthCalledWith(1, {
+      pageId: 'changed-page',
+      actorId: 'admin-id',
+      idempotencyKey: 'root:root-job:changed-page',
+    });
+    expect(enqueueSourceSync).toHaveBeenNthCalledWith(2, {
+      pageId: 'new-page',
+      actorId: 'admin-id',
+      idempotencyKey: 'root:root-job:new-page',
+    });
   });
 
   it('uses the same active-job dedupe key when a source sync request is retried', async () => {

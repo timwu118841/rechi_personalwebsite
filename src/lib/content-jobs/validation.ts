@@ -62,7 +62,7 @@ export function parseLimit(value: string | null, fallback = 25, maximum = 100): 
 export function parseEnqueueRequest(value: unknown): {
   sourceId?: string;
   pageId?: string;
-  root?: true;
+  dataSource?: true;
   idempotencyKey: string;
 } {
   const input = record(value);
@@ -70,14 +70,14 @@ export function parseEnqueueRequest(value: unknown): {
     input.sourceId === undefined ? undefined : requiredString(input.sourceId, 'sourceId', 128);
   const pageId =
     input.pageId === undefined ? undefined : requiredString(input.pageId, 'pageId', 128);
-  const root = input.root === true ? true : undefined;
-  if ((sourceId ? 1 : 0) + (pageId ? 1 : 0) + (root ? 1 : 0) !== 1) {
-    throw new RequestValidationError('Exactly one of sourceId, pageId, or root is required.');
+  const dataSource = input.dataSource === true ? true : undefined;
+  if ((sourceId ? 1 : 0) + (pageId ? 1 : 0) + (dataSource ? 1 : 0) !== 1) {
+    throw new RequestValidationError('Exactly one of sourceId, pageId, or dataSource is required.');
   }
   return {
     sourceId,
     pageId,
-    root,
+    dataSource,
     idempotencyKey: requiredString(input.idempotencyKey, 'idempotencyKey', 128),
   };
 }

@@ -1,16 +1,8 @@
-import { errorResponse, json } from '@/lib/admin/http';
+import { errorResponse, json, readJsonBody } from '@/lib/admin/http';
 import { RequestValidationError } from '@/lib/content-jobs/validation';
 
 export async function readJson(request: Request): Promise<unknown> {
-  const contentType = request.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase();
-  if (contentType !== 'application/json') {
-    throw new RequestValidationError('Content-Type must be application/json.');
-  }
-  try {
-    return await request.json();
-  } catch {
-    throw new RequestValidationError('Request body must contain valid JSON.');
-  }
+  return readJsonBody(request);
 }
 
 export function contentJobErrorResponse(error: unknown): Response {

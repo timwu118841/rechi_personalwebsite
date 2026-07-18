@@ -19,40 +19,6 @@ function list(results: unknown[], nextCursor: string | null = null) {
 }
 
 describe('NotionClient', () => {
-  it('fails open per child when canonical metadata retrieval fails', async () => {
-    const fetchMock = vi.fn(async (input: string | URL | Request) => {
-      const url = String(input);
-      if (url.endsWith('/blocks/root/children?page_size=100')) {
-        return json(
-          list([
-            { object: 'block', id: 'child-1', type: 'child_page', child_page: { title: '第一篇' } },
-            { object: 'block', id: 'child-2', type: 'child_page', child_page: { title: '第二篇' } },
-          ]),
-        );
-      }
-      if (url.endsWith('/pages/child-1')) return json({ message: 'temporary failure' }, 503);
-      if (url.endsWith('/pages/child-2')) {
-        return json({
-          object: 'page',
-          id: 'child-2',
-          last_edited_time: '2026-07-15T00:00:02.000Z',
-          properties: {},
-        });
-      }
-      throw new Error(`Unexpected URL: ${url}`);
-    });
-    const client = new NotionClient({
-      token: 'secret',
-      fetch: fetchMock as typeof fetch,
-      maxRetries: 0,
-    });
-
-    await expect(client.listChildPages('root')).resolves.toEqual([
-      { id: 'child-1', title: '第一篇', lastEditedTime: null },
-      { id: 'child-2', title: '第二篇', lastEditedTime: '2026-07-15T00:00:02.000Z' },
-    ]);
-  });
-
   it('pins the API version and recursively paginates page properties, data sources, and nested blocks', async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -67,22 +33,6 @@ describe('NotionClient', () => {
             Name: { id: 'title', type: 'title', title: [{ type: 'text', plain_text: '文章' }] },
             Related: { id: 'rel', type: 'relation', relation: [{ id: 'r1' }], has_more: true },
           },
-        });
-      }
-      if (url.endsWith('/pages/child-1')) {
-        return json({
-          object: 'page',
-          id: 'child-1',
-          last_edited_time: '2026-07-15T00:00:01.000Z',
-          properties: {},
-        });
-      }
-      if (url.endsWith('/pages/child-2')) {
-        return json({
-          object: 'page',
-          id: 'child-2',
-          last_edited_time: '2026-07-15T00:00:02.000Z',
-          properties: {},
         });
       }
       if (url.includes('/properties/rel?') && url.includes('start_cursor=prop-2')) {
@@ -104,35 +54,6 @@ describe('NotionClient', () => {
               quote: { rich_text: [{ type: 'text', plain_text: '父層' }] },
             },
           ]),
-        );
-      }
-      if (url.includes('/blocks/root/children') && url.includes('start_cursor=root-2')) {
-        return json(
-          list([
-            {
-              object: 'block',
-              id: 'child-2',
-              type: 'child_page',
-              child_page: { title: '第二篇' },
-            },
-          ]),
-        );
-      }
-      if (url.includes('/blocks/root/children')) {
-        return json(
-          list(
-            [
-              { object: 'block', id: 'paragraph', type: 'paragraph', paragraph: {} },
-              {
-                object: 'block',
-                id: 'child-1',
-                type: 'child_page',
-                child_page: { title: '第一篇' },
-                has_children: true,
-              },
-            ],
-            'root-2',
-          ),
         );
       }
       if (url.includes('/blocks/page-1/children')) {
@@ -164,17 +85,11 @@ describe('NotionClient', () => {
 
     const snapshot = await client.readSourceSnapshot('page-1');
     const pages = await client.queryDataSource('source');
-    const childPages = await client.listChildPages('root');
 
     expect(snapshot.sourceState).toBe('archived');
     expect(snapshot.properties.values.Related).toEqual(['r2', 'r3']);
     expect(snapshot.document.blocks[0]?.children?.[0]?.blockId).toBe('child');
     expect(pages.map((page) => page.id)).toEqual(['p1', 'p2']);
-    expect(childPages).toEqual([
-      { id: 'child-1', title: '第一篇', lastEditedTime: '2026-07-15T00:00:01.000Z' },
-      { id: 'child-2', title: '第二篇', lastEditedTime: '2026-07-15T00:00:02.000Z' },
-    ]);
-    expect(calls.some((call) => call.url.includes('/blocks/child-1/children'))).toBe(false);
     expect(
       calls.every(
         (call) => new Headers(call.init.headers).get('Notion-Version') === NOTION_API_VERSION,

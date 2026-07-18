@@ -45,12 +45,6 @@ export interface NotionBlock extends NotionObject {
   children?: NotionBlock[];
 }
 
-export interface NotionChildPage {
-  id: string;
-  title: string;
-  lastEditedTime: string | null;
-}
-
 export type NormalizedMark =
   { type: 'bold' | 'italic' | 'underline' | 'strike' | 'code' } | { type: 'link'; href: string };
 

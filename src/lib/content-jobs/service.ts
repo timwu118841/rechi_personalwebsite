@@ -4,6 +4,7 @@ import { getNotionConfig, getSupabaseEnvironment } from '@/lib/content/env';
 import {
   NotionClient,
   downloadNotionImage,
+  mapPageProperties,
   renderNotionMarkdown,
   resolveNotionAssetUrls,
   validatedMediaUrl,
@@ -207,7 +208,7 @@ export class ContentJobService {
     });
   }
 
-  async enqueueRootSync(input: {
+  async enqueueDataSourceSync(input: {
     actorId: string;
     idempotencyKey: string;
   }): Promise<DatabaseRecord | null> {
@@ -771,35 +772,39 @@ export class ContentJobService {
   }
 
   private async dispatchJob(job: DatabaseRecord): Promise<void> {
-    if (job.job_type === 'sync_root') return this.syncRoot(job);
+    if (job.job_type === 'sync_root') return this.syncDataSource(job);
     if (job.job_type === 'sync_source') return this.syncSource(job);
     if (job.job_type === 'finalize_candidate')
       return this.finalizeCandidate(String(job.candidate_id), record(job.payload));
     throw new Error(`Unsupported content job type: ${String(job.job_type)}`);
   }
 
-  private async syncRoot(job: DatabaseRecord): Promise<void> {
+  private async syncDataSource(job: DatabaseRecord): Promise<void> {
     const config = getNotionConfig();
     if (!config) throw new Error('Notion editorial integration is not configured.');
     const requestedBy = stringValue(record(job.payload)?.requested_by);
     if (!requestedBy) throw new Error('Content job is missing its requesting actor.');
-    const childPages = await this.notionClient().listChildPages(config.rootPageId);
-    if (!childPages.length) return;
+    const pages = await this.notionClient().queryDataSource(config.dataSourceId);
+    if (!pages.length) return;
     const { data: existingSources, error } = await this.client
       .from('article_sources')
       .select('id,external_id,configuration')
       .eq('provider', 'notion')
       .in(
         'external_id',
-        childPages.map((page) => page.id),
+        pages.map((page) => page.id),
       );
     throwIfError(error);
     const byPageId = new Map(
       rows(existingSources).map((source) => [String(source.external_id), source]),
     );
-    for (const page of childPages) {
+    for (const page of pages) {
       const source = byPageId.get(page.id);
-      if (source && !shouldSyncNotionPage(source.configuration, page.lastEditedTime, page.title))
+      const title = mapPageProperties(page.properties).title;
+      if (
+        source &&
+        !shouldSyncNotionPage(source.configuration, page.last_edited_time ?? null, title)
+      )
         continue;
       await this.enqueueSourceSync({
         pageId: page.id,

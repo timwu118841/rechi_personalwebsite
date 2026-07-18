@@ -45,25 +45,20 @@ on conflict (user_id) do update set email = excluded.email, updated_at = now();
 
 ## 啟用 Notion 編輯來源
 
-Notion integration 只讀取指定頁面；同步先建立不可變來源版本，不會直接覆寫公開文章。設定前先完成 Supabase migration 與 Storage 前置條件。
+Notion integration 只讀取指定文章資料庫及其中的頁面；同步先建立不可變來源版本，不會直接覆寫公開文章。設定前先完成 Supabase migration 與 Storage 前置條件。
 
 ### 1. 建立 Notion internal integration
 
 1. 以 Notion Workspace Owner 開啟 [Creator dashboard](https://www.notion.so/profile/integrations/internal)，在 **Build → Internal connections** 建立 connection。
 2. 在 **Configuration** 啟用讀取內容能力。本專案不需要由 integration 寫入 Notion。
 3. 複製 **Installation access token**，填入 server-only 的 `NOTION_TOKEN`。不要提交到 Git、加上 `PUBLIC_` 或貼到瀏覽器程式；若外洩，立即在 Notion 重新產生 token。
-4. 開啟作為文章入口的 root page，從右上角 `•••` 選擇 **Connections → Add connection**，加入剛建立的 connection。父頁分享後，子頁會繼承存取權；新增到 root page 外的頁面不會自動取得權限。Notion 官方步驟見 [Internal connections](https://developers.notion.com/guides/get-started/internal-connections)。
+4. 開啟作為文章來源的 Notion database，從右上角 `•••` 選擇 **Connections → Add connection**，加入剛建立的 connection。未分享給 integration 的 database 無法查詢。Notion 官方步驟見 [Internal connections](https://developers.notion.com/guides/get-started/internal-connections)。
 
-### 2. 取得 root page ID
+### 2. 建立文章資料庫並取得 Data Source ID
 
-在 root page 使用 **Share → Copy link**。網址末端、查詢參數前的 32 個十六進位字元就是 page ID，例如：
+在 Notion 建立文章 database；每一列代表一篇文章，列內頁面正文就是網站文章內容。建議至少保留 `Name` 標題欄位，也可使用 `Slug`、`Tags`、`Description`／`Summary` properties。
 
-```text
-https://www.notion.so/Editorial-Root-1429989fe8ac4effbc8f57f56486db54?pvs=4
-                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-```
-
-將 `1429989fe8ac4effbc8f57f56486db54` 或 `1429989f-e8ac-4eff-bc8f-57f56486db54` 填入 `NOTION_ROOT_PAGE_ID`。Notion API 接受有或沒有連字號的 UUID；詳見 [Working with page content](https://developers.notion.com/guides/data-apis/working-with-page-content)。
+在 database 的設定選單開啟 **Manage data sources**，選擇 **Copy data source ID**，將取得的 UUID 填入 `NOTION_DATA_SOURCE_ID`。Database ID 與 Data Source ID 不可互換；本專案使用 `POST /v1/data_sources/{data_source_id}/query` 列出文章頁面。詳見 [Query a data source](https://developers.notion.com/reference/query-a-data-source)。
 
 ### 3. 設定環境變數
 
@@ -75,32 +70,32 @@ https://www.notion.so/Editorial-Root-1429989fe8ac4effbc8f57f56486db54?pvs=4
 | `CRON_SECRET`                     | 僅 server environment      | 保護 `/api/internal/content-worker`；使用至少 16 字元的隨機值         |
 | `NOTION_EDITORIAL_ENABLED`        | server environment         | 啟用 Notion editorial pipeline 時必須設為 `true`                      |
 | `NOTION_TOKEN`                    | 僅 server environment      | 使用者提供的 Notion internal integration secret／API key              |
-| `NOTION_ROOT_PAGE_ID`             | server environment         | 已分享給 integration 的文章 root page UUID                            |
+| `NOTION_DATA_SOURCE_ID`           | server environment         | 已分享給 integration 的文章 database 對應 Data Source UUID            |
 | `NOTION_VERSION`                  | server environment         | 必須固定為 `2026-03-11`；request header 也由 adapter 常數固定為此版本 |
 | `CONTENT_PUBLIC_READ_MODE`        | server environment         | 保留值 `service`／`publishable`；目前沒有作用中的切換 call site       |
 | `NOTION_PUBLICATION_MODE`         | server environment         | 保留值 `legacy`／`shadow`／`notion`；目前沒有作用中的切換 call site   |
 
-啟用前至少要提供 `PUBLIC_SUPABASE_URL`、`PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`SUPABASE_SECRET_KEY`、`CRON_SECRET`、`NOTION_TOKEN`、`NOTION_ROOT_PAGE_ID`，並設定 `NOTION_EDITORIAL_ENABLED=true`、`NOTION_VERSION=2026-03-11`。`CONTENT_PUBLIC_READ_MODE` 與 `NOTION_PUBLICATION_MODE` 是保留的 rollout 設定；部署時維持 `.env.example` 的 `service` 與 `legacy`，不要假設只修改這兩個值就會切換公開來源。
+啟用前至少要提供 `PUBLIC_SUPABASE_URL`、`PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`SUPABASE_SECRET_KEY`、`CRON_SECRET`、`NOTION_TOKEN`、`NOTION_DATA_SOURCE_ID`，並設定 `NOTION_EDITORIAL_ENABLED=true`、`NOTION_VERSION=2026-03-11`。`CONTENT_PUBLIC_READ_MODE` 與 `NOTION_PUBLICATION_MODE` 是保留的 rollout 設定；部署時維持 `.env.example` 的 `service` 與 `legacy`，不要假設只修改這兩個值就會切換公開來源。
 
 ### 4. Cron 與 Storage 前置條件
 
 - 依序套用全部 migration，包含 `supabase/migrations/202607150001_notion_content_pipeline.sql` 與其後的 `supabase/migrations/202607150002_enqueue_content_job_rpc.sql`。前者建立內容工作佇列、審查資料表與 private `notion-staging` bucket；後者提供 partial-index-safe 的 durable job enqueue RPC。
 - `vercel.json` 每天以 GET 呼叫 `/api/internal/content-worker`（`0 0 * * *`，UTC 00:00／台灣時間 08:00；Hobby 方案可能在該小時內觸發）。在 Vercel Production 設定 `CRON_SECRET` 後，Vercel 會自動送出 `Authorization: Bearer <CRON_SECRET>`；端點缺少或不符合時回應 `503` 或 `401`。詳見 [Vercel Cron Jobs](https://vercel.com/docs/cron-jobs/manage-cron-jobs)。
-- 每輪 worker 最多 claim 及處理 5 個 `sync_root`、`sync_source` 或 `finalize_candidate` jobs；管理員從後台按下同步時會立即觸發一次 worker，Vercel Cron 則作為每日備援，root 下的頁面較多時後續執行會繼續清空佇列。
+- 每輪 worker 最多 claim 及處理 5 個 `sync_root`、`sync_source` 或 `finalize_candidate` jobs；管理員從後台按下同步時會立即觸發一次 worker，Vercel Cron 則作為每日備援，資料庫列數較多時後續執行會繼續清空佇列。`sync_root` 是相容既有佇列的內部工作名稱，實際同步目標已是 Data Source。
 - 確認目標 Supabase project 已啟用 Storage，且全域檔案上限至少 25 MB；bucket 上限不能高於全域上限。
 - `notion-staging` 是 private bucket，上限 25 MB；`site-media` 是公開 bucket，上限 5 MB。公開 bucket 的 URL 可由任何取得網址的人讀取，不得存放敏感案件資料。
 - migration 只建立 bucket metadata；仍須在目標 project 檢查 bucket、RLS 與 service key 權限。Supabase Storage 的 private/public 行為與限制見 [Storage buckets](https://supabase.com/docs/guides/storage/buckets/fundamentals) 與 [file limits](https://supabase.com/docs/guides/storage/uploads/file-limits)。
 
 ### 5. 同步與發布流程
 
-1. 在 `/admin` 的 **Notion 發布**按下 **立即同步 Root 直屬頁面**，排入 `sync_root` job 並立即執行 worker；也可以貼上單一 page ID，只同步指定頁面。
-2. Root sync 讀取 `NOTION_ROOT_PAGE_ID`，只掃描 root page 的直屬 `child_page` block，並為每個直屬頁面排入一個 `sync_source` job。它不會遞迴探索孫頁或更深層頁面；需要同步的文章頁必須直接放在 root page 下。
+1. 在 `/admin` 的 **Notion 同步**按下 **同步文章資料庫**，排入 discovery job 並立即執行 worker；也可以貼上單一 page ID，只同步指定資料列頁面。
+2. Database sync 使用 `NOTION_DATA_SOURCE_ID` 查詢全部資料列，支援 Notion cursor pagination，並為新增或已變更的文章頁面排入 `sync_source` job；未變更的資料列不會重複同步。
 3. 每個 source job 以 `Notion-Version: 2026-03-11` 讀取該頁 properties 與頁內遞迴 block tree，建立或更新 source、不可變 revision 與 working copy。同步本身不會改變目前公開文章。
 4. 頁面含圖片時，worker 會先下載並驗證，再以內容 digest 產生穩定路徑、promotion 到公開 `site-media`，最後把 working copy 中的 logical asset reference 換成公開 URL；任何必要圖片失敗時，整個 source job 失敗，不會留下部分完成的 working copy。
 5. 建立發布候選並檢查預覽；候選必須分別通過隱私與法律審查。
 6. 按下立即發布後，worker 會立刻重新讀取 Notion、下載圖片並比對來源及媒體 hash；內容已變更或頁面已移到垃圾桶時會取消舊候選，不會發布過期版本。後台不提供排程發布。
 
-每輪 worker 最多處理 5 個 jobs。`sync_root` 本身也算一個 job；若 root 有多個直屬頁面，立即執行最多先處理 5 個，剩餘工作會由下一次手動同步或每日 Cron 繼續處理。一般單頁同步不需要等待 Cron。
+每輪 worker 最多處理 5 個 jobs。資料庫 discovery 本身也算一個 job；若 database 有多筆資料列，立即執行最多先處理 5 個，剩餘工作會由下一次手動同步或每日 Cron 繼續處理。一般單頁同步不需要等待 Cron。
 
 ### 圖片與內容限制
 

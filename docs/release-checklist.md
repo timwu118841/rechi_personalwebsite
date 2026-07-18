@@ -16,7 +16,7 @@
 - [ ] Supabase 已啟用 Google provider、callback URI 與 `/admin` Redirect URL；`PUBLIC_ADMIN_PASSWORD_LOGIN` 已依相容期策略設定
 - [ ] Vercel 已設定 `SITE_URL`、`PUBLIC_SUPABASE_URL`、`PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`SUPABASE_SECRET_KEY`、`CRON_SECRET` 與 `NOTION_EDITORIAL_ENABLED`；未設定 `ALLOW_FIXTURE_CONTENT=true`
 - [ ] `SUPABASE_SECRET_KEY`、`CRON_SECRET` 與 `NOTION_TOKEN` 只存在 server environment，未加上 `PUBLIC_`、未提交到 Git、未出現在瀏覽器 bundle
-- [ ] 若啟用 Notion：使用者已提供 internal integration secret／API key 作為 `NOTION_TOKEN`、root UUID 作為 `NOTION_ROOT_PAGE_ID`，並設定 `NOTION_EDITORIAL_ENABLED=true`、`NOTION_VERSION=2026-03-11`
+- [ ] 若啟用 Notion：使用者已提供 internal integration secret／API key 作為 `NOTION_TOKEN`、文章資料庫的 Data Source UUID 作為 `NOTION_DATA_SOURCE_ID`，並設定 `NOTION_EDITORIAL_ENABLED=true`、`NOTION_VERSION=2026-03-11`
 - [ ] rollout 設定維持 `CONTENT_PUBLIC_READ_MODE=service`、`NOTION_PUBLICATION_MODE=legacy`；若要改值，先確認部署版本已有作用中的切換 call site
 - [ ] `npm run deploy:validate`、`npm run quality`、`npm run test:e2e:ci` 全部成功
 - [ ] preview 回應含 `X-Robots-Tag: noindex, nofollow`
@@ -24,9 +24,9 @@
 ## Notion、Cron 與 Storage
 
 - [ ] 已由 Workspace Owner 建立具讀取內容能力的 Notion internal integration，並將 Installation access token（internal integration secret／API key）設為 server-only `NOTION_TOKEN`
-- [ ] 已開啟 root page，從右上角 **••• → Connections → Add connection** 分享給 integration，並確認直屬文章頁繼承存取權
-- [ ] `NOTION_ROOT_PAGE_ID` 是 root page URL 末端的 32 個十六進位字元（可含 UUID 連字號），不是完整網址
-- [ ] `/admin` 的 root sync 只列舉 root 的直屬 `child_page`；孫頁與更深層頁面不會自動同步，所有文章頁都直接位於 root 下
+- [ ] 已開啟文章 database，從右上角 **••• → Connections → Add connection** 分享給 integration
+- [ ] `NOTION_DATA_SOURCE_ID` 是 **Manage data sources → Copy data source ID** 取得的 UUID，不是 Database ID 或完整網址
+- [ ] `/admin` 的資料庫同步會列舉 Data Source 內的每一筆文章頁面，並確認多頁結果可透過 cursor pagination 完整取得
 - [ ] Vercel Production 已建立每日執行的 `/api/internal/content-worker` Cron（`0 0 * * *`，UTC 00:00／台灣時間 08:00），且請求帶有 `Authorization: Bearer <CRON_SECRET>`
 - [ ] 已確認每輪 worker 最多處理 5 個 jobs；管理員可從後台立即執行 worker，大量直屬頁面由後續手動同步或 Cron 輪次繼續處理
 - [ ] 未授權的 worker 請求回應 `401`；缺少 `CRON_SECRET` 時回應 `503`；回應不可快取且不可索引
@@ -37,7 +37,7 @@
 ## 功能驗收
 
 - [ ] `/admin` 可登入、建立草稿、發布、下架與重新編輯，不產生 Git commit 或 deployment
-- [ ] Root sync 能為每個直屬 `child_page` 排入 source job，且立即執行後每頁都能建立或更新 source、不可變 revision 與 working copy；同步不會改變目前公開文章
+- [ ] 資料庫同步能為每個新增或變更的 Data Source row page 排入 source job，且立即執行後每頁都能建立或更新 source、不可變 revision 與 working copy；同步不會改變目前公開文章
 - [ ] 單頁 page ID 同步仍可獨立排入；候選需完成隱私與法律審查才可發布
 - [ ] Notion 內容在候選建立後變更或移到垃圾桶時，freshness gate 會取消舊候選
 - [ ] 新文章立即出現在文章頁、列表、搜尋、RSS 與 sitemap

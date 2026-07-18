@@ -1148,7 +1148,7 @@ function NotionEditorialPanel({
       setRepublishSourceId(source.id);
       showToast('success', '已找到原本的 Notion 來源；請先同步最新內容，再建立發布候選。');
     } else {
-      showToast('error', '找不到這篇文章綁定的 Notion 來源，請先同步主要頁面。');
+      showToast('error', '找不到這篇文章綁定的 Notion 來源，請先同步文章資料庫。');
     }
     onFocusHandled();
   }, [focusedArticleId, onFocusHandled, showToast, sources, sourcesLoaded]);
@@ -1274,11 +1274,11 @@ function NotionEditorialPanel({
     );
   };
 
-  const syncRoot = async () => {
+  const syncDataSource = async () => {
     await enqueueAndRun(
-      { root: true, idempotencyKey: operationId() },
-      'Root 直屬頁面',
-      'sync-root',
+      { dataSource: true, idempotencyKey: operationId() },
+      'Notion 文章資料庫',
+      'sync-database',
     );
   };
 
@@ -1463,16 +1463,16 @@ function NotionEditorialPanel({
           <div>
             <p className="admin-section-label">同步範圍</p>
             <h3>取得 Notion 最新內容</h3>
-            <p>同步主要頁面下的所有文章，或指定單一 Notion 頁面。</p>
+            <p>同步文章資料庫中的所有資料列，或指定單一 Notion 頁面。</p>
           </div>
           <div className="button-row admin-sync-actions">
             <LoadingButton
               className="secondary"
-              onClick={() => void syncRoot()}
+              onClick={() => void syncDataSource()}
               disabled={busy}
-              loading={busyAction === 'sync-root'}
+              loading={busyAction === 'sync-database'}
             >
-              同步主要頁面
+              同步文章資料庫
             </LoadingButton>
             <input
               value={pageId}
@@ -1519,12 +1519,12 @@ function NotionEditorialPanel({
           <div className="admin-card-heading">
             <div>
               <p className="admin-section-label">已連接內容</p>
-              <h2>Root Page 來源</h2>
+              <h2>資料庫文章來源</h2>
             </div>
             <span className="admin-count">{sources.length}</span>
           </div>
           <p className="admin-source-list-description">
-            顯示 Root Page 已同步的全部文章，包括已發布與已下架內容。
+            顯示 Notion 文章資料庫已同步的全部資料列，包括已發布與已下架內容。
           </p>
           <div className="admin-source-list">
             {sources.map((source) => (
@@ -1535,7 +1535,7 @@ function NotionEditorialPanel({
                       {source.name ||
                         source.title ||
                         source.page_title ||
-                        (source.external_id === 'root' ? '主要頁面' : 'Notion 頁面')}
+                        (source.external_id === 'root' ? '舊版主要頁面' : 'Notion 資料列')}
                     </strong>
                     <small className="admin-source-slug" title={source.slug || '尚未設定'}>
                       Slug：{source.slug || '尚未設定'}

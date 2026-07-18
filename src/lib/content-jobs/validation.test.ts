@@ -13,13 +13,13 @@ import {
 } from './validation';
 
 describe('content job request validation', () => {
-  it('accepts root sync as an exclusive sync target', () => {
-    expect(parseEnqueueRequest({ root: true, idempotencyKey: 'root-1' })).toEqual({
-      root: true,
-      idempotencyKey: 'root-1',
+  it('accepts data-source sync as an exclusive sync target', () => {
+    expect(parseEnqueueRequest({ dataSource: true, idempotencyKey: 'database-1' })).toEqual({
+      dataSource: true,
+      idempotencyKey: 'database-1',
     });
     expect(() =>
-      parseEnqueueRequest({ root: true, pageId: 'page-1', idempotencyKey: 'root-1' }),
+      parseEnqueueRequest({ dataSource: true, pageId: 'page-1', idempotencyKey: 'database-1' }),
     ).toThrow(/Exactly one/);
   });
 
