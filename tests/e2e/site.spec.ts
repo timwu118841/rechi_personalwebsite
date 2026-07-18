@@ -122,6 +122,16 @@ test.describe('公開即時閱讀體驗', () => {
     expect(bodyImageBox?.width).toBeLessThanOrEqual(608);
   });
 
+  test('文章分享列與頁尾之間保留清楚的收尾留白', async ({ page }) => {
+    await page.goto(welcomeArticlePath);
+    const [shareBox, footerBox] = await Promise.all([
+      page.locator('.share-row').boundingBox(),
+      page.locator('.site-footer').boundingBox(),
+    ]);
+    const spacing = (footerBox?.y || 0) - ((shareBox?.y || 0) + (shareBox?.height || 0));
+    expect(spacing).toBeGreaterThanOrEqual(64);
+  });
+
   test('未設定 Supabase 時後台清楚顯示設定提示且 API 拒絕匿名存取', async ({ page, request }) => {
     await page.goto('/admin/');
     await expect(

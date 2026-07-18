@@ -1600,6 +1600,7 @@ main,
   grid-template-columns: minmax(8rem, 0.25fr) minmax(0, 1fr) minmax(8rem, 0.25fr);
   gap: clamp(1.5rem, 4vw, 4rem);
   padding-top: clamp(3rem, 7vw, 5.5rem);
+  padding-bottom: clamp(4rem, 8vw, 6rem);
 }
 
 .article-reading {
