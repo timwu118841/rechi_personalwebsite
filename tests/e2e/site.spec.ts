@@ -109,10 +109,7 @@ test.describe('公開即時閱讀體驗', () => {
     expect(darkBackground).not.toBe(lightBackground);
 
     await page.goto(welcomeArticlePath);
-    const articleFallback = page.locator('.article-cover-fallback');
-    await expect(articleFallback).toBeVisible();
-    const articleFallbackBox = await articleFallback.boundingBox();
-    expect(articleFallbackBox?.width).toBeLessThanOrEqual(720);
+    await expect(page.locator('.article-cover')).toHaveCount(0);
 
     const prose = page.locator('.prose');
     await prose.evaluate((element) => {

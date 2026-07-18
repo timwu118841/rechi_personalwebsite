@@ -583,18 +583,6 @@ select {
   background: var(--color-brand);
   font-family: var(--font-serif);
 }
-.article-cover {
-  width: min(calc(100% - 2rem), 64rem);
-  margin: 1rem auto 3rem;
-  overflow: hidden;
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-soft);
-}
-.article-cover img {
-  width: 100%;
-  max-height: 42rem;
-  object-fit: cover;
-}
 .prose {
   color: var(--color-ink);
   font-family: var(--font-serif);
@@ -1607,30 +1595,6 @@ main,
   overflow-wrap: anywhere;
 }
 
-.article-cover {
-  width: min(calc(100% - 2rem), 48rem);
-  margin: clamp(1.5rem, 3vw, 2.5rem) auto 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.article-cover img {
-  width: 100%;
-  max-height: 28rem;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-}
-
-.article-cover-fallback {
-  width: min(calc(100% - 2rem), 42rem);
-  aspect-ratio: 2 / 1;
-  background: transparent;
-}
-
-.article-cover-fallback .default-artwork {
-  min-height: 0;
-}
-
 .article-layout {
   display: grid;
   grid-template-columns: minmax(8rem, 0.25fr) minmax(0, 1fr) minmax(8rem, 0.25fr);
@@ -2161,12 +2125,6 @@ main,
   }
   .article-facts dd {
     margin-top: 0.3rem;
-  }
-  .article-cover {
-    width: 100%;
-  }
-  .article-cover img {
-    aspect-ratio: 4 / 3;
   }
   .article-layout {
     width: min(calc(100% - 1.25rem), var(--content));
