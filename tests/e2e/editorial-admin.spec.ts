@@ -55,6 +55,18 @@ const activeSource = {
   page_title: '勞動法實務筆記',
   last_synced_at: '2026-07-17T12:00:00.000Z',
 };
+const legalCategory = {
+  slug: 'legal-practice',
+  name: '法律實務',
+  description: '從契約、爭議與日常法律工作中整理可帶走的判斷方法。',
+  order: 10,
+  visible: true,
+};
+const legalContentType = {
+  slug: 'legal-articles',
+  name: '法律文章',
+  description: '系統內部使用的文章格式。',
+};
 
 test.describe('受保護的 Notion 編輯發布後台', () => {
   test.beforeEach(async ({ page }, testInfo) => {
@@ -65,6 +77,7 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
         : activeCandidate.state,
     };
     let source = { ...activeSource };
+    let categories = [{ ...legalCategory }];
     let publishRequested = false;
     let articles = [
       publishedArticle,
@@ -80,9 +93,22 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
       if (url.pathname === '/api/admin/articles') body = { articles };
       else if (url.pathname === '/api/admin/settings')
         body = { settings: { shortTitle: '測試站' } };
-      else if (url.pathname === '/api/admin/taxonomies')
-        body = { categories: [], contentTypes: [] };
-      else if (url.pathname === '/api/admin/notion/sources') body = { sources: [source] };
+      else if (url.pathname === '/api/admin/taxonomies') {
+        if (request.method() === 'POST') {
+          const input = request.postDataJSON();
+          requests.push(`TAXONOMY ${JSON.stringify(input)}`);
+          if (input.kind === 'category') {
+            categories = categories.some((item) => item.slug === input.value.slug)
+              ? categories.map((item) =>
+                  item.slug === input.value.slug ? { ...input.value } : item,
+                )
+              : [...categories, { ...input.value }];
+          }
+          body = { item: input.value };
+        } else {
+          body = { categories, contentTypes: [legalContentType] };
+        }
+      } else if (url.pathname === '/api/admin/notion/sources') body = { sources: [source] };
       else if (
         url.pathname === `/api/admin/notion/sources/${activeSource.id}` &&
         request.method() === 'PATCH'
@@ -329,6 +355,64 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
       requests.some((entry) =>
         entry.startsWith(
           'UNPUBLISH {"expectedPublicationVersion":3,"reason":"內容需要更新","idempotencyKey":',
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  test('edits reader-facing categories without exposing the redundant content-type editor', async ({
+    page,
+  }) => {
+    await page.getByRole('button', { name: '文章分類' }).click();
+    await expect(page.getByRole('heading', { name: '文章分類', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '內容類型' })).toHaveCount(0);
+    await expect(page.getByText('內容類型由系統固定管理')).toBeVisible();
+
+    await page.getByRole('button', { name: /法律實務/ }).click();
+    await expect(page.getByLabel('分類網址代稱')).toHaveAttribute('readonly', '');
+    await page.getByLabel('分類名稱').fill('法律工作方法');
+    await page.getByLabel('分類說明').fill('整理法律工作中的判斷方法與實務觀察。');
+    await page.getByLabel('顯示在前台').uncheck();
+    const invalidFields = await page.locator('.admin-taxonomy-form').evaluate((form) =>
+      Array.from((form as HTMLFormElement).elements)
+        .filter(
+          (element) =>
+            'checkValidity' in element &&
+            !(element as HTMLInputElement | HTMLTextAreaElement).checkValidity(),
+        )
+        .map((element) => (element as HTMLInputElement | HTMLTextAreaElement).id),
+    );
+    expect(invalidFields).toEqual([]);
+    await page.getByRole('button', { name: '儲存分類' }).click();
+
+    await expect(page.getByRole('status')).toContainText('文章分類已儲存');
+    await expect(page.getByRole('button', { name: /法律工作方法/ })).toBeVisible();
+    const requests = requestLogs.get(page) || [];
+    expect(
+      requests.some((entry) =>
+        entry.includes(
+          'TAXONOMY {"kind":"category","value":{"slug":"legal-practice","name":"法律工作方法"',
+        ),
+      ),
+    ).toBe(true);
+
+    await page.getByRole('button', { name: '關閉通知' }).click();
+    await page.getByRole('button', { name: '新增分類' }).click();
+    await expect(page.getByLabel('分類網址代稱')).not.toHaveAttribute('readonly', '');
+    await expect(page.getByRole('button', { name: '儲存分類' })).toBeDisabled();
+    await page.getByLabel('分類名稱').fill('案例筆記');
+    await page.getByLabel('分類網址代稱').fill('case-notes');
+    await page.getByLabel('分類說明').fill('整理案例中的爭點、判斷與可延伸的實務觀察。');
+    await page.getByLabel('排序').fill('20');
+    await expect(page.getByRole('button', { name: '儲存分類' })).toBeEnabled();
+    await page.getByRole('button', { name: '儲存分類' }).click();
+
+    await expect(page.getByRole('status')).toContainText('文章分類已儲存');
+    await expect(page.getByRole('button', { name: /案例筆記/ })).toBeVisible();
+    expect(
+      requests.some((entry) =>
+        entry.includes(
+          'TAXONOMY {"kind":"category","value":{"slug":"case-notes","name":"案例筆記"',
         ),
       ),
     ).toBe(true);

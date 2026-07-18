@@ -24,6 +24,9 @@ export const POST: APIRoute = async (context) => {
   try {
     await requireAdmin(context.request);
     const body = await context.request.json();
+    if (body.kind !== 'category' && body.kind !== 'contentType') {
+      return json({ message: '不支援的分類設定類型。' }, { status: 400 });
+    }
     const repository = getContentRepository();
     const item =
       body.kind === 'category'

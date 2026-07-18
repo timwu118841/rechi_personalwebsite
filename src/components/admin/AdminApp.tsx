@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import type { Category, ContentType, MediaAsset, SiteSettings } from '@/lib/content/types';
+import type { Category, MediaAsset, SiteSettings } from '@/lib/content/types';
 import '@/styles/admin.css';
 import { renderMarkdown } from '@/lib/content/markdown';
 
@@ -462,7 +462,6 @@ export function Dashboard({
   const [focusedNotionArticleId, setFocusedNotionArticleId] = useState<string | null>(null);
   const [articles, setArticles] = useState<AdminArticle[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [contentTypes, setContentTypes] = useState<ContentType[]>([]);
   const [settings, setSettings] = useState<SiteSettings | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const { toast, showToast, dismissToast } = useToast();
@@ -486,12 +485,11 @@ export function Dashboard({
       const [articleData, settingData, taxonomyData] = await Promise.all([
         api<{ articles: AdminArticle[] }>('/api/admin/articles'),
         api<{ settings: SiteSettings }>('/api/admin/settings'),
-        api<{ categories: Category[]; contentTypes: ContentType[] }>('/api/admin/taxonomies'),
+        api<{ categories: Category[] }>('/api/admin/taxonomies'),
       ]);
       setArticles(articleData.articles);
       setSettings(settingData.settings);
       setCategories(taxonomyData.categories);
-      setContentTypes(taxonomyData.contentTypes);
     } catch (error) {
       showToast('error', (error as Error).message);
     }
@@ -569,7 +567,7 @@ export function Dashboard({
             onClick={() => setTab('taxonomies')}
           >
             <span aria-hidden="true">⌘</span>
-            分類與內容類型
+            文章分類
           </button>
         </nav>
         <main className="admin-main">
@@ -613,17 +611,23 @@ export function Dashboard({
           {tab === 'taxonomies' && (
             <TaxonomyPanel
               categories={categories}
-              contentTypes={contentTypes}
-              onSave={async (kind, value) => {
+              onSave={async (value) => {
                 try {
-                  await api('/api/admin/taxonomies', {
+                  const result = await api<{ item: Category }>('/api/admin/taxonomies', {
                     method: 'POST',
-                    body: JSON.stringify({ kind, value }),
+                    body: JSON.stringify({ kind: 'category', value }),
                   });
-                  await reload();
-                  showToast('success', '內容設定已更新。');
+                  setCategories((current) =>
+                    [...current.filter((item) => item.slug !== result.item.slug), result.item].sort(
+                      (left, right) =>
+                        left.order - right.order || left.name.localeCompare(right.name),
+                    ),
+                  );
+                  showToast('success', '文章分類已儲存。');
+                  return result.item;
                 } catch (error) {
                   showToast('error', (error as Error).message);
+                  return null;
                 }
               }}
             />
@@ -1747,13 +1751,18 @@ function MediaUpload({
 
 function TaxonomyPanel({
   categories,
-  contentTypes,
   onSave,
 }: {
   categories: Category[];
-  contentTypes: ContentType[];
-  onSave: (kind: 'category' | 'contentType', value: Category | ContentType) => Promise<void>;
+  onSave: (value: Category) => Promise<Category | null>;
 }) {
+  const emptyCategory = (): Category => ({
+    slug: '',
+    name: '',
+    description: '',
+    order: 100,
+    visible: true,
+  });
   const [category, setCategory] = useState<Category>({
     slug: '',
     name: '',
@@ -1761,145 +1770,174 @@ function TaxonomyPanel({
     order: 100,
     visible: true,
   });
-  const [contentType, setContentType] = useState<ContentType>({
-    slug: '',
-    name: '',
-    description: '',
-  });
-  const [saving, setSaving] = useState<'category' | 'contentType' | null>(null);
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const normalizedCategory = {
+    ...category,
+    slug: category.slug.trim().toLowerCase(),
+    name: category.name.trim(),
+    description: category.description.trim(),
+  };
+  const categoryIsValid = Boolean(
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(normalizedCategory.slug) &&
+    normalizedCategory.name &&
+    normalizedCategory.description &&
+    Number.isInteger(normalizedCategory.order) &&
+    normalizedCategory.order >= 0 &&
+    normalizedCategory.order <= 10000,
+  );
+  const saveCategory = async () => {
+    if (!categoryIsValid || saving) return;
+    setSaving(true);
+    try {
+      const saved = await onSave(normalizedCategory);
+      if (saved) {
+        setSelectedSlug(saved.slug);
+        setCategory(saved);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
     <section>
       <div className="admin-title-row">
         <div>
           <p className="admin-kicker">Organization</p>
-          <h1>分類與內容類型</h1>
+          <h1>文章分類</h1>
+          <p className="admin-page-description">分類會顯示在前台，讀者可以依主題瀏覽文章。</p>
         </div>
-      </div>
-      <div className="admin-two-columns">
-        <form
-          className="admin-form-card"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            setSaving('category');
-            try {
-              await onSave('category', category);
-            } finally {
-              setSaving(null);
-            }
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => {
+            setSelectedSlug(null);
+            setCategory(emptyCategory());
           }}
         >
-          <h2>文章分類</h2>
-          <p>用來組織文章主題，例如契約、職涯或工作方法。</p>
-          {categories.map((item) => (
-            <button
-              type="button"
-              className="taxonomy-edit"
-              key={item.slug}
-              onClick={() => setCategory(item)}
-            >
-              {item.name}
-              <small>{item.visible ? '顯示中' : '已隱藏'}</small>
-            </button>
-          ))}
-          <label>
-            名稱
+          新增分類
+        </button>
+      </div>
+      <div className="admin-message" role="note">
+        <strong>分類與格式分工</strong>
+        <span>文章分類是讀者看得到的主題；內容類型由系統固定管理，目前不需要另外設定。</span>
+      </div>
+      <div className="admin-taxonomy-layout">
+        <aside className="admin-form-card admin-taxonomy-list" aria-label="現有文章分類">
+          <div className="admin-card-heading">
+            <div>
+              <p className="admin-section-label">現有分類</p>
+              <h2>選擇要編輯的分類</h2>
+            </div>
+            <span className="admin-count">{categories.length}</span>
+          </div>
+          <div className="admin-list">
+            {categories.map((item) => (
+              <button
+                type="button"
+                className="taxonomy-edit"
+                key={item.slug}
+                aria-pressed={selectedSlug === item.slug}
+                onClick={() => {
+                  setSelectedSlug(item.slug);
+                  setCategory({ ...item });
+                }}
+              >
+                <span>
+                  <strong>{item.name}</strong>
+                  <small>/{item.slug}</small>
+                </span>
+                <small>{item.visible ? '前台顯示' : '已隱藏'}</small>
+              </button>
+            ))}
+          </div>
+        </aside>
+        <form
+          className="admin-form-card admin-taxonomy-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void saveCategory();
+          }}
+        >
+          <div>
+            <p className="admin-section-label">{selectedSlug ? '編輯分類' : '新增分類'}</p>
+            <h2>{selectedSlug ? category.name : '建立文章分類'}</h2>
+          </div>
+          <label htmlFor="category-name">
+            分類名稱
             <input
+              id="category-name"
               value={category.name}
               onChange={(event) => setCategory({ ...category, name: event.target.value })}
+              maxLength={80}
+              placeholder="例如：法律實務"
               required
             />
           </label>
-          <label>
-            網址代稱
+          <label htmlFor="category-slug">
+            分類網址代稱
             <input
+              id="category-slug"
               value={category.slug}
-              onChange={(event) => setCategory({ ...category, slug: event.target.value })}
+              onChange={(event) =>
+                setCategory({
+                  ...category,
+                  slug: event.target.value.toLowerCase().replace(/\s+/g, '-'),
+                })
+              }
+              pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+              maxLength={100}
+              readOnly={selectedSlug !== null}
+              aria-describedby="category-slug-help"
+              placeholder="legal-practice"
               required
             />
+            <small id="category-slug-help">
+              {selectedSlug
+                ? '為避免既有文章網址失效，建立後不能修改。'
+                : '僅限小寫英文、數字與連字號。'}
+            </small>
           </label>
-          <label>
-            說明
+          <label htmlFor="category-description">
+            分類說明
             <textarea
+              id="category-description"
               rows={3}
               value={category.description}
               onChange={(event) => setCategory({ ...category, description: event.target.value })}
+              maxLength={180}
+              placeholder="說明這個分類收錄哪些文章"
               required
             />
           </label>
-          <label>
+          <label htmlFor="category-order">
             排序
             <input
+              id="category-order"
               type="number"
               min="0"
+              max="10000"
               value={category.order}
               onChange={(event) => setCategory({ ...category, order: Number(event.target.value) })}
+              required
             />
           </label>
-          <label className="checkbox">
+          <label className="checkbox" htmlFor="category-visible">
             <input
+              id="category-visible"
               type="checkbox"
               checked={category.visible}
               onChange={(event) => setCategory({ ...category, visible: event.target.checked })}
             />
             顯示在前台
           </label>
-          <LoadingButton loading={saving === 'category'} disabled={saving !== null}>
+          <LoadingButton
+            type="button"
+            loading={saving}
+            disabled={saving || !categoryIsValid}
+            onClick={() => void saveCategory()}
+          >
             儲存分類
-          </LoadingButton>
-        </form>
-        <form
-          className="admin-form-card"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            setSaving('contentType');
-            try {
-              await onSave('contentType', contentType);
-            } finally {
-              setSaving(null);
-            }
-          }}
-        >
-          <h2>內容類型</h2>
-          <p>定義文章形式，例如法律文章、生活隨筆或讀書筆記。</p>
-          {contentTypes.map((item) => (
-            <button
-              type="button"
-              className="taxonomy-edit"
-              key={item.slug}
-              onClick={() => setContentType(item)}
-            >
-              {item.name}
-            </button>
-          ))}
-          <label>
-            名稱
-            <input
-              value={contentType.name}
-              onChange={(event) => setContentType({ ...contentType, name: event.target.value })}
-              required
-            />
-          </label>
-          <label>
-            網址代稱
-            <input
-              value={contentType.slug}
-              onChange={(event) => setContentType({ ...contentType, slug: event.target.value })}
-              required
-            />
-          </label>
-          <label>
-            說明
-            <textarea
-              rows={3}
-              value={contentType.description}
-              onChange={(event) =>
-                setContentType({ ...contentType, description: event.target.value })
-              }
-              required
-            />
-          </label>
-          <LoadingButton loading={saving === 'contentType'} disabled={saving !== null}>
-            儲存內容類型
           </LoadingButton>
         </form>
       </div>

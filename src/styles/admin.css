@@ -943,10 +943,45 @@ legend {
 }
 .taxonomy-edit {
   display: flex;
+  width: 100%;
+  align-items: center;
   justify-content: space-between;
+  gap: 1rem;
   border-color: var(--admin-line);
   color: #3f3f46;
   background: #f4f4f5;
+  text-align: left;
+}
+.taxonomy-edit[aria-pressed='true'] {
+  border-color: #a5b4fc;
+  background: #eef2ff;
+}
+.taxonomy-edit > span {
+  display: grid;
+  min-width: 0;
+  gap: 0.15rem;
+}
+.taxonomy-edit small {
+  color: var(--admin-subtle);
+  font-size: 0.72rem;
+}
+.admin-taxonomy-layout {
+  display: grid;
+  grid-template-columns: minmax(18rem, 0.8fr) minmax(24rem, 1.2fr);
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+}
+.admin-taxonomy-list,
+.admin-taxonomy-form {
+  align-content: start;
+}
+.admin-taxonomy-form label > small {
+  color: var(--admin-subtle);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+.admin-taxonomy-form > button {
+  min-height: 3.25rem;
 }
 .admin-message {
   display: flex;
@@ -1177,6 +1212,7 @@ legend {
   .admin-login,
   .admin-workspace,
   .admin-two-columns,
+  .admin-taxonomy-layout,
   .admin-sync-card {
     grid-template-columns: 1fr;
   }
