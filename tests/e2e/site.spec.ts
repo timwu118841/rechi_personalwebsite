@@ -9,6 +9,25 @@ const encodedUnicodeArticlePath = buildArticlePath(unicodeArticleSlug);
 const rawUnicodeArticlePath = `/articles/${unicodeArticleSlug}/`;
 
 test.describe('公開即時閱讀體驗', () => {
+  test('公開頁面與後台回應包含必要的瀏覽器安全標頭', async ({ request }) => {
+    for (const path of ['/', '/admin/']) {
+      const response = await request.get(path);
+      const headers = response.headers();
+      expect(headers['x-content-type-options']).toBe('nosniff');
+      expect(headers['x-frame-options']).toBe('DENY');
+      expect(headers['cross-origin-opener-policy']).toBe('same-origin');
+      expect(headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
+      expect(headers['content-security-policy']).toContain("base-uri 'self'");
+      expect(headers['content-security-policy']).toContain("object-src 'none'");
+      expect(headers['content-security-policy']).toContain("frame-ancestors 'none'");
+    }
+
+    const adminApi = await request.get('/api/admin/articles');
+    expect([401, 503]).toContain(adminApi.status());
+    expect(adminApi.headers()['cache-control']).toContain('no-store');
+    expect(adminApi.headers()['x-robots-tag']).toContain('noindex');
+  });
+
   test('首頁、文章、封面與主要探索路徑可使用', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { level: 1 })).toContainText('法律經驗');

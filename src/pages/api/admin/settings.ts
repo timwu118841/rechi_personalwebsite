@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { requireAdmin } from '@/lib/admin/auth';
-import { errorResponse, invalidateContent, json } from '@/lib/admin/http';
+import { errorResponse, invalidateContent, json, readJsonBody } from '@/lib/admin/http';
 import { getContentRepository } from '@/lib/content/repository';
 import { siteSettingsInputSchema } from '@/lib/content/validation';
 
@@ -19,7 +19,7 @@ export const PUT: APIRoute = async (context) => {
   try {
     await requireAdmin(context.request);
     const settings = await getContentRepository().saveSiteSettings(
-      siteSettingsInputSchema.parse(await context.request.json()),
+      siteSettingsInputSchema.parse(await readJsonBody(context.request)),
     );
     await invalidateContent(context, ['site-settings']);
     return json({ settings });
