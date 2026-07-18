@@ -9,19 +9,29 @@ const { settings } = Astro.props;
 <footer class="site-footer">
   <div class="container">
     <div class="footer-grid">
-      <div>
-        <p class="footer-title">{settings.siteTitle}</p><p class="footer-copy">
-          {settings.siteDescription}
-        </p>
-      </div><nav class="footer-links" aria-label="頁尾導覽">
-        <a href="/articles/">所有文章</a><a href="/categories/">文章分類</a><a href="/about/"
-          >關於本站</a
-        ><a href="/rss.xml">RSS</a><a href="/admin/" rel="nofollow">管理登入</a>
-      </nav>
+      <div class="footer-intro">
+        <span class="footer-mark" aria-hidden="true">R</span><div>
+          <p class="footer-title">
+            {settings.siteTitle}
+          </p><p class="footer-copy">
+            {settings.siteDescription}
+          </p>
+        </div>
+      </div><div class="footer-navs">
+        <nav class="footer-links" aria-label="內容導覽">
+          <strong>探索</strong><a href="/articles/">所有文章</a><a href="/categories/">文章分類</a
+          ><a href="/tags/">文章標籤</a><a href="/search/">站內搜尋</a>
+        </nav><nav class="footer-links" aria-label="網站導覽">
+          <strong>本站</strong><a href="/about/">關於本站</a><a href="/rss.xml">RSS 訂閱</a><a
+            href="/admin/"
+            rel="nofollow">管理登入</a
+          >
+        </nav>
+      </div>
     </div>
     <div class="footer-bottom">
-      <span>© {new Date().getFullYear()} {settings.authorName}</span><span
-        >法律資訊與經驗分享，不構成個案法律意見。</span
+      <span>© {new Date().getFullYear()} {settings.authorName}</span><span class="footer-note"
+        ><span aria-hidden="true">※</span> 法律資訊與經驗分享，不構成個案法律意見。</span
       >
     </div>
   </div>

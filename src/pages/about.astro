@@ -11,10 +11,16 @@ if (Astro.cache.enabled) Astro.cache.set({ maxAge: 86400, swr: 604800, tags: ['s
   title="關於本站"
   description={`了解${settings.siteTitle}的寫作方向、作者與內容原則。`}
   ><header class="page-hero">
-    <div class="container">
-      <p class="eyebrow">About</p><h1>讓法律知識，回到人的處境。</h1><p>
-        這是一個整理法律實務經驗、制度觀察與工作方法的個人部落格。
-      </p>
+    <div class="container page-hero-grid">
+      <div>
+        <p class="page-index" aria-hidden="true">ABOUT / 05</p><p class="eyebrow">About</p><h1>
+          讓法律知識，回到人的處境。
+        </h1>
+      </div><div class="page-intro">
+        <p>這是一個整理法律實務經驗、制度觀察與工作方法的個人部落格。</p><span
+          >By {settings.authorName}</span
+        >
+      </div>
     </div>
   </header><section class="section">
     <div class="container about-grid">

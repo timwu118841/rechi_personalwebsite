@@ -11,11 +11,11 @@ const href = (target: number) => (target === 1 ? basePath : `${basePath}?page=${
 {
   totalPages > 1 && (
     <nav class="pagination" aria-label="文章分頁">
-      {page > 1 ? <a href={href(page - 1)}>← 上一頁</a> : <span aria-hidden="true" />}
-      <span>
-        第 {page} 頁，共 {totalPages} 頁
+      {page > 1 ? <a href={href(page - 1)}>← 較新的文章</a> : <span aria-hidden="true" />}
+      <span class="pagination-status">
+        <span>{String(page).padStart(2, '0')}</span> / {String(totalPages).padStart(2, '0')}
       </span>
-      {page < totalPages ? <a href={href(page + 1)}>下一頁 →</a> : <span aria-hidden="true" />}
+      {page < totalPages ? <a href={href(page + 1)}>較早的文章 →</a> : <span aria-hidden="true" />}
     </nav>
   )
 }

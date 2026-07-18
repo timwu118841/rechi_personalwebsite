@@ -30,10 +30,14 @@ const basePath = `/categories/${slug}/`;
   description={category.description}
   canonical={pageCanonical(basePath, page, Astro.site!)}
   ><header class="page-hero">
-    <div class="container">
-      <p class="eyebrow">Category</p><h1>{category.name}</h1><p>{category.description}</p><p>
-        共 {result.totalItems} 篇文章
-      </p>
+    <div class="container page-hero-grid">
+      <div>
+        <p class="page-index" aria-hidden="true">TOPIC</p><p class="eyebrow">Category</p><h1>
+          {category.name}
+        </h1>
+      </div><div class="page-intro">
+        <p>{category.description}</p><span>共 {result.totalItems} 篇文章</span>
+      </div>
     </div>
   </header><section class="section">
     <div class="container">

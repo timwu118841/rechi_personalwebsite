@@ -16,8 +16,7 @@ test.describe('公開即時閱讀體驗', () => {
       'href',
       '/articles/',
     );
-    await expect(page.locator('.article-card').first().locator('img')).toBeVisible();
-    await expect(page.locator('.card-pattern')).toHaveCount(0);
+    await expect(page.locator('.article-card').first().locator('.default-artwork')).toBeVisible();
 
     await page.goto(welcomeArticlePath);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
@@ -83,6 +82,91 @@ test.describe('公開即時閱讀體驗', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   });
 
+  test('預設圖片尺寸、Header 工具間距與雙主題配色保持舒適', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/');
+
+    const artwork = page.locator('.article-card-featured .default-artwork');
+    await expect(artwork).toBeVisible();
+    const lightBackground = await artwork.evaluate(
+      (element) => getComputedStyle(element).backgroundImage,
+    );
+    const artworkBox = await artwork.boundingBox();
+    expect(artworkBox?.height).toBeLessThanOrEqual(340);
+
+    const search = page.locator('.site-nav .search-link');
+    const toggle = page.locator('.site-nav .theme-toggle');
+    const [searchBox, toggleBox] = await Promise.all([search.boundingBox(), toggle.boundingBox()]);
+    expect(
+      (toggleBox?.x || 0) - ((searchBox?.x || 0) + (searchBox?.width || 0)),
+    ).toBeGreaterThanOrEqual(12);
+
+    await toggle.click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    const darkBackground = await artwork.evaluate(
+      (element) => getComputedStyle(element).backgroundImage,
+    );
+    expect(darkBackground).not.toBe(lightBackground);
+
+    await page.goto(welcomeArticlePath);
+    await expect(page.locator('.article-cover')).toHaveCount(0);
+
+    const prose = page.locator('.prose');
+    await prose.evaluate((element) => {
+      element.insertAdjacentHTML(
+        'afterbegin',
+        '<img data-testid="article-body-image" width="1200" height="630" alt="版面測試圖片" src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%221200%22 height=%22630%22%3E%3Crect width=%221200%22 height=%22630%22 fill=%22%23ddd%22/%3E%3C/svg%3E" />',
+      );
+    });
+    const bodyImageBox = await page.getByTestId('article-body-image').boundingBox();
+    expect(bodyImageBox?.width).toBeLessThanOrEqual(608);
+  });
+
+  test('首頁文章卡片圖片等高對齊且裝飾線不與文字重疊', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/');
+
+    const artworkLinks = page.locator('.article-card:not(.article-card-featured) .card-image');
+    const boxes = await artworkLinks.evaluateAll((elements) =>
+      elements.slice(0, 3).map((element) => {
+        const box = element.getBoundingClientRect();
+        return { y: box.y, height: box.height };
+      }),
+    );
+    expect(boxes).toHaveLength(3);
+    expect(
+      Math.max(...boxes.map((box) => box.y)) - Math.min(...boxes.map((box) => box.y)),
+    ).toBeLessThanOrEqual(1);
+    expect(
+      Math.max(...boxes.map((box) => box.height)) - Math.min(...boxes.map((box) => box.height)),
+    ).toBeLessThanOrEqual(1);
+
+    const firstArtwork = artworkLinks.first();
+    await expect(firstArtwork).toHaveCSS('text-decoration-line', 'none');
+    expect(
+      await firstArtwork
+        .locator('.default-artwork')
+        .evaluate((element) => getComputedStyle(element, '::after').borderTopWidth),
+    ).toBe('0px');
+    const [copyBox, ruleBox] = await Promise.all([
+      firstArtwork.locator('.default-artwork-copy').boundingBox(),
+      firstArtwork.locator('.default-artwork-rule').boundingBox(),
+    ]);
+    expect((ruleBox?.y || 0) - ((copyBox?.y || 0) + (copyBox?.height || 0))).toBeGreaterThanOrEqual(
+      8,
+    );
+  });
+
+  test('文章分享列與頁尾之間保留清楚的收尾留白', async ({ page }) => {
+    await page.goto(welcomeArticlePath);
+    const [shareBox, footerBox] = await Promise.all([
+      page.locator('.share-row').boundingBox(),
+      page.locator('.site-footer').boundingBox(),
+    ]);
+    const spacing = (footerBox?.y || 0) - ((shareBox?.y || 0) + (shareBox?.height || 0));
+    expect(spacing).toBeGreaterThanOrEqual(64);
+  });
+
   test('未設定 Supabase 時後台清楚顯示設定提示且 API 拒絕匿名存取', async ({ page, request }) => {
     await page.goto('/admin/');
     await expect(
@@ -116,6 +200,47 @@ test.describe('公開即時閱讀體驗', () => {
       await menu.click();
       await expect(page.locator('.mobile-nav').getByRole('link', { name: '文章' })).toBeVisible();
     }
+  });
+
+  test('公開核心頁面在手機寬度沒有橫向溢位', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+
+    for (const path of [
+      '/',
+      '/articles/',
+      welcomeArticlePath,
+      '/categories/',
+      '/tags/',
+      '/search/',
+      '/about/',
+    ]) {
+      await page.goto(path);
+      const hasHorizontalOverflow = await page.evaluate(
+        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      );
+      expect(hasHorizontalOverflow, `${path} 不應產生橫向捲動`).toBe(false);
+    }
+  });
+
+  test('文章長標題在 200% 縮放下完整換行且不撐破版面', async ({ page }) => {
+    await page.setViewportSize({ width: 640, height: 900 });
+    await page.goto(welcomeArticlePath);
+    const heading = page.locator('.article-header h1');
+    await heading.evaluate((element) => {
+      element.textContent =
+        '這是一個用來驗證法律實務文章超長標題在高倍率縮放與窄版閱讀情境下仍能完整換行的測試標題';
+      document.documentElement.style.zoom = '2';
+    });
+
+    await expect(heading).toBeVisible();
+    expect(await heading.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+      true,
+    );
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
   });
 
   test('分析被封鎖或收到多餘欄位時不影響閱讀且不送出敏感資料', async ({ page }) => {

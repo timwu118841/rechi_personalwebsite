@@ -1,0 +1,16 @@
+---
+interface Props {
+  compact?: boolean;
+}
+
+const { compact = false } = Astro.props;
+---
+
+<span class:list={['default-artwork', { 'default-artwork-compact': compact }]} aria-hidden="true">
+  <span class="default-artwork-seal">法</span>
+  <span class="default-artwork-copy">
+    <strong>法律實務筆記</strong>
+    <small>從實務現場出發，讓複雜的法律更容易被理解。</small>
+  </span>
+  <span class="default-artwork-rule"></span>
+</span>

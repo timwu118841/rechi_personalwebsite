@@ -29,10 +29,16 @@ const canonical = pageCanonical('/articles/', page, Astro.site!);
   canonical={canonical}
 >
   <header class="page-hero">
-    <div class="container">
-      <p class="eyebrow">All articles</p><h1>所有文章</h1><p>
-        法律不只存在於法條裡，也存在於每一次判斷、溝通與選擇之中。
-      </p>
+    <div class="container page-hero-grid">
+      <div>
+        <p class="page-index" aria-hidden="true">INDEX / 01</p><p class="eyebrow">
+          All articles
+        </p><h1>所有文章</h1>
+      </div><div class="page-intro">
+        <p>法律不只存在於法條裡，也存在於每一次判斷、溝通與選擇之中。</p><span
+          >{result.totalItems} 篇公開文章</span
+        >
+      </div>
     </div>
   </header>
   <section class="section">

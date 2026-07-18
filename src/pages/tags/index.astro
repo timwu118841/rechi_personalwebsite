@@ -8,17 +8,28 @@ if (Astro.cache.enabled)
 
 <BaseLayout title="文章標籤" description="依標籤探索法律實務筆記。"
   ><header class="page-hero">
-    <div class="container">
-      <p class="eyebrow">Tags</p><h1>文章標籤</h1><p>依照關鍵概念找到相關文章。</p>
+    <div class="container page-hero-grid">
+      <div>
+        <p class="page-index" aria-hidden="true">INDEX / 03</p><p class="eyebrow">Tags</p><h1>
+          文章標籤
+        </h1>
+      </div><div class="page-intro">
+        <p>從關鍵概念切入，在不同文章之間找到相連的思考線索。</p><span>{tags.length} 個標籤</span>
+      </div>
     </div>
   </header><section class="section">
     <div class="container taxonomy-grid">
       {
-        tags.map((tag) => (
+        tags.map((tag, index) => (
           <a class="taxonomy-card" href={`/tags/${encodeURIComponent(tag.name)}/`}>
             <>
-              <strong>#{tag.name}</strong>
-              <span>{tag.count} 篇文章 →</span>
+              <>
+                <span class="taxonomy-index" aria-hidden="true">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+                <strong>#{tag.name}</strong>
+              </>
+              <span class="taxonomy-count">{tag.count} 篇文章 →</span>
             </>
           </a>
         ))
