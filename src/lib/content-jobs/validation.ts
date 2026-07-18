@@ -101,6 +101,14 @@ export function parseSourceSummaryRequest(value: unknown): {
   };
 }
 
+export function parseFeaturedArticleRequest(value: unknown): { featured: boolean } {
+  const input = record(value);
+  if (typeof input.featured !== 'boolean') {
+    throw new RequestValidationError('featured must be a boolean.');
+  }
+  return { featured: input.featured };
+}
+
 export function parsePrepareRequest(value: unknown): {
   expectedWorkingCopyVersion?: number;
   expectedPublicationVersion?: number;

@@ -1,6 +1,6 @@
 begin;
 
-select plan(69);
+select plan(81);
 
 select has_table('public', 'article_sources', 'Notion source table exists');
 select has_table('public', 'article_source_revisions', 'Immutable revision table exists');
@@ -36,6 +36,12 @@ select has_function(
   'enqueue_content_job',
   array['text', 'text', 'uuid', 'uuid', 'jsonb', 'timestamptz', 'integer', 'integer'],
   'Job enqueueing is exposed through a partial-index-safe RPC'
+);
+select has_function(
+  'public',
+  'set_featured_article',
+  array['uuid', 'boolean', 'uuid'],
+  'Featured article selection is exposed through a server-only RPC'
 );
 select is(
   (select public from storage.buckets where id = 'notion-staging'),
@@ -645,6 +651,95 @@ select is(
   (select status from public.articles where slug = 'manual-review-defaults'),
   'published',
   'Republishing restores the existing article without creating a replacement record'
+);
+
+select is(
+  (select (public.save_article_with_policy(
+    null, 'secondary-featured-article', 'Secondary featured article',
+    'A sufficiently long description for the secondary featured article.',
+    'Secondary article body', null, 'Secondary article body', 'published', now(),
+    'legal-articles', 'legal-practice', '{}'::text[], false, null,
+    null, null, null, 'notion_direct'
+  )).featured),
+  false,
+  'A second published article starts without featured status'
+);
+
+select lives_ok(
+  $$select public.set_featured_article(
+    (select id from public.articles where slug = 'manual-review-defaults'),
+    true,
+    '90000000-0000-0000-0000-000000000001'
+  )$$,
+  'A published article can be selected as featured'
+);
+
+select is(
+  (select featured from public.articles where slug = 'manual-review-defaults'),
+  true,
+  'The selected article is featured'
+);
+
+select is(
+  (select featured from public.article_working_copies
+   where id = '30000000-0000-0000-0000-000000000003'),
+  false,
+  'Featured selection remains Admin metadata rather than rewriting the Notion working copy'
+);
+
+select lives_ok(
+  $$select public.set_featured_article(
+    (select id from public.articles where slug = 'secondary-featured-article'),
+    true,
+    '90000000-0000-0000-0000-000000000001'
+  )$$,
+  'A different published article can replace the featured selection'
+);
+
+select is(
+  (select count(*) from public.articles where featured),
+  1::bigint,
+  'Only one article can be featured'
+);
+
+select is(
+  (select featured from public.articles where slug = 'manual-review-defaults'),
+  false,
+  'Selecting another article clears the previous featured article'
+);
+
+select is(
+  (select featured from public.articles where slug = 'secondary-featured-article'),
+  true,
+  'The replacement article becomes featured'
+);
+
+select is(
+  (select (public.save_article_with_policy(
+    (select id from public.articles where slug = 'secondary-featured-article'),
+    'secondary-featured-article', 'Secondary featured article',
+    'A sufficiently long description for the secondary featured article.',
+    'Republished article body', null, 'Republished article body', 'published', now(),
+    'legal-articles', 'legal-practice', '{}'::text[], false, null,
+    null, null, null, 'notion_direct'
+  )).featured),
+  true,
+  'Republishing preserves the Admin-managed featured selection'
+);
+
+select lives_ok(
+  $$select public.set_featured_article(
+    (select id from public.articles where slug = 'secondary-featured-article'),
+    false,
+    '90000000-0000-0000-0000-000000000001'
+  )$$,
+  'The featured selection can be cleared'
+);
+
+select is(
+  (select count(*) from public.articles where featured),
+  0::bigint,
+  'Clearing the featured selection leaves no featured article'
 );
 
 select * from finish();

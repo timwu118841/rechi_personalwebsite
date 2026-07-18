@@ -187,6 +187,17 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
           article.id === publishedArticle.id ? { ...article, status: 'unpublished' } : article,
         );
         body = { publication: { article_id: publishedArticle.id, publication_version: 4 } };
+      } else if (
+        url.pathname === `/api/admin/articles/${publishedArticle.id}/featured` &&
+        request.method() === 'PATCH'
+      ) {
+        const input = request.postDataJSON();
+        requests.push(`FEATURED ${JSON.stringify(input)}`);
+        articles = articles.map((article) => ({
+          ...article,
+          featured: article.id === publishedArticle.id ? input.featured : false,
+        }));
+        body = { article: articles.find((article) => article.id === publishedArticle.id) };
       } else {
         body = { ok: true };
       }
@@ -391,6 +402,21 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
         ),
       ),
     ).toBe(true);
+  });
+
+  test('sets and clears the featured article from the published article list', async ({ page }) => {
+    const publishedSection = page.locator('#published-articles');
+
+    await publishedSection.getByRole('button', { name: '設為精選文章' }).click();
+    await expect(publishedSection.getByText('精選文章', { exact: true })).toBeVisible();
+    await expect(publishedSection.getByRole('button', { name: '取消精選文章' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    const requests = requestLogs.get(page) || [];
+    expect(requests).toContain(`PATCH /api/admin/articles/${publishedArticle.id}/featured`);
+    expect(requests).toContain('FEATURED {"featured":true}');
   });
 
   test('edits reader-facing categories without exposing the redundant content-type editor', async ({

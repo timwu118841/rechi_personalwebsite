@@ -41,6 +41,7 @@ if (
 const requiredMarkers = [
   'publication_policy',
   'save_article_with_policy',
+  'set_featured_article',
   'finalize_publication_candidate',
   'content_outbox',
   'actor_id',

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseAttestationRequest,
   parseEnqueueRequest,
+  parseFeaturedArticleRequest,
   parseLimit,
   parsePrepareRequest,
   parsePublishRequest,
@@ -90,5 +91,11 @@ describe('content job request validation', () => {
     expect(() => parseSourceSummaryRequest({ summary: '', expectedWorkingCopyVersion: 4 })).toThrow(
       /summary/,
     );
+  });
+
+  it('accepts only an explicit boolean for featured article changes', () => {
+    expect(parseFeaturedArticleRequest({ featured: true })).toEqual({ featured: true });
+    expect(parseFeaturedArticleRequest({ featured: false })).toEqual({ featured: false });
+    expect(() => parseFeaturedArticleRequest({ featured: 'true' })).toThrow(/featured/);
   });
 });
