@@ -668,8 +668,12 @@ html[data-theme='dark'] .prose span[data-editor-color='danger'] {
   font-size: 0.86em;
 }
 .prose img {
+  width: auto;
+  max-width: min(100%, 38rem);
+  max-height: 32rem;
   margin-inline: auto;
   border-radius: var(--radius-md);
+  object-fit: contain;
 }
 .article-end {
   margin-top: 3.5rem;
@@ -1604,21 +1608,21 @@ main,
 }
 
 .article-cover {
-  width: min(calc(100% - 2rem), var(--content));
-  margin-block: 0;
+  width: min(calc(100% - 2rem), 48rem);
+  margin: clamp(1.5rem, 3vw, 2.5rem) auto 0;
   border-radius: 0;
   box-shadow: none;
 }
 
 .article-cover img {
   width: 100%;
-  max-height: 46rem;
-  aspect-ratio: 16 / 8.5;
+  max-height: 28rem;
+  aspect-ratio: 16 / 9;
   object-fit: cover;
 }
 
 .article-cover-fallback {
-  width: min(calc(100% - 2rem), 54rem);
+  width: min(calc(100% - 2rem), 42rem);
   aspect-ratio: 2 / 1;
   background: transparent;
 }

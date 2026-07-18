@@ -112,7 +112,17 @@ test.describe('公開即時閱讀體驗', () => {
     const articleFallback = page.locator('.article-cover-fallback');
     await expect(articleFallback).toBeVisible();
     const articleFallbackBox = await articleFallback.boundingBox();
-    expect(articleFallbackBox?.width).toBeLessThanOrEqual(900);
+    expect(articleFallbackBox?.width).toBeLessThanOrEqual(720);
+
+    const prose = page.locator('.prose');
+    await prose.evaluate((element) => {
+      element.insertAdjacentHTML(
+        'afterbegin',
+        '<img data-testid="article-body-image" width="1200" height="630" alt="版面測試圖片" src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%221200%22 height=%22630%22%3E%3Crect width=%221200%22 height=%22630%22 fill=%22%23ddd%22/%3E%3C/svg%3E" />',
+      );
+    });
+    const bodyImageBox = await page.getByTestId('article-body-image').boundingBox();
+    expect(bodyImageBox?.width).toBeLessThanOrEqual(608);
   });
 
   test('未設定 Supabase 時後台清楚顯示設定提示且 API 拒絕匿名存取', async ({ page, request }) => {
