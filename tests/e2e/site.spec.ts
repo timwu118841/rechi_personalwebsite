@@ -16,8 +16,7 @@ test.describe('公開即時閱讀體驗', () => {
       'href',
       '/articles/',
     );
-    await expect(page.locator('.article-card').first().locator('img')).toBeVisible();
-    await expect(page.locator('.card-pattern')).toHaveCount(0);
+    await expect(page.locator('.article-card').first().locator('.default-artwork')).toBeVisible();
 
     await page.goto(welcomeArticlePath);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
@@ -81,6 +80,39 @@ test.describe('公開即時閱讀體驗', () => {
     await expect(toggle).toHaveAttribute('aria-pressed', 'true');
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  });
+
+  test('預設圖片尺寸、Header 工具間距與雙主題配色保持舒適', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/');
+
+    const artwork = page.locator('.article-card-featured .default-artwork');
+    await expect(artwork).toBeVisible();
+    const lightBackground = await artwork.evaluate(
+      (element) => getComputedStyle(element).backgroundImage,
+    );
+    const artworkBox = await artwork.boundingBox();
+    expect(artworkBox?.height).toBeLessThanOrEqual(340);
+
+    const search = page.locator('.site-nav .search-link');
+    const toggle = page.locator('.site-nav .theme-toggle');
+    const [searchBox, toggleBox] = await Promise.all([search.boundingBox(), toggle.boundingBox()]);
+    expect(
+      (toggleBox?.x || 0) - ((searchBox?.x || 0) + (searchBox?.width || 0)),
+    ).toBeGreaterThanOrEqual(12);
+
+    await toggle.click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    const darkBackground = await artwork.evaluate(
+      (element) => getComputedStyle(element).backgroundImage,
+    );
+    expect(darkBackground).not.toBe(lightBackground);
+
+    await page.goto(welcomeArticlePath);
+    const articleFallback = page.locator('.article-cover-fallback');
+    await expect(articleFallback).toBeVisible();
+    const articleFallbackBox = await articleFallback.boundingBox();
+    expect(articleFallbackBox?.width).toBeLessThanOrEqual(900);
   });
 
   test('未設定 Supabase 時後台清楚顯示設定提示且 API 拒絕匿名存取', async ({ page, request }) => {

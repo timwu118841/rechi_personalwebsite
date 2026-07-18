@@ -2,6 +2,7 @@
 import type { Article, MediaAsset } from '@/lib/content/repository';
 import { formatDate, readingTimeMinutes } from '@/lib/articles';
 import { articlePath } from '@/lib/content/slug';
+import DefaultArticleArtwork from './DefaultArticleArtwork.astro';
 import TagList from './TagList.astro';
 
 interface Props {
@@ -11,14 +12,22 @@ interface Props {
 }
 const { article, fallbackImage, featured = false } = Astro.props;
 const image = article.cover || fallbackImage;
+const usesBuiltInFallback = !article.cover && fallbackImage?.url === '/social-card.svg';
 const minutes = readingTimeMinutes(article.body);
 const articleUrl = articlePath(article.slug);
 ---
 
 <article class:list={['article-card', { 'article-card-featured': featured }]}>
-  <a class="card-image" href={articleUrl} tabindex="-1" aria-hidden="true">
+  <a
+    class:list={['card-image', { 'card-image-fallback': usesBuiltInFallback }]}
+    href={articleUrl}
+    tabindex="-1"
+    aria-hidden="true"
+  >
     {
-      image ? (
+      usesBuiltInFallback ? (
+        <DefaultArticleArtwork compact={true} />
+      ) : image ? (
         <img
           src={image.url}
           alt=""

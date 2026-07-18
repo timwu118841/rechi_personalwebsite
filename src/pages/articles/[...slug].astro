@@ -1,6 +1,7 @@
 ---
 import LegalDisclaimer from '@/components/LegalDisclaimer.astro';
 import TagList from '@/components/TagList.astro';
+import DefaultArticleArtwork from '@/components/DefaultArticleArtwork.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { formatDate, readingTimeMinutes } from '@/lib/articles';
 import { renderMarkdown, renderRichText } from '@/lib/content/markdown';
@@ -27,6 +28,8 @@ if (Astro.cache.enabled)
 const articleUrl = new URL(articlePath(article.slug), Astro.site).toString();
 const canonical = article.canonicalUrl || articleUrl;
 const image = article.cover || settings.defaultSocialImage;
+const usesBuiltInFallback =
+  !article.cover && settings.defaultSocialImage?.url === '/social-card.svg';
 const minutes = readingTimeMinutes(article.body);
 const bodyHtml =
   article.bodyHtml ||
@@ -128,18 +131,24 @@ const jsonLd = [
       </div>
     </header>
     {
-      image && (
-        <div class="article-cover">
-          <img
-            src={image.url}
-            alt={article.cover?.alt || image.alt}
-            width={image.width}
-            height={image.height}
-            loading="eager"
-            fetchpriority="high"
-            decoding="async"
-          />
+      usesBuiltInFallback ? (
+        <div class="article-cover article-cover-fallback">
+          <DefaultArticleArtwork />
         </div>
+      ) : (
+        image && (
+          <div class="article-cover">
+            <img
+              src={image.url}
+              alt={article.cover?.alt || image.alt}
+              width={image.width}
+              height={image.height}
+              loading="eager"
+              fetchpriority="high"
+              decoding="async"
+            />
+          </div>
+        )
       )
     }
     <div class="container article-layout">
