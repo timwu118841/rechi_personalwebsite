@@ -1287,14 +1287,6 @@ main,
   isolation: isolate;
 }
 
-.default-artwork::after {
-  position: absolute;
-  inset: 0.75rem;
-  z-index: -1;
-  border: 1px solid color-mix(in srgb, var(--artwork-ink) 13%, transparent);
-  content: '';
-}
-
 .default-artwork-seal {
   display: grid;
   width: 2.5rem;

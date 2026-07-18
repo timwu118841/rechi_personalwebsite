@@ -143,6 +143,11 @@ test.describe('公開即時閱讀體驗', () => {
 
     const firstArtwork = artworkLinks.first();
     await expect(firstArtwork).toHaveCSS('text-decoration-line', 'none');
+    expect(
+      await firstArtwork
+        .locator('.default-artwork')
+        .evaluate((element) => getComputedStyle(element, '::after').borderTopWidth),
+    ).toBe('0px');
     const [copyBox, ruleBox] = await Promise.all([
       firstArtwork.locator('.default-artwork-copy').boundingBox(),
       firstArtwork.locator('.default-artwork-rule').boundingBox(),
