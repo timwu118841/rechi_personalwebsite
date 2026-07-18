@@ -109,6 +109,46 @@ export function parseFeaturedArticleRequest(value: unknown): { featured: boolean
   return { featured: input.featured };
 }
 
+function parseClassification(value: unknown): { category: string; tags: string[] } {
+  const input = record(value);
+  const category = requiredString(input.category, 'category', 100).trim();
+  if (!category) throw new RequestValidationError('category is invalid.');
+  if (!Array.isArray(input.tags) || input.tags.length > 20) {
+    throw new RequestValidationError('tags must contain at most 20 items.');
+  }
+  const tags: string[] = [];
+  for (const value of input.tags) {
+    if (typeof value !== 'string') throw new RequestValidationError('tags are invalid.');
+    const tag = value.trim();
+    if (!tag) continue;
+    if (tag.length > 40) throw new RequestValidationError('tags are invalid.');
+    if (!tags.includes(tag)) tags.push(tag);
+  }
+  return { category, tags };
+}
+
+export function parseArticleClassificationRequest(value: unknown): {
+  category: string;
+  tags: string[];
+} {
+  return parseClassification(value);
+}
+
+export function parseSourceClassificationRequest(value: unknown): {
+  category: string;
+  tags: string[];
+  expectedWorkingCopyVersion: number;
+} {
+  const input = record(value);
+  return {
+    ...parseClassification(input),
+    expectedWorkingCopyVersion: nonNegativeInteger(
+      input.expectedWorkingCopyVersion,
+      'expectedWorkingCopyVersion',
+    ),
+  };
+}
+
 export function parsePrepareRequest(value: unknown): {
   expectedWorkingCopyVersion?: number;
   expectedPublicationVersion?: number;

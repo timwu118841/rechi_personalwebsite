@@ -38,8 +38,8 @@ const publishedArticle = {
   publicationVersion: 3,
   publishedAt: '2026-07-15T08:00:00.000Z',
   contentType: 'legal',
-  category: 'practice',
-  tags: [],
+  category: 'legal-practice',
+  tags: ['既有標籤'],
   featured: false,
   privacyReviewed: true,
   legalReviewed: true,
@@ -53,6 +53,8 @@ const activeSource = {
   working_copy_version: 3,
   manual_summary: null as string | null,
   slug: 'published-article',
+  category_slug: 'legal-practice',
+  tags: ['既有標籤'],
   page_title: '勞動法實務筆記',
   last_synced_at: '2026-07-17T12:00:00.000Z',
 };
@@ -129,6 +131,21 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
             manual_summary: source.manual_summary,
           },
         };
+      } else if (
+        url.pathname === `/api/admin/notion/sources/${activeSource.id}/classification` &&
+        request.method() === 'PATCH'
+      ) {
+        const input = request.postDataJSON();
+        source = {
+          ...source,
+          category_slug: input.category,
+          tags: input.tags,
+          working_copy_version: source.working_copy_version + 1,
+        };
+        requests.push(`SOURCE_CLASSIFICATION ${JSON.stringify(input)}`);
+        body = {
+          workingCopy: { id: source.working_copy_id, version: source.working_copy_version },
+        };
       } else if (url.pathname === '/api/admin/notion/candidates') {
         let candidates = [candidate];
         if (url.searchParams.get('view') === 'history') candidates = [historyCandidate];
@@ -198,6 +215,18 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
           featured: article.id === publishedArticle.id ? input.featured : false,
         }));
         body = { article: articles.find((article) => article.id === publishedArticle.id) };
+      } else if (
+        url.pathname === `/api/admin/articles/${publishedArticle.id}/classification` &&
+        request.method() === 'PATCH'
+      ) {
+        const input = request.postDataJSON();
+        requests.push(`ARTICLE_CLASSIFICATION ${JSON.stringify(input)}`);
+        articles = articles.map((article) =>
+          article.id === publishedArticle.id
+            ? { ...article, category: input.category, tags: input.tags }
+            : article,
+        );
+        body = { article: articles.find((article) => article.id === publishedArticle.id) };
       } else {
         body = { ok: true };
       }
@@ -231,6 +260,8 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     await publishingSection.getByRole('button', { name: '管理', exact: true }).click();
     await expect(publishingSection.getByLabel('文章摘要')).toBeVisible();
     await expect(publishingSection.getByLabel('手動設定網址代稱')).toBeVisible();
+    await expect(publishingSection.getByLabel('文章分類')).toBeVisible();
+    await expect(publishingSection.getByLabel('文章標籤')).toBeVisible();
     await expect(page.locator('#published-articles')).toContainText(publishedArticle.title);
     const articleCard = page.locator('.admin-article-card').first();
     expect(await articleCard.evaluate((card) => card.scrollWidth <= card.clientWidth)).toBe(true);
@@ -291,7 +322,7 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     page,
   }) => {
     await page.getByRole('button', { name: new RegExp(longTitle.slice(0, 12)) }).click();
-    const immediate = page.getByRole('button', { name: '立即發布' });
+    const immediate = page.getByRole('button', { name: '立即發布', exact: true });
     await expect(immediate).toBeEnabled();
     await immediate.click();
     await page.getByRole('button', { name: '確認立即發布' }).click();
@@ -301,9 +332,7 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     await expect(diagnostic).toContainText(jobId);
     await expect(page.getByText('目前沒有進行中的發布候選。')).toBeVisible();
     const requests = requestLogs.get(page) || [];
-    expect(requests).toContain(
-      `POST /api/admin/notion/candidates/${candidateId}/publish?immediate=true`,
-    );
+    expect(requests).toContain(`POST /api/admin/notion/candidates/${candidateId}/publish`);
     expect(requests).toContain(`GET /api/admin/notion/candidates/${candidateId}`);
     expect(requests).toContain(`GET /api/admin/notion/jobs/${jobId}`);
   });
@@ -312,7 +341,7 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     page,
   }) => {
     await page.getByRole('button', { name: new RegExp(longTitle.slice(0, 12)) }).click();
-    await page.getByRole('button', { name: '立即發布' }).click();
+    await page.getByRole('button', { name: '立即發布', exact: true }).click();
     await page.getByRole('button', { name: '確認立即發布' }).click();
     const diagnostic = page.locator('.admin-publication-diagnostic[role="alert"]');
     await expect(diagnostic).toContainText('媒體處理失敗');
@@ -323,7 +352,7 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
 
   test('rejects a mismatched job candidate with an accessible diagnostic', async ({ page }) => {
     await page.getByRole('button', { name: new RegExp(longTitle.slice(0, 12)) }).click();
-    await page.getByRole('button', { name: '立即發布' }).click();
+    await page.getByRole('button', { name: '立即發布', exact: true }).click();
     await page.getByRole('button', { name: '確認立即發布' }).click();
     const diagnostic = page.locator('.admin-publication-diagnostic[role="alert"]');
     await expect(diagnostic).toContainText('工作與候選不符');
@@ -335,7 +364,7 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     page,
   }) => {
     await page.getByRole('button', { name: new RegExp(longTitle.slice(0, 12)) }).click();
-    await page.getByRole('button', { name: '立即發布' }).click();
+    await page.getByRole('button', { name: '立即發布', exact: true }).click();
     await page.getByRole('button', { name: '確認立即發布' }).click();
     const diagnostic = page.locator('.admin-publication-diagnostic[role="alert"]');
     await expect(diagnostic).toContainText('資料庫版本尚未更新');
@@ -353,7 +382,7 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
 
   test('allows an overdue ready_to_activate candidate to publish immediately', async ({ page }) => {
     await page.getByRole('button', { name: new RegExp(longTitle.slice(0, 12)) }).click();
-    await expect(page.getByRole('button', { name: '立即發布' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: '立即發布', exact: true })).toBeEnabled();
   });
 
   test('keeps the dashboard within the viewport on desktop and mobile', async ({ page }) => {
@@ -417,6 +446,54 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     const requests = requestLogs.get(page) || [];
     expect(requests).toContain(`PATCH /api/admin/articles/${publishedArticle.id}/featured`);
     expect(requests).toContain('FEATURED {"featured":true}');
+  });
+
+  test('edits category and tags before publication and on a published article', async ({
+    page,
+  }) => {
+    const publishingSection = page.locator('#article-publishing-content');
+    await publishingSection.getByRole('button', { name: '管理', exact: true }).click();
+    const sourceTagInput = publishingSection.getByLabel('文章標籤');
+    const sourceClassificationButton = publishingSection.getByRole('button', {
+      name: '儲存分類與標籤',
+    });
+    const [tagBox, buttonBox] = await Promise.all([
+      sourceTagInput.boundingBox(),
+      sourceClassificationButton.boundingBox(),
+    ]);
+    expect(tagBox).not.toBeNull();
+    expect(buttonBox).not.toBeNull();
+    expect(buttonBox!.y).toBeGreaterThanOrEqual(tagBox!.y + tagBox!.height);
+    await publishingSection.getByLabel('文章分類').selectOption('legal-practice');
+    await sourceTagInput.fill('勞動法、契約');
+    await sourceClassificationButton.click();
+    await expect(page.getByRole('status')).toContainText('分類與標籤已儲存');
+
+    const publishedSection = page.locator('#published-articles');
+    const articleCard = publishedSection.locator('.admin-article-card').first();
+    await articleCard.getByRole('button', { name: '編輯分類與標籤' }).click();
+    await articleCard.getByLabel('文章分類').selectOption('legal-practice');
+    await articleCard.getByLabel('文章標籤').fill('公司法、訴訟');
+    await articleCard.getByRole('button', { name: '儲存分類與標籤' }).click();
+    await expect(page.getByRole('status')).toContainText('文章分類與標籤已更新');
+    await expect(articleCard).toContainText('公司法、訴訟');
+
+    const requests = requestLogs.get(page) || [];
+    expect(requests).toContain(`PATCH /api/admin/notion/sources/${activeSource.id}/classification`);
+    expect(requests).toContain(`PATCH /api/admin/articles/${publishedArticle.id}/classification`);
+    expect(requests).toContain(
+      'SOURCE_CLASSIFICATION {"category":"legal-practice","tags":["勞動法","契約"],"expectedWorkingCopyVersion":3}',
+    );
+    expect(requests).toContain(
+      'ARTICLE_CLASSIFICATION {"category":"legal-practice","tags":["公司法","訴訟"]}',
+    );
+  });
+
+  test('offers immediate publication only and removes scheduling controls', async ({ page }) => {
+    await page.getByRole('button', { name: new RegExp(longTitle.slice(0, 12)) }).click();
+    await expect(page.getByRole('button', { name: '立即發布', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '排入發布' })).toHaveCount(0);
+    await expect(page.getByText(/預定：|排程發布/)).toHaveCount(0);
   });
 
   test('edits reader-facing categories without exposing the redundant content-type editor', async ({

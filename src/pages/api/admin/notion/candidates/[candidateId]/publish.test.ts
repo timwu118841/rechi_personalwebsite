@@ -17,11 +17,11 @@ describe('admin Notion candidate publish endpoint', () => {
     requireAdmin.mockResolvedValue({ id: 'admin-id' });
   });
 
-  it('passes explicit immediate publication through to the service', async () => {
+  it('always requests immediate publication without a scheduling mode', async () => {
     const requestPublish = vi.fn(async () => ({ id: 'job-id' }));
     getContentJobService.mockReturnValue({ requestPublish });
     const request = new Request(
-      'https://example.com/api/admin/notion/candidates/candidate-id/publish?immediate=true',
+      'https://example.com/api/admin/notion/candidates/candidate-id/publish',
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -40,32 +40,7 @@ describe('admin Notion candidate publish endpoint', () => {
       'candidate-id',
       'admin-id',
       expect.objectContaining({ idempotencyKey: 'publish-now-operation' }),
-      { immediate: true },
     );
     expect(response.status).toBe(202);
-  });
-
-  it('preserves scheduled publication when immediate mode is absent', async () => {
-    const requestPublish = vi.fn(async () => ({ id: 'job-id' }));
-    getContentJobService.mockReturnValue({ requestPublish });
-    const request = new Request(
-      'https://example.com/api/admin/notion/candidates/candidate-id/publish',
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          expectedRevisionId: 'revision-id',
-          expectedMetadataVersion: 4,
-          expectedCandidateHash: 'candidate-hash',
-          idempotencyKey: 'scheduled-operation',
-        }),
-      },
-    );
-
-    await POST({ request, params: { candidateId: 'candidate-id' } } as never);
-
-    expect(requestPublish).toHaveBeenCalledWith('candidate-id', 'admin-id', expect.any(Object), {
-      immediate: false,
-    });
   });
 });

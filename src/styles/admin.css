@@ -509,6 +509,28 @@ button.admin-list-item[aria-pressed='true'] {
   font-size: 0.7rem;
   text-align: right;
 }
+.admin-source-classification-inputs {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(9rem, 0.7fr) minmax(12rem, 1.3fr);
+  gap: 0.5rem;
+}
+.admin-source-classification-control {
+  grid-template-columns: minmax(8rem, 10rem) minmax(0, 1fr);
+  align-items: start;
+}
+.admin-source-classification-control > label {
+  padding-top: 0.8rem;
+}
+.admin-source-classification-control > button {
+  grid-column: 2;
+  justify-self: end;
+}
+.admin-source-classification-inputs small {
+  grid-column: 1 / -1;
+  color: var(--admin-subtle);
+  font-size: 0.7rem;
+}
 .admin-source-control-group button {
   white-space: nowrap;
 }
@@ -784,6 +806,32 @@ button.admin-list-item[aria-pressed='true'] {
   font-size: 0.82rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.admin-classification-toggle {
+  width: 100%;
+}
+.admin-article-classification-form {
+  display: grid;
+  grid-template-columns: minmax(6rem, 0.35fr) minmax(0, 1fr);
+  gap: 0.65rem 0.8rem;
+  align-items: center;
+  padding: 0.9rem;
+  border: 1px solid #dfe3ee;
+  border-radius: 0.8rem;
+  background: #fafbfe;
+}
+.admin-article-classification-form label {
+  color: var(--admin-muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+.admin-article-classification-form small {
+  grid-column: 2;
+  color: var(--admin-subtle);
+  font-size: 0.7rem;
+}
+.admin-article-classification-form button {
+  grid-column: 1 / -1;
 }
 button.admin-featured-control {
   width: 100%;
@@ -1431,6 +1479,21 @@ legend {
   }
   .admin-source-control-group {
     grid-template-columns: 1fr;
+  }
+  .admin-source-classification-inputs,
+  .admin-article-classification-form {
+    grid-template-columns: 1fr;
+  }
+  .admin-source-classification-inputs small,
+  .admin-article-classification-form small,
+  .admin-article-classification-form button {
+    grid-column: 1;
+  }
+  .admin-source-classification-control > label {
+    padding-top: 0;
+  }
+  .admin-source-classification-control > button {
+    grid-column: 1;
   }
   .admin-source-control-group button {
     width: 100%;

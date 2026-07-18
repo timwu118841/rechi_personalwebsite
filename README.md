@@ -98,7 +98,7 @@ https://www.notion.so/Editorial-Root-1429989fe8ac4effbc8f57f56486db54?pvs=4
 3. 每個 source job 以 `Notion-Version: 2026-03-11` 讀取該頁 properties 與頁內遞迴 block tree，建立或更新 source、不可變 revision 與 working copy。同步本身不會改變目前公開文章。
 4. 頁面含圖片時，worker 會先下載並驗證，再以內容 digest 產生穩定路徑、promotion 到公開 `site-media`，最後把 working copy 中的 logical asset reference 換成公開 URL；任何必要圖片失敗時，整個 source job 失敗，不會留下部分完成的 working copy。
 5. 建立發布候選並檢查預覽；候選必須分別通過隱私與法律審查。
-6. 排入發布後，worker 會重新讀取 Notion、下載圖片並比對來源及媒體 hash；內容已變更或頁面已移到垃圾桶時會取消舊候選，不會發布過期版本。
+6. 按下立即發布後，worker 會立刻重新讀取 Notion、下載圖片並比對來源及媒體 hash；內容已變更或頁面已移到垃圾桶時會取消舊候選，不會發布過期版本。後台不提供排程發布。
 
 每輪 worker 最多處理 5 個 jobs。`sync_root` 本身也算一個 job；若 root 有多個直屬頁面，立即執行最多先處理 5 個，剩餘工作會由下一次手動同步或每日 Cron 繼續處理。一般單頁同步不需要等待 Cron。
 
