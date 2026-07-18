@@ -393,6 +393,7 @@ select {
 }
 .card-body {
   display: flex;
+  min-width: 0;
   flex: 1;
   flex-direction: column;
   padding: 1.35rem;
@@ -406,18 +407,24 @@ select {
   font-size: 0.78rem;
 }
 .article-card h3 {
+  min-width: 0;
   margin: 0 0 0.7rem;
   font-family: var(--font-serif);
   font-size: 1.35rem;
   line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .article-card h3 a {
   text-decoration: none;
 }
 .article-card p {
+  min-width: 0;
   margin: 0 0 1.2rem;
   color: var(--color-muted);
   font-size: 0.94rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .card-footer {
   display: flex;
@@ -530,6 +537,8 @@ select {
   margin: 0 0 1.5rem;
   color: var(--color-muted);
   font-size: clamp(1.05rem, 2vw, 1.25rem);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .article-byline {
   display: flex;
@@ -743,6 +752,8 @@ html[data-theme='dark'] .prose span[data-editor-color='danger'] {
   margin: 0;
   color: var(--color-muted);
   font-size: 0.9rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .empty-state {

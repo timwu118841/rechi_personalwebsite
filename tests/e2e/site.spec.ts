@@ -59,6 +59,20 @@ test.describe('公開即時閱讀體驗', () => {
     await expect(page.locator('.search-results a').first()).toBeVisible();
   });
 
+  test('無空白的長摘要不會撐破文章卡片', async ({ page }) => {
+    await page.goto('/articles/');
+    const card = page.locator('.article-card').first();
+    const summary = card.locator('p');
+    await summary.evaluate((element) => {
+      element.textContent = 'test'.repeat(120);
+    });
+    expect(await card.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    expect(await summary.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+      true,
+    );
+    await expect(summary).toHaveCSS('overflow-wrap', 'anywhere');
+  });
+
   test('Dark Mode 可切換、持久化且按鈕狀態可存取', async ({ page }) => {
     await page.goto('/');
     const toggle = page.locator('.theme-toggle:visible').first();

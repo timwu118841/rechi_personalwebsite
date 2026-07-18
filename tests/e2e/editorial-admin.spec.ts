@@ -10,6 +10,7 @@ const candidateId = `candidate-${'a'.repeat(96)}`;
 const jobId = `job-${'b'.repeat(96)}`;
 const longTitle = `待發布文章-${'超長標題'.repeat(28)}`;
 const longContent = `https://media.example/private/image.png?token=fixture-secret-${'x'.repeat(180)}`;
+const unbrokenSummary = 'test'.repeat(120);
 
 const activeCandidate = {
   id: candidateId,
@@ -31,7 +32,7 @@ const publishedArticle = {
   id: 'article-published-1',
   slug: 'published-article',
   title: '已發布的法律文章',
-  description: '這是一篇已經公開在網站上的文章。',
+  description: unbrokenSummary,
   body: '文章內容',
   status: 'published',
   publicationVersion: 3,
@@ -220,6 +221,13 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     await expect(publishingSection.getByLabel('文章摘要')).toBeVisible();
     await expect(publishingSection.getByLabel('手動設定網址代稱')).toBeVisible();
     await expect(page.locator('#published-articles')).toContainText(publishedArticle.title);
+    const articleCard = page.locator('.admin-article-card').first();
+    expect(await articleCard.evaluate((card) => card.scrollWidth <= card.clientWidth)).toBe(true);
+    expect(
+      await articleCard
+        .locator('p')
+        .evaluate((summary) => summary.scrollWidth <= summary.clientWidth),
+    ).toBe(true);
   });
 
   test('does not expose Notion privacy/legal controls and filters active/history candidates', async ({

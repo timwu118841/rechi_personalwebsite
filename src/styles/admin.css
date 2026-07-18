@@ -726,11 +726,14 @@ button.admin-list-item[aria-pressed='true'] {
 }
 .admin-article-card p {
   display: -webkit-box;
+  min-width: 0;
   overflow: hidden;
   margin: 0.55rem 0 0;
   color: var(--admin-muted);
   font-size: 0.9rem;
   line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
@@ -1223,6 +1226,8 @@ legend {
   margin: 0 0 1.5rem;
   color: var(--admin-muted);
   font-size: 1.05rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .admin-preview-body {
   overflow-wrap: anywhere;
