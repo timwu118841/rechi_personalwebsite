@@ -10,6 +10,7 @@ const candidateId = `candidate-${'a'.repeat(96)}`;
 const jobId = `job-${'b'.repeat(96)}`;
 const longTitle = `待發布文章-${'超長標題'.repeat(28)}`;
 const longContent = `https://media.example/private/image.png?token=fixture-secret-${'x'.repeat(180)}`;
+const unbrokenSummary = 'test'.repeat(120);
 
 const activeCandidate = {
   id: candidateId,
@@ -31,7 +32,7 @@ const publishedArticle = {
   id: 'article-published-1',
   slug: 'published-article',
   title: '已發布的法律文章',
-  description: '這是一篇已經公開在網站上的文章。',
+  description: unbrokenSummary,
   body: '文章內容',
   status: 'published',
   publicationVersion: 3,
@@ -196,7 +197,37 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
       });
     });
     await page.goto('/admin-fixture');
-    await expect(page.getByRole('heading', { name: 'Notion 文章發布' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '文章管理', exact: true })).toBeVisible();
+  });
+
+  test('uses one article workspace and keeps Notion limited to synchronization', async ({
+    page,
+  }) => {
+    await expect(page.getByRole('button', { name: 'Notion 發布' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '文章管理' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+
+    const syncSection = page.locator('#notion-sync');
+    await expect(syncSection.getByRole('heading', { name: 'Notion 同步' })).toBeVisible();
+    await expect(syncSection.getByRole('button', { name: '同步主要頁面' })).toBeVisible();
+    await expect(syncSection.getByLabel('文章摘要')).toHaveCount(0);
+    await expect(syncSection.getByLabel('手動設定網址代稱')).toHaveCount(0);
+
+    const publishingSection = page.locator('#article-publishing-content');
+    await expect(page.getByRole('heading', { name: '待發布文章' })).toBeVisible();
+    await publishingSection.getByRole('button', { name: '管理', exact: true }).click();
+    await expect(publishingSection.getByLabel('文章摘要')).toBeVisible();
+    await expect(publishingSection.getByLabel('手動設定網址代稱')).toBeVisible();
+    await expect(page.locator('#published-articles')).toContainText(publishedArticle.title);
+    const articleCard = page.locator('.admin-article-card').first();
+    expect(await articleCard.evaluate((card) => card.scrollWidth <= card.clientWidth)).toBe(true);
+    expect(
+      await articleCard
+        .locator('p')
+        .evaluate((summary) => summary.scrollWidth <= summary.clientWidth),
+    ).toBe(true);
   });
 
   test('does not expose Notion privacy/legal controls and filters active/history candidates', async ({
@@ -327,22 +358,24 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
   test('keeps an unpublished article manageable and directs republishing through fresh Notion sync', async ({
     page,
   }) => {
-    await page.getByRole('button', { name: '文章管理' }).click();
-    await expect(page.getByRole('heading', { name: '文章管理' })).toBeVisible();
-    await expect(page.getByText(publishedArticle.title)).toBeVisible();
-    await expect(page.getByText('尚未發布的草稿')).toHaveCount(0);
-    await expect(page.getByLabel('狀態：已發布')).toBeVisible();
+    const publishedSection = page.locator('#published-articles');
+    await expect(page.getByRole('heading', { name: '文章管理', exact: true })).toBeVisible();
+    await expect(publishedSection.getByText(publishedArticle.title)).toBeVisible();
+    await expect(publishedSection.getByText('尚未發布的草稿')).toHaveCount(0);
+    await expect(publishedSection.getByLabel('狀態：已發布')).toBeVisible();
 
-    await page.getByRole('button', { name: '下架文章' }).click();
+    await publishedSection.getByRole('button', { name: '下架文章' }).click();
     await expect(page.getByRole('dialog', { name: '確定要下架這篇文章？' })).toBeVisible();
     await page.getByLabel('備註（選填）').fill('內容需要更新');
     await page.getByRole('button', { name: '確認下架' }).click();
 
     await expect(page.getByRole('dialog', { name: '確定要下架這篇文章？' })).toBeHidden();
-    await expect(page.getByRole('heading', { name: publishedArticle.title })).toBeVisible();
-    await expect(page.getByLabel('狀態：已下架')).toBeVisible();
-    await page.getByRole('button', { name: '從 Notion 重新發布' }).click();
-    await expect(page.getByRole('heading', { name: 'Notion 文章發布' })).toBeVisible();
+    await expect(
+      publishedSection.getByRole('heading', { name: publishedArticle.title }),
+    ).toBeVisible();
+    await expect(publishedSection.getByLabel('狀態：已下架')).toBeVisible();
+    await publishedSection.getByRole('button', { name: '從 Notion 重新發布' }).click();
+    await expect(page.getByRole('heading', { name: '文章管理', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: '同步 Notion 最新內容' })).toBeVisible();
     await page.getByRole('button', { name: '同步 Notion 最新內容' }).click();
     await expect(page.getByRole('status')).toContainText('Notion 最新內容同步完成');

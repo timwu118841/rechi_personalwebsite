@@ -40,9 +40,10 @@ interface AdminArticle {
   legalReviewed: boolean;
 }
 
-type Tab = 'notion' | 'articles' | 'site' | 'taxonomies';
+type Tab = 'articles' | 'site' | 'taxonomies';
 
 type DashboardApi = <T>(path: string, init?: RequestInit) => Promise<T>;
+type ShowToast = (kind: ToastKind, message: string) => void;
 
 interface NotionSourceStatus {
   id: string;
@@ -458,8 +459,7 @@ export function Dashboard({
   session: Session;
   onSignOut: () => Promise<void>;
 }) {
-  const [tab, setTab] = useState<Tab>('notion');
-  const [focusedNotionArticleId, setFocusedNotionArticleId] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>('articles');
   const [articles, setArticles] = useState<AdminArticle[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [settings, setSettings] = useState<SiteSettings | null>(null);
@@ -549,11 +549,11 @@ export function Dashboard({
       <div className="admin-workspace">
         <nav className="admin-sidebar" aria-label="後台導覽">
           <p>發布管理</p>
-          <button className={tab === 'notion' ? 'active' : ''} onClick={() => setTab('notion')}>
-            <span aria-hidden="true">↗</span>
-            Notion 發布
-          </button>
-          <button className={tab === 'articles' ? 'active' : ''} onClick={() => setTab('articles')}>
+          <button
+            className={tab === 'articles' ? 'active' : ''}
+            aria-current={tab === 'articles' ? 'page' : undefined}
+            onClick={() => setTab('articles')}
+          >
             <span aria-hidden="true">▤</span>
             文章管理
           </button>
@@ -571,24 +571,8 @@ export function Dashboard({
           </button>
         </nav>
         <main className="admin-main">
-          {tab === 'notion' && (
-            <NotionEditorialPanel
-              api={api}
-              articles={articles}
-              focusedArticleId={focusedNotionArticleId}
-              onFocusHandled={() => setFocusedNotionArticleId(null)}
-            />
-          )}
           {tab === 'articles' && (
-            <PublishedArticlesPanel
-              api={api}
-              articles={articles}
-              onReload={reload}
-              onRepublish={(articleId) => {
-                setFocusedNotionArticleId(articleId);
-                setTab('notion');
-              }}
-            />
+            <ArticleManagementWorkspace api={api} articles={articles} onReload={reload} />
           )}
           {tab === 'site' && settings && (
             <SiteSettingsPanel
@@ -638,22 +622,98 @@ export function Dashboard({
   );
 }
 
+function ArticleManagementWorkspace({
+  api,
+  articles,
+  onReload,
+}: {
+  api: DashboardApi;
+  articles: AdminArticle[];
+  onReload: () => Promise<void>;
+}) {
+  const [focusedArticleId, setFocusedArticleId] = useState<string | null>(null);
+  const { toast, showToast, dismissToast } = useToast();
+
+  const focusPublishingSource = (articleId: string) => {
+    setFocusedArticleId(articleId);
+    window.requestAnimationFrame(() => {
+      document.getElementById('article-publishing')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    });
+  };
+
+  return (
+    <section>
+      <Toast toast={toast} onDismiss={dismissToast} />
+      <div className="admin-title-row">
+        <div>
+          <p className="admin-kicker">內容工作流程</p>
+          <h1>文章管理</h1>
+          <p className="admin-page-description">
+            在同一個工作區完成 Notion 同步、文章設定、預覽、發布與下架。
+          </p>
+        </div>
+        <span className="admin-summary-badge">
+          <strong>{articles.filter((article) => article.status !== 'draft').length}</strong>
+          篇可管理文章
+        </span>
+      </div>
+
+      <nav className="admin-workflow-jumps" aria-label="文章管理快速導覽">
+        <a href="#notion-sync">
+          <span>1</span>
+          <strong>同步 Notion</strong>
+          <small>取得最新正文</small>
+        </a>
+        <a href="#article-publishing">
+          <span>2</span>
+          <strong>設定與發布</strong>
+          <small>摘要、網址、預覽</small>
+        </a>
+        <a href="#published-articles">
+          <span>3</span>
+          <strong>管理文章</strong>
+          <small>檢視、下架、重發</small>
+        </a>
+      </nav>
+
+      <NotionEditorialPanel
+        api={api}
+        articles={articles}
+        focusedArticleId={focusedArticleId}
+        onFocusHandled={() => setFocusedArticleId(null)}
+        showToast={showToast}
+      />
+      <PublishedArticlesPanel
+        api={api}
+        articles={articles}
+        onReload={onReload}
+        onRepublish={focusPublishingSource}
+        showToast={showToast}
+      />
+    </section>
+  );
+}
+
 function PublishedArticlesPanel({
   api,
   articles,
   onReload,
   onRepublish,
+  showToast,
 }: {
   api: DashboardApi;
   articles: AdminArticle[];
   onReload: () => Promise<void>;
   onRepublish: (articleId: string) => void;
+  showToast: ShowToast;
 }) {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<AdminArticle | null>(null);
   const [reason, setReason] = useState('');
   const [unpublishing, setUnpublishing] = useState(false);
-  const { toast, showToast, dismissToast } = useToast();
   const managedArticles = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase('zh-TW');
     return articles
@@ -693,20 +753,20 @@ function PublishedArticlesPanel({
   };
 
   return (
-    <section>
-      <Toast toast={toast} onDismiss={dismissToast} />
+    <section
+      id="published-articles"
+      className="admin-workflow-section admin-published-section"
+      aria-labelledby="published-articles-title"
+    >
       <div className="admin-title-row">
         <div>
-          <p className="admin-kicker">文章管理</p>
-          <h1>文章管理</h1>
+          <p className="admin-kicker">步驟 3 · 公開內容</p>
+          <h2 id="published-articles-title">已發布與已下架文章</h2>
           <p className="admin-page-description">
-            管理公開與已下架文章；重新發布時會回到綁定的 Notion 來源同步最新內容。
+            管理網站上的文章；重新發布會直接展開同一頁內綁定的 Notion 來源。
           </p>
         </div>
-        <span className="admin-summary-badge">
-          <strong>{managedArticles.length}</strong>
-          篇可管理文章
-        </span>
+        <span className="admin-count">{managedArticles.length}</span>
       </div>
 
       <div className="admin-form-card admin-article-toolbar">
@@ -830,11 +890,13 @@ function NotionEditorialPanel({
   articles,
   focusedArticleId,
   onFocusHandled,
+  showToast,
 }: {
   api: DashboardApi;
   articles: AdminArticle[];
   focusedArticleId: string | null;
   onFocusHandled: () => void;
+  showToast: ShowToast;
 }) {
   const [pageId, setPageId] = useState('');
   const [sources, setSources] = useState<NotionSourceStatus[]>([]);
@@ -858,7 +920,6 @@ function NotionEditorialPanel({
   const [publicationDiagnostic, setPublicationDiagnostic] = useState<PublicationDiagnostic | null>(
     null,
   );
-  const { toast, showToast, dismissToast } = useToast();
   const busy = busyAction !== null;
   const selectedActivationTime = selected?.activation_at
     ? Date.parse(selected.activation_at)
@@ -1190,63 +1251,94 @@ function NotionEditorialPanel({
   };
 
   return (
-    <section>
-      <Toast toast={toast} onDismiss={dismissToast} />
-      <div className="admin-title-row">
-        <div>
-          <p className="admin-kicker">發布管理</p>
-          <h1>Notion 文章發布</h1>
-          <p className="admin-page-description">同步內容、檢查預覽並安全發布到網站。</p>
-        </div>
-        <LoadingButton
-          className="secondary"
-          onClick={() =>
-            void runAction('refresh', async () => {
-              await refresh();
-              showToast('success', 'Notion 狀態已更新。');
-            })
-          }
-          disabled={busy}
-          loading={busyAction === 'refresh'}
-        >
-          重新整理
-        </LoadingButton>
-      </div>
-      <div className="admin-message" role="note">
-        <strong>安心同步</strong>
-        <span>正文維持在 Notion 編輯；同步與預覽都不會更動目前公開的文章。</span>
-      </div>
-      <div className="admin-form-card admin-sync-card">
-        <div>
-          <p className="admin-section-label">內容來源</p>
-          <h2>同步 Notion 頁面</h2>
-          <p>同步主要頁面下的文章，或指定單一 Notion 頁面。</p>
-        </div>
-        <div className="button-row admin-sync-actions">
+    <section className="admin-editorial-workflow">
+      <section
+        id="notion-sync"
+        className="admin-workflow-section"
+        aria-labelledby="notion-sync-title"
+      >
+        <div className="admin-title-row">
+          <div>
+            <p className="admin-kicker">步驟 1 · 內容來源</p>
+            <h2 id="notion-sync-title">Notion 同步</h2>
+            <p className="admin-page-description">
+              這裡只負責取得 Notion 最新正文，不會直接改動公開文章。
+            </p>
+          </div>
           <LoadingButton
             className="secondary"
-            onClick={() => void syncRoot()}
+            onClick={() =>
+              void runAction('refresh', async () => {
+                await refresh();
+                showToast('success', 'Notion 狀態已更新。');
+              })
+            }
             disabled={busy}
-            loading={busyAction === 'sync-root'}
+            loading={busyAction === 'refresh'}
           >
-            同步主要頁面
-          </LoadingButton>
-          <input
-            value={pageId}
-            onChange={(event) => setPageId(event.target.value)}
-            placeholder="貼上 Notion 頁面 ID"
-            aria-label="Notion page ID"
-          />
-          <LoadingButton
-            onClick={() => void sync()}
-            disabled={busy}
-            loading={busyAction === 'sync-page'}
-          >
-            立即同步
+            重新整理同步狀態
           </LoadingButton>
         </div>
+        <div className="admin-message" role="note">
+          <strong>只同步，不發布</strong>
+          <span>正文維持在 Notion 編輯；完成同步後，再到下一區設定摘要、網址與發布。</span>
+        </div>
+        <div className="admin-form-card admin-sync-card">
+          <div>
+            <p className="admin-section-label">同步範圍</p>
+            <h3>取得 Notion 最新內容</h3>
+            <p>同步主要頁面下的所有文章，或指定單一 Notion 頁面。</p>
+          </div>
+          <div className="button-row admin-sync-actions">
+            <LoadingButton
+              className="secondary"
+              onClick={() => void syncRoot()}
+              disabled={busy}
+              loading={busyAction === 'sync-root'}
+            >
+              同步主要頁面
+            </LoadingButton>
+            <input
+              value={pageId}
+              onChange={(event) => setPageId(event.target.value)}
+              placeholder="貼上 Notion 頁面 ID"
+              aria-label="Notion page ID"
+            />
+            <LoadingButton
+              onClick={() => void sync()}
+              disabled={busy}
+              loading={busyAction === 'sync-page'}
+            >
+              立即同步
+            </LoadingButton>
+          </div>
+        </div>
+      </section>
+
+      <div
+        id="article-publishing"
+        className="admin-workflow-section"
+        aria-labelledby="article-publishing-title"
+      >
+        <div className="admin-title-row">
+          <div>
+            <p className="admin-kicker">步驟 2 · 文章設定</p>
+            <h2 id="article-publishing-title">待發布文章</h2>
+            <p className="admin-page-description">
+              選擇已同步來源，在這裡設定摘要與網址，建立候選後預覽並發布。
+            </p>
+          </div>
+          <span className="admin-summary-badge">
+            <strong>{visibleCandidates.length}</strong>
+            個處理中版本
+          </span>
+        </div>
       </div>
-      <div className="admin-two-columns">
+      <div
+        id="article-publishing-content"
+        className="admin-two-columns"
+        aria-labelledby="article-publishing-title"
+      >
         <div className="admin-form-card">
           <div className="admin-card-heading">
             <div>
