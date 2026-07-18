@@ -1640,7 +1640,7 @@ function NotionEditorialPanel({
                             儲存摘要
                           </LoadingButton>
                         </div>
-                        <div className="admin-source-control-group admin-source-slug-control">
+                        <div className="admin-source-control-group admin-source-classification-control">
                           <label htmlFor={`source-category-${source.id}`}>文章分類</label>
                           <span className="admin-source-classification-inputs">
                             <select

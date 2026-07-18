@@ -453,9 +453,20 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
   }) => {
     const publishingSection = page.locator('#article-publishing-content');
     await publishingSection.getByRole('button', { name: '管理', exact: true }).click();
+    const sourceTagInput = publishingSection.getByLabel('文章標籤');
+    const sourceClassificationButton = publishingSection.getByRole('button', {
+      name: '儲存分類與標籤',
+    });
+    const [tagBox, buttonBox] = await Promise.all([
+      sourceTagInput.boundingBox(),
+      sourceClassificationButton.boundingBox(),
+    ]);
+    expect(tagBox).not.toBeNull();
+    expect(buttonBox).not.toBeNull();
+    expect(buttonBox!.y).toBeGreaterThanOrEqual(tagBox!.y + tagBox!.height);
     await publishingSection.getByLabel('文章分類').selectOption('legal-practice');
-    await publishingSection.getByLabel('文章標籤').fill('勞動法、契約');
-    await publishingSection.getByRole('button', { name: '儲存分類與標籤' }).click();
+    await sourceTagInput.fill('勞動法、契約');
+    await sourceClassificationButton.click();
     await expect(page.getByRole('status')).toContainText('分類與標籤已儲存');
 
     const publishedSection = page.locator('#published-articles');

@@ -515,6 +515,17 @@ button.admin-list-item[aria-pressed='true'] {
   grid-template-columns: minmax(9rem, 0.7fr) minmax(12rem, 1.3fr);
   gap: 0.5rem;
 }
+.admin-source-classification-control {
+  grid-template-columns: minmax(8rem, 10rem) minmax(0, 1fr);
+  align-items: start;
+}
+.admin-source-classification-control > label {
+  padding-top: 0.8rem;
+}
+.admin-source-classification-control > button {
+  grid-column: 2;
+  justify-self: end;
+}
 .admin-source-classification-inputs small {
   grid-column: 1 / -1;
   color: var(--admin-subtle);
@@ -1476,6 +1487,12 @@ legend {
   .admin-source-classification-inputs small,
   .admin-article-classification-form small,
   .admin-article-classification-form button {
+    grid-column: 1;
+  }
+  .admin-source-classification-control > label {
+    padding-top: 0;
+  }
+  .admin-source-classification-control > button {
     grid-column: 1;
   }
   .admin-source-control-group button {
