@@ -39,6 +39,24 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
     });
   });
 
+  it('updates published article classification through the database RPC', async () => {
+    const rpc = vi.fn(async () => ({
+      data: { id: 'article-id', category_slug: 'legal-practice', tags: ['勞動法'] },
+      error: null,
+    }));
+    const service = new ContentJobService(clientWith({ rpc }));
+
+    await expect(
+      service.updateArticleClassification('article-id', 'legal-practice', ['勞動法'], 'admin-id'),
+    ).resolves.toMatchObject({ category_slug: 'legal-practice', tags: ['勞動法'] });
+    expect(rpc).toHaveBeenCalledWith('update_article_classification', {
+      p_article_id: 'article-id',
+      p_category_slug: 'legal-practice',
+      p_tags: ['勞動法'],
+      p_actor_id: 'admin-id',
+    });
+  });
+
   it('explains when the featured article migration is missing from PostgREST', async () => {
     const rpc = vi.fn(async () => ({
       data: null,
@@ -296,6 +314,7 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
                 id: 'working-copy-id',
                 description: '這是一段由管理者手動設定且符合長度限制的文章摘要。',
                 manual_summary: '這是一段由管理者手動設定且符合長度限制的文章摘要。',
+                tags: ['管理者標籤'],
               },
               error: null,
             }),
@@ -335,6 +354,7 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
     expect(events[0]?.value).not.toHaveProperty('configuration');
     expect(events[1]?.value).toMatchObject({
       description: '這是一段由管理者手動設定且符合長度限制的文章摘要。',
+      tags: ['管理者標籤'],
     });
     expect(events[2]?.value).toMatchObject({
       configuration: {
@@ -479,6 +499,42 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
         description: '這是一段由管理者手動設定且符合長度限制的文章摘要。',
       },
     ]);
+  });
+
+  it('stores category and tags on a working copy with compare-and-swap protection', async () => {
+    const updates: unknown[] = [];
+    const from = vi.fn((table: string) => {
+      expect(table).toBe('article_working_copies');
+      return {
+        update(value: unknown) {
+          updates.push(value);
+          return {
+            eq: () => ({
+              eq: () => ({
+                select: () => ({
+                  maybeSingle: async () => ({
+                    data: {
+                      id: 'copy-id',
+                      source_id: 'source-id',
+                      version: 6,
+                      category_slug: 'legal-practice',
+                      tags: ['勞動法', '契約'],
+                    },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        },
+      };
+    });
+    const service = new ContentJobService(clientWith({ from }));
+
+    await expect(
+      service.updateSourceClassification('source-id', 5, 'legal-practice', ['勞動法', '契約']),
+    ).resolves.toMatchObject({ version: 6 });
+    expect(updates).toEqual([{ category_slug: 'legal-practice', tags: ['勞動法', '契約'] }]);
   });
 
   it('refuses candidate preparation until an Admin summary has been saved', async () => {
@@ -769,6 +825,7 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
       source_revision_id: 'revision-id',
       working_copy_version: 4,
       candidate_hash: 'candidate-hash',
+      state: 'prepared',
       activation_at: '2026-07-15T00:00:00.000Z',
     };
     const from = vi.fn((table: string) => {
@@ -832,7 +889,7 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
       idempotencyKey: 'publish-now-operation',
     };
 
-    await service.requestPublish('candidate-id', 'admin-id', request, { immediate: true });
+    await service.requestPublish('candidate-id', 'admin-id', request);
 
     expect(rpc).toHaveBeenCalledWith(
       'enqueue_content_job',
@@ -846,16 +903,14 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
     expect(Date.parse(queuedAt)).toBeGreaterThan(Date.parse(candidate.activation_at));
 
     candidate.state = 'prepared';
-    await service.requestPublish(
-      'candidate-id',
-      'admin-id',
-      { ...request, idempotencyKey: 'publish-prepared-now-operation' },
-      { immediate: true },
-    );
+    await service.requestPublish('candidate-id', 'admin-id', {
+      ...request,
+      idempotencyKey: 'publish-prepared-now-operation',
+    });
     expect(rpc).toHaveBeenCalledTimes(2);
   });
 
-  it('does not bypass review readiness or a future activation for immediate publication', async () => {
+  it('publishes future legacy activations immediately but still enforces candidate readiness', async () => {
     const candidate = {
       id: 'candidate-id',
       source_revision_id: 'revision-id',
@@ -869,7 +924,7 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
         eq: () => ({ maybeSingle: async () => ({ data: candidate, error: null }) }),
       }),
     }));
-    const rpc = vi.fn();
+    const rpc = vi.fn(async () => ({ data: { id: 'job-id' }, error: null }));
     const service = new ContentJobService(clientWith({ from, rpc }));
     const request = {
       expectedRevisionId: 'revision-id',
@@ -879,14 +934,16 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
     };
 
     await expect(
-      service.requestPublish('candidate-id', 'admin-id', request, { immediate: true }),
-    ).rejects.toMatchObject({ code: '409' });
-    expect(rpc).not.toHaveBeenCalled();
+      service.requestPublish('candidate-id', 'admin-id', request),
+    ).resolves.toMatchObject({
+      id: 'job-id',
+    });
+    expect(rpc).toHaveBeenCalledTimes(1);
 
-    candidate.state = 'ready_to_activate';
-    await expect(
-      service.requestPublish('candidate-id', 'admin-id', request, { immediate: true }),
-    ).rejects.toMatchObject({ code: '409' });
-    expect(rpc).not.toHaveBeenCalled();
+    candidate.state = 'publishing';
+    await expect(service.requestPublish('candidate-id', 'admin-id', request)).rejects.toMatchObject(
+      { code: '409' },
+    );
+    expect(rpc).toHaveBeenCalledTimes(1);
   });
 });

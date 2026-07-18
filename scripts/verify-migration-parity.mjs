@@ -42,6 +42,8 @@ const requiredMarkers = [
   'publication_policy',
   'save_article_with_policy',
   'set_featured_article',
+  'update_article_classification',
+  'force_immediate_candidate_activation',
   'finalize_publication_candidate',
   'content_outbox',
   'actor_id',

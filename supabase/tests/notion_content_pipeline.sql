@@ -1,6 +1,6 @@
 begin;
 
-select plan(81);
+select plan(90);
 
 select has_table('public', 'article_sources', 'Notion source table exists');
 select has_table('public', 'article_source_revisions', 'Immutable revision table exists');
@@ -42,6 +42,18 @@ select has_function(
   'set_featured_article',
   array['uuid', 'boolean', 'uuid'],
   'Featured article selection is exposed through a server-only RPC'
+);
+select has_function(
+  'public',
+  'update_article_classification',
+  array['uuid', 'text', 'text[]', 'uuid'],
+  'Article classification is exposed through a server-only RPC'
+);
+select has_trigger(
+  'public',
+  'publication_candidates',
+  'publication_candidates_force_immediate',
+  'Publication candidates are forced to immediate activation'
 );
 select is(
   (select public from storage.buckets where id = 'notion-staging'),
@@ -740,6 +752,67 @@ select is(
   (select count(*) from public.articles where featured),
   0::bigint,
   'Clearing the featured selection leaves no featured article'
+);
+
+select lives_ok(
+  $$select public.update_article_classification(
+    (select id from public.articles where slug = 'manual-review-defaults'),
+    'experience',
+    array['勞動法', '契約', '勞動法'],
+    '90000000-0000-0000-0000-000000000001'
+  )$$,
+  'A published article category and tags can be changed from Admin'
+);
+
+select is(
+  (select category_slug from public.articles where slug = 'manual-review-defaults'),
+  'experience',
+  'The article category is updated'
+);
+
+select is(
+  (select tags from public.articles where slug = 'manual-review-defaults'),
+  array['勞動法', '契約']::text[],
+  'Article tags are trimmed and deduplicated'
+);
+
+select is(
+  (select category_slug from public.article_working_copies
+   where id = '30000000-0000-0000-0000-000000000003'),
+  'experience',
+  'The linked working copy category stays aligned'
+);
+
+select is(
+  (select tags from public.article_working_copies
+   where id = '30000000-0000-0000-0000-000000000003'),
+  array['勞動法', '契約']::text[],
+  'The linked working copy tags stay aligned'
+);
+
+update public.article_working_copies
+set published_at = '2999-01-01T00:00:00Z'
+where id = '30000000-0000-0000-0000-000000000003';
+
+select lives_ok(
+  $$select public.prepare_publication_candidate(
+    '30000000-0000-0000-0000-000000000003',
+    (select version from public.article_working_copies
+     where id = '30000000-0000-0000-0000-000000000003'),
+    (select publication_version from public.articles where slug = 'manual-review-defaults'),
+    '90000000-0000-0000-0000-000000000001'
+  )$$,
+  'A future legacy publish time no longer creates a scheduled candidate'
+);
+
+select ok(
+  (select activation_at <= now()
+   from public.publication_candidates
+   where working_copy_id = '30000000-0000-0000-0000-000000000003'
+     and state = 'prepared'
+   order by created_at desc
+   limit 1),
+  'New publication candidates are immediately eligible'
 );
 
 select * from finish();

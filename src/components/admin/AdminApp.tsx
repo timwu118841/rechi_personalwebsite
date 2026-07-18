@@ -55,6 +55,8 @@ interface NotionSourceStatus {
   working_copy_version?: number | null;
   manual_summary?: string | null;
   slug?: string | null;
+  category_slug?: string | null;
+  tags?: string[];
   name?: string | null;
   title?: string | null;
   page_title?: string | null;
@@ -143,6 +145,23 @@ function formatAdminDate(value?: string | null, fallback = '尚未同步') {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
+}
+
+function tagsFromInput(value: string): string[] {
+  return [
+    ...new Set(
+      value
+        .split(/[,，、\n]/)
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function validateTags(tags: string[]): string | null {
+  if (tags.length > 20) return '標籤最多 20 個。';
+  if (tags.some((tag) => tag.length > 40)) return '每個標籤最多 40 個字元。';
+  return null;
 }
 
 function useToast() {
@@ -572,7 +591,12 @@ export function Dashboard({
         </nav>
         <main className="admin-main">
           {tab === 'articles' && (
-            <ArticleManagementWorkspace api={api} articles={articles} onReload={reload} />
+            <ArticleManagementWorkspace
+              api={api}
+              articles={articles}
+              categories={categories}
+              onReload={reload}
+            />
           )}
           {tab === 'site' && settings && (
             <SiteSettingsPanel
@@ -625,10 +649,12 @@ export function Dashboard({
 function ArticleManagementWorkspace({
   api,
   articles,
+  categories,
   onReload,
 }: {
   api: DashboardApi;
   articles: AdminArticle[];
+  categories: Category[];
   onReload: () => Promise<void>;
 }) {
   const [focusedArticleId, setFocusedArticleId] = useState<string | null>(null);
@@ -682,6 +708,7 @@ function ArticleManagementWorkspace({
       <NotionEditorialPanel
         api={api}
         articles={articles}
+        categories={categories}
         focusedArticleId={focusedArticleId}
         onFocusHandled={() => setFocusedArticleId(null)}
         showToast={showToast}
@@ -689,6 +716,7 @@ function ArticleManagementWorkspace({
       <PublishedArticlesPanel
         api={api}
         articles={articles}
+        categories={categories}
         onReload={onReload}
         onRepublish={focusPublishingSource}
         showToast={showToast}
@@ -700,12 +728,14 @@ function ArticleManagementWorkspace({
 function PublishedArticlesPanel({
   api,
   articles,
+  categories,
   onReload,
   onRepublish,
   showToast,
 }: {
   api: DashboardApi;
   articles: AdminArticle[];
+  categories: Category[];
   onReload: () => Promise<void>;
   onRepublish: (articleId: string) => void;
   showToast: ShowToast;
@@ -715,6 +745,10 @@ function PublishedArticlesPanel({
   const [reason, setReason] = useState('');
   const [unpublishing, setUnpublishing] = useState(false);
   const [featuredArticleId, setFeaturedArticleId] = useState<string | null>(null);
+  const [classificationArticleId, setClassificationArticleId] = useState<string | null>(null);
+  const [articleCategory, setArticleCategory] = useState('');
+  const [articleTags, setArticleTags] = useState('');
+  const [savingClassification, setSavingClassification] = useState(false);
   const managedArticles = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase('zh-TW');
     return articles
@@ -773,6 +807,43 @@ function PublishedArticlesPanel({
     }
   };
 
+  const editClassification = (article: AdminArticle) => {
+    if (classificationArticleId === article.id) {
+      setClassificationArticleId(null);
+      return;
+    }
+    setClassificationArticleId(article.id);
+    setArticleCategory(article.category);
+    setArticleTags(article.tags.join('、'));
+  };
+
+  const saveClassification = async (article: AdminArticle) => {
+    const tags = tagsFromInput(articleTags);
+    const tagError = validateTags(tags);
+    if (!articleCategory) {
+      showToast('error', '請選擇文章分類。');
+      return;
+    }
+    if (tagError) {
+      showToast('error', tagError);
+      return;
+    }
+    setSavingClassification(true);
+    try {
+      await api(`/api/admin/articles/${article.id}/classification`, {
+        method: 'PATCH',
+        body: JSON.stringify({ category: articleCategory, tags }),
+      });
+      await onReload();
+      setClassificationArticleId(null);
+      showToast('success', '文章分類與標籤已更新。');
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : '文章分類與標籤更新失敗。');
+    } finally {
+      setSavingClassification(false);
+    }
+  };
+
   return (
     <section
       id="published-articles"
@@ -826,7 +897,55 @@ function PublishedArticlesPanel({
             <div className="admin-article-meta">
               <span>網址</span>
               <strong>/articles/{article.slug}</strong>
+              <span>分類</span>
+              <strong>
+                {categories.find((category) => category.slug === article.category)?.name ||
+                  article.category}
+              </strong>
+              <span>標籤</span>
+              <strong>{article.tags.length ? article.tags.join('、') : '尚未設定'}</strong>
             </div>
+            <button
+              type="button"
+              className="secondary admin-classification-toggle"
+              aria-expanded={classificationArticleId === article.id}
+              onClick={() => editClassification(article)}
+            >
+              {classificationArticleId === article.id ? '收起分類與標籤' : '編輯分類與標籤'}
+            </button>
+            {classificationArticleId === article.id && (
+              <div className="admin-article-classification-form">
+                <label htmlFor={`article-category-${article.id}`}>文章分類</label>
+                <select
+                  id={`article-category-${article.id}`}
+                  value={articleCategory}
+                  onChange={(event) => setArticleCategory(event.target.value)}
+                >
+                  <option value="">選擇分類</option>
+                  {categories.map((category) => (
+                    <option value={category.slug} key={category.slug}>
+                      {category.name}
+                      {category.visible ? '' : '（隱藏）'}
+                    </option>
+                  ))}
+                </select>
+                <label htmlFor={`article-tags-${article.id}`}>文章標籤</label>
+                <input
+                  id={`article-tags-${article.id}`}
+                  value={articleTags}
+                  onChange={(event) => setArticleTags(event.target.value)}
+                  placeholder="例如：勞動法、契約、訴訟"
+                />
+                <small>使用逗號或頓號分隔，最多 20 個。</small>
+                <LoadingButton
+                  type="button"
+                  loading={savingClassification}
+                  onClick={() => void saveClassification(article)}
+                >
+                  儲存分類與標籤
+                </LoadingButton>
+              </div>
+            )}
             {article.status === 'published' && (
               <LoadingButton
                 type="button"
@@ -927,12 +1046,14 @@ function PublishedArticlesPanel({
 function NotionEditorialPanel({
   api,
   articles,
+  categories,
   focusedArticleId,
   onFocusHandled,
   showToast,
 }: {
   api: DashboardApi;
   articles: AdminArticle[];
+  categories: Category[];
   focusedArticleId: string | null;
   onFocusHandled: () => void;
   showToast: ShowToast;
@@ -948,6 +1069,8 @@ function NotionEditorialPanel({
   } | null>(null);
   const [slugForSource, setSlugForSource] = useState<Record<string, string>>({});
   const [summaryForSource, setSummaryForSource] = useState<Record<string, string>>({});
+  const [categoryForSource, setCategoryForSource] = useState<Record<string, string>>({});
+  const [tagsForSource, setTagsForSource] = useState<Record<string, string>>({});
   const [articleForSource, setArticleForSource] = useState<Record<string, string>>({});
   const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
   const [republishSourceId, setRepublishSourceId] = useState<string | null>(null);
@@ -960,13 +1083,8 @@ function NotionEditorialPanel({
     null,
   );
   const busy = busyAction !== null;
-  const selectedActivationTime = selected?.activation_at
-    ? Date.parse(selected.activation_at)
-    : Number.NaN;
-  const canPublishImmediately = Boolean(
-    (selected?.state === 'prepared' || selected?.state === 'ready_to_activate') &&
-    Number.isFinite(selectedActivationTime) &&
-    selectedActivationTime <= Date.now(),
+  const canPublish = Boolean(
+    selected?.state === 'prepared' || selected?.state === 'ready_to_activate',
   );
   const visibleCandidates = useMemo(() => {
     const history = new Set(['published', 'superseded', 'cancelled']);
@@ -995,6 +1113,22 @@ function NotionEditorialPanel({
         ]),
       ),
     );
+    setCategoryForSource((current) =>
+      Object.fromEntries(
+        sourceData.sources.map((source) => [
+          source.id,
+          current[source.id] ?? source.category_slug ?? categories[0]?.slug ?? '',
+        ]),
+      ),
+    );
+    setTagsForSource((current) =>
+      Object.fromEntries(
+        sourceData.sources.map((source) => [
+          source.id,
+          current[source.id] ?? (source.tags || []).join('、'),
+        ]),
+      ),
+    );
     setSourcesLoaded(true);
     setCandidates(candidateData.candidates);
     setSelected((current) =>
@@ -1018,33 +1152,6 @@ function NotionEditorialPanel({
     }
     onFocusHandled();
   }, [focusedArticleId, onFocusHandled, showToast, sources, sourcesLoaded]);
-
-  useEffect(() => {
-    if (!selected?.activation_at || canPublishImmediately) return;
-    let cancelled = false;
-    let timer: number | undefined;
-    const scheduleRefresh = () => {
-      const delay = Date.parse(selected.activation_at as string) - Date.now();
-      if (!Number.isFinite(delay)) return;
-      if (delay <= 0) {
-        void refresh();
-        return;
-      }
-      timer = window.setTimeout(
-        () => {
-          if (cancelled) return;
-          if (Date.parse(selected.activation_at as string) <= Date.now()) void refresh();
-          else scheduleRefresh();
-        },
-        Math.min(delay + 50, 60_000),
-      );
-    };
-    scheduleRefresh();
-    return () => {
-      cancelled = true;
-      if (timer !== undefined) window.clearTimeout(timer);
-    };
-  }, [canPublishImmediately, selected?.activation_at]);
 
   const operationId = () =>
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -1183,43 +1290,43 @@ function NotionEditorialPanel({
     );
   };
 
-  const publish = async (immediate = false) => {
+  const publish = async () => {
     if (!selected) return;
     const candidate = selected;
-    await runAction(immediate ? 'publish-now' : 'publish', async () => {
+    await runAction('publish-now', async () => {
       setPublicationDiagnostic(null);
-      const publishPath = `/api/admin/notion/candidates/${candidate.id}/publish${immediate ? '?immediate=true' : ''}`;
-      const publicationResponse = await api<{ publication: PublicationJob }>(publishPath, {
-        method: 'POST',
-        body: JSON.stringify({
-          expectedRevisionId: candidate.source_revision_id,
-          expectedMetadataVersion: candidate.working_copy_version,
-          expectedCandidateHash: candidate.candidate_hash,
-          idempotencyKey: operationId(),
-        }),
-      });
-      if (immediate) await runWorkerNow();
+      const publicationResponse = await api<{ publication: PublicationJob }>(
+        `/api/admin/notion/candidates/${candidate.id}/publish`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            expectedRevisionId: candidate.source_revision_id,
+            expectedMetadataVersion: candidate.working_copy_version,
+            expectedCandidateHash: candidate.candidate_hash,
+            idempotencyKey: operationId(),
+          }),
+        },
+      );
+      await runWorkerNow();
       await refresh();
       const jobId = publicationResponse.publication?.id || publicationResponse.publication?.job_id;
-      if (immediate && !jobId) {
+      if (!jobId) {
         const diagnostic = {
           kind: 'failure' as const,
           message: `發布工作未回傳可追蹤的工作 ID。候選 ID：${candidate.id}；工作 ID：未知。`,
         };
         setPublicationDiagnostic(diagnostic);
         showToast('error', diagnostic.message);
-      } else if (immediate && jobId) {
+      } else {
         const diagnostic = await pollImmediatePublication(candidate.id, jobId);
         setPublicationDiagnostic(diagnostic);
         showToast(diagnostic.kind === 'success' ? 'success' : 'error', diagnostic.message);
-      } else {
-        showToast('success', '發布工作已排入佇列，worker 會在設定時間完成 freshness gate。');
       }
     });
   };
 
   const requestImmediatePublish = () => {
-    if (canPublishImmediately) setPublishConfirmOpen(true);
+    if (canPublish) setPublishConfirmOpen(true);
   };
 
   const loadPreview = async () => {
@@ -1269,6 +1376,36 @@ function NotionEditorialPanel({
       });
       await refresh();
       showToast('success', '文章摘要已儲存；後續 Notion 同步不會覆寫。');
+    });
+  };
+
+  const saveSourceClassification = async (source: NotionSourceStatus) => {
+    const category = categoryForSource[source.id] || '';
+    const tags = tagsFromInput(tagsForSource[source.id] || '');
+    const tagError = validateTags(tags);
+    if (!category) {
+      showToast('error', '請選擇文章分類。');
+      return;
+    }
+    if (tagError) {
+      showToast('error', tagError);
+      return;
+    }
+    if (!source.working_copy_version) {
+      showToast('error', '此來源目前沒有可編輯的文章版本。');
+      return;
+    }
+    await runAction(`classification-${source.id}`, async () => {
+      await api(`/api/admin/notion/sources/${source.id}/classification`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          category,
+          tags,
+          expectedWorkingCopyVersion: source.working_copy_version,
+        }),
+      });
+      await refresh();
+      showToast('success', '文章分類與標籤已儲存；後續 Notion 同步不會覆寫。');
     });
   };
 
@@ -1504,6 +1641,49 @@ function NotionEditorialPanel({
                           </LoadingButton>
                         </div>
                         <div className="admin-source-control-group admin-source-slug-control">
+                          <label htmlFor={`source-category-${source.id}`}>文章分類</label>
+                          <span className="admin-source-classification-inputs">
+                            <select
+                              id={`source-category-${source.id}`}
+                              value={categoryForSource[source.id] || ''}
+                              onChange={(event) =>
+                                setCategoryForSource((current) => ({
+                                  ...current,
+                                  [source.id]: event.target.value,
+                                }))
+                              }
+                            >
+                              <option value="">選擇分類</option>
+                              {categories.map((category) => (
+                                <option value={category.slug} key={category.slug}>
+                                  {category.name}
+                                  {category.visible ? '' : '（隱藏）'}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              value={tagsForSource[source.id] || ''}
+                              onChange={(event) =>
+                                setTagsForSource((current) => ({
+                                  ...current,
+                                  [source.id]: event.target.value,
+                                }))
+                              }
+                              placeholder="標籤：勞動法、契約、訴訟"
+                              aria-label="文章標籤"
+                            />
+                            <small>標籤使用逗號或頓號分隔，最多 20 個。</small>
+                          </span>
+                          <LoadingButton
+                            className="secondary"
+                            disabled={busy}
+                            loading={busyAction === `classification-${source.id}`}
+                            onClick={() => void saveSourceClassification(source)}
+                          >
+                            儲存分類與標籤
+                          </LoadingButton>
+                        </div>
+                        <div className="admin-source-control-group admin-source-slug-control">
                           <label htmlFor={`source-slug-${source.id}`}>網址代稱</label>
                           <input
                             id={`source-slug-${source.id}`}
@@ -1575,11 +1755,7 @@ function NotionEditorialPanel({
               >
                 <span>
                   <strong className="admin-breakable-text">{candidate.title}</strong>
-                  <small className="admin-breakable-text">
-                    {candidate.activation_at
-                      ? `預定：${formatAdminDate(candidate.activation_at, '立即發布')}`
-                      : '可立即發布'}
-                  </small>
+                  <small className="admin-breakable-text">可立即發布</small>
                 </span>
                 <StatusBadge state={candidate.state} />
               </button>
@@ -1605,26 +1781,11 @@ function NotionEditorialPanel({
           </div>
           <div className="button-row">
             <LoadingButton
-              disabled={
-                busy ||
-                pollingCandidateId !== null ||
-                ['published', 'superseded', 'cancelled'].includes(selected.state)
-              }
-              loading={busyAction === 'publish'}
-              onClick={() => void publish(false)}
-            >
-              排入發布
-            </LoadingButton>
-            <LoadingButton
               className="publish-now"
-              disabled={busy || pollingCandidateId !== null || !canPublishImmediately}
+              disabled={busy || pollingCandidateId !== null || !canPublish}
               loading={busyAction === 'publish-now'}
               onClick={requestImmediatePublish}
-              title={
-                canPublishImmediately
-                  ? '立即執行已到期的發布候選'
-                  : '候選須處於 prepared 或 ready_to_activate，且已到發布時間'
-              }
+              title={canPublish ? '立即發布候選版本' : '候選須處於 prepared 或 ready_to_activate'}
             >
               立即發布
             </LoadingButton>
@@ -1691,7 +1852,7 @@ function NotionEditorialPanel({
             <p className="admin-kicker">準備發布</p>
             <h2 id="publish-confirm-title">立即發布這個候選版本？</h2>
             <p id="publish-confirm-description">
-              「{selected.title}」已到發布時間。送出後仍會重新檢查 Notion
+              「{selected.title}」送出後會立即重新檢查 Notion
               freshness、圖片與資料庫版本，任何一項不符都會停止發布。
             </p>
             <div className="button-row admin-dialog-actions">
@@ -1708,7 +1869,7 @@ function NotionEditorialPanel({
                 loading={busyAction === 'publish-now'}
                 onClick={() => {
                   setPublishConfirmOpen(false);
-                  void publish(true);
+                  void publish();
                 }}
               >
                 確認立即發布

@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   parseAttestationRequest,
+  parseArticleClassificationRequest,
   parseEnqueueRequest,
   parseFeaturedArticleRequest,
   parseLimit,
   parsePrepareRequest,
   parsePublishRequest,
   parseSourceSummaryRequest,
+  parseSourceClassificationRequest,
   parseUnpublishRequest,
 } from './validation';
 
@@ -97,5 +99,31 @@ describe('content job request validation', () => {
     expect(parseFeaturedArticleRequest({ featured: true })).toEqual({ featured: true });
     expect(parseFeaturedArticleRequest({ featured: false })).toEqual({ featured: false });
     expect(() => parseFeaturedArticleRequest({ featured: 'true' })).toThrow(/featured/);
+  });
+
+  it('normalizes article categories and tags for Admin-managed classification', () => {
+    expect(
+      parseArticleClassificationRequest({
+        category: 'legal-practice',
+        tags: [' 勞動法 ', '契約', '勞動法', ''],
+      }),
+    ).toEqual({ category: 'legal-practice', tags: ['勞動法', '契約'] });
+    expect(
+      parseSourceClassificationRequest({
+        category: 'legal-practice',
+        tags: ['勞動法'],
+        expectedWorkingCopyVersion: 5,
+      }),
+    ).toEqual({
+      category: 'legal-practice',
+      tags: ['勞動法'],
+      expectedWorkingCopyVersion: 5,
+    });
+    expect(() => parseArticleClassificationRequest({ category: '', tags: ['勞動法'] })).toThrow(
+      /category/,
+    );
+    expect(() =>
+      parseArticleClassificationRequest({ category: 'legal-practice', tags: ['x'.repeat(41)] }),
+    ).toThrow(/tags/);
   });
 });

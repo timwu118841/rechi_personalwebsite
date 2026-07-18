@@ -240,6 +240,30 @@ export class ContentJobService {
     return article;
   }
 
+  async updateArticleClassification(
+    articleId: string,
+    categorySlug: string,
+    tags: string[],
+    actorId: string,
+  ): Promise<DatabaseRecord> {
+    const { data, error } = await this.client.rpc('update_article_classification', {
+      p_article_id: articleId,
+      p_category_slug: categorySlug,
+      p_tags: tags,
+      p_actor_id: actorId,
+    });
+    if (error?.code === 'PGRST202') {
+      throw Object.assign(
+        new Error('文章分類資料庫函式尚未套用，請執行最新 Supabase migration。'),
+        { code: error.code },
+      );
+    }
+    throwIfError(error);
+    const article = rpcRecord(data);
+    if (!article) throw new Error('Article classification update returned no article.');
+    return article;
+  }
+
   async listSourceStatus(
     limit: number,
     articleId?: string,
@@ -257,7 +281,7 @@ export class ContentJobService {
     if (!sources.length) return sources;
     const { data: workingCopies, error: workingError } = await this.client
       .from('article_working_copies')
-      .select('id,source_id,version,source_revision_id,manual_summary,slug')
+      .select('id,source_id,version,source_revision_id,manual_summary,slug,category_slug,tags')
       .in(
         'source_id',
         sources.map((source) => String(source.id)),
@@ -271,6 +295,8 @@ export class ContentJobService {
       working_copy_version: bySource.get(String(source.id))?.version ?? null,
       manual_summary: bySource.get(String(source.id))?.manual_summary ?? null,
       slug: bySource.get(String(source.id))?.slug ?? null,
+      category_slug: bySource.get(String(source.id))?.category_slug ?? null,
+      tags: bySource.get(String(source.id))?.tags ?? [],
     }));
     if (view === 'all') return statuses;
     const { data: published, error: publishedError } = await this.client
@@ -361,6 +387,26 @@ export class ContentJobService {
     throwIfError(error);
     if (!data) {
       throw Object.assign(new Error('摘要版本已變更，請重新整理後再試。'), { code: '409' });
+    }
+    return record(data) || {};
+  }
+
+  async updateSourceClassification(
+    sourceId: string,
+    expectedWorkingCopyVersion: number,
+    categorySlug: string,
+    tags: string[],
+  ): Promise<DatabaseRecord> {
+    const { data, error } = await this.client
+      .from('article_working_copies')
+      .update({ category_slug: categorySlug, tags })
+      .eq('source_id', sourceId)
+      .eq('version', expectedWorkingCopyVersion)
+      .select('id,source_id,version,category_slug,tags')
+      .maybeSingle();
+    throwIfError(error);
+    if (!data) {
+      throw Object.assign(new Error('文章設定版本已變更，請重新整理後再試。'), { code: '409' });
     }
     return record(data) || {};
   }
@@ -604,7 +650,6 @@ export class ContentJobService {
     candidateId: string,
     actorId: string,
     input: PublishRequest,
-    options: { immediate?: boolean } = {},
   ): Promise<DatabaseRecord> {
     const candidate = await this.getCandidateStatus(candidateId);
     if (!candidate) throw new Error('Publication candidate not found.');
@@ -617,27 +662,16 @@ export class ContentJobService {
         code: '409',
       });
     }
-    if (options.immediate) {
-      if (!['prepared', 'ready_to_activate'].includes(String(candidate.state))) {
-        throw Object.assign(
-          new Error('Only due prepared or ready-to-activate candidates can publish immediately.'),
-          { code: '409' },
-        );
-      }
-      const activationAt = Date.parse(String(candidate.activation_at));
-      if (!Number.isFinite(activationAt) || activationAt > Date.now()) {
-        throw Object.assign(
-          new Error('Scheduled publication cannot be published immediately before activation.'),
-          { code: '409' },
-        );
-      }
+    if (!['prepared', 'ready_to_activate'].includes(String(candidate.state))) {
+      throw Object.assign(new Error('Only prepared candidates can be published.'), {
+        code: '409',
+      });
     }
     const data = await this.enqueueJob({
       jobType: 'finalize_candidate',
       candidateId,
       dedupeKey: `finalize_candidate:${candidateId}:${input.idempotencyKey}`,
       payload: { requested_by: actorId, candidate_id: candidateId },
-      runAfter: options.immediate ? undefined : candidate.activation_at || undefined,
       priority: 1,
     });
     return (
@@ -645,7 +679,7 @@ export class ContentJobService {
         candidate_id: candidateId,
         job_id: null,
         state: 'queued',
-        run_after: candidate.activation_at,
+        run_after: new Date().toISOString(),
       }
     );
   }
@@ -1041,7 +1075,7 @@ export class ContentJobService {
           body_markdown: bodyMarkdown,
           body_json: null,
           body_html: null,
-          tags: text.tags,
+          tags: Array.isArray(current.tags) ? current.tags : text.tags,
         })
         .eq('source_id', sourceId);
       throwIfError(error);
