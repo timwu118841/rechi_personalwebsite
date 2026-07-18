@@ -12,8 +12,11 @@ export const POST: APIRoute = async ({ request }) => {
     const admin = await requireAdmin(request);
     const input = parseEnqueueRequest(await readJson(request));
     const service = getContentJobService();
-    const job = input.root
-      ? await service.enqueueRootSync({ actorId: admin.id, idempotencyKey: input.idempotencyKey })
+    const job = input.dataSource
+      ? await service.enqueueDataSourceSync({
+          actorId: admin.id,
+          idempotencyKey: input.idempotencyKey,
+        })
       : await service.enqueueSourceSync({ ...input, actorId: admin.id });
     return json({ accepted: true, job }, { status: 202 });
   } catch (error) {

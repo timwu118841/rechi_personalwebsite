@@ -38,7 +38,7 @@ describe('Notion editorial environment', () => {
   it('returns null when editorial sync is disabled even with complete credentials', () => {
     process.env.NOTION_EDITORIAL_ENABLED = 'false';
     process.env.NOTION_TOKEN = 'token';
-    process.env.NOTION_ROOT_PAGE_ID = 'root-page';
+    process.env.NOTION_DATA_SOURCE_ID = 'data-source';
 
     expect(getNotionConfig()).toBeNull();
   });
@@ -46,11 +46,11 @@ describe('Notion editorial environment', () => {
   it('returns config when editorial sync is enabled with complete credentials', () => {
     process.env.NOTION_EDITORIAL_ENABLED = 'true';
     process.env.NOTION_TOKEN = 'token';
-    process.env.NOTION_ROOT_PAGE_ID = 'root-page';
+    process.env.NOTION_DATA_SOURCE_ID = 'data-source';
 
     expect(getNotionConfig()).toEqual({
       token: 'token',
-      rootPageId: 'root-page',
+      dataSourceId: 'data-source',
       version: '2026-03-11',
     });
   });

@@ -182,7 +182,9 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
         };
       } else if (url.pathname === '/api/admin/notion/sync' && request.method() === 'POST') {
         const input = request.postDataJSON();
-        requests.push(`SYNC ${JSON.stringify({ sourceId: input.sourceId })}`);
+        requests.push(
+          `SYNC ${JSON.stringify({ sourceId: input.sourceId, dataSource: input.dataSource })}`,
+        );
         body = { accepted: true, job: { id: 'sync-job-1', state: 'queued' } };
       } else if (url.pathname === `/api/admin/notion/jobs/${jobId}`) {
         body = {
@@ -251,7 +253,11 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
 
     const syncSection = page.locator('#notion-sync');
     await expect(syncSection.getByRole('heading', { name: 'Notion 同步' })).toBeVisible();
-    await expect(syncSection.getByRole('button', { name: '同步主要頁面' })).toBeVisible();
+    const syncDatabaseButton = syncSection.getByRole('button', { name: '同步文章資料庫' });
+    await expect(syncDatabaseButton).toBeVisible();
+    await syncDatabaseButton.click();
+    await expect(page.getByRole('status')).toContainText('Notion 文章資料庫同步完成');
+    expect(requestLogs.get(page)).toContain('SYNC {"dataSource":true}');
     await expect(syncSection.getByLabel('文章摘要')).toHaveCount(0);
     await expect(syncSection.getByLabel('手動設定網址代稱')).toHaveCount(0);
 

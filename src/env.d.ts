@@ -12,7 +12,7 @@ interface ImportMetaEnv {
   readonly CRON_SECRET?: string;
   readonly NOTION_EDITORIAL_ENABLED?: string;
   readonly NOTION_TOKEN?: string;
-  readonly NOTION_ROOT_PAGE_ID?: string;
+  readonly NOTION_DATA_SOURCE_ID?: string;
   readonly NOTION_VERSION?: string;
   readonly CONTENT_PUBLIC_READ_MODE?: string;
   readonly NOTION_PUBLICATION_MODE?: string;

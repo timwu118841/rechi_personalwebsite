@@ -50,11 +50,11 @@ export function getContentPublicReadMode(): 'service' | 'publishable' {
 export function getNotionConfig() {
   if (!isNotionEditorialEnabled()) return null;
   const token = read('NOTION_TOKEN');
-  const rootPageId = read('NOTION_ROOT_PAGE_ID');
-  return token && rootPageId
+  const dataSourceId = read('NOTION_DATA_SOURCE_ID');
+  return token && dataSourceId
     ? {
         token,
-        rootPageId,
+        dataSourceId,
         version: '2026-03-11' as const,
       }
     : null;

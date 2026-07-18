@@ -16,7 +16,7 @@ if (
 }
 
 if (process.env.NOTION_EDITORIAL_ENABLED === 'true') {
-  for (const name of ['NOTION_TOKEN', 'NOTION_ROOT_PAGE_ID', 'NOTION_VERSION']) {
+  for (const name of ['NOTION_TOKEN', 'NOTION_DATA_SOURCE_ID', 'NOTION_VERSION']) {
     if (!process.env[name]?.trim()) missing.push(name);
   }
 }
@@ -25,10 +25,10 @@ if (process.env.NOTION_VERSION && process.env.NOTION_VERSION !== '2026-03-11') {
   missing.push('NOTION_VERSION（必須固定為 2026-03-11）');
 }
 
-if (process.env.NOTION_ROOT_PAGE_ID) {
-  const compactPageId = process.env.NOTION_ROOT_PAGE_ID.replaceAll('-', '');
+if (process.env.NOTION_DATA_SOURCE_ID) {
+  const compactPageId = process.env.NOTION_DATA_SOURCE_ID.replaceAll('-', '');
   if (!/^[0-9a-f]{32}$/i.test(compactPageId)) {
-    missing.push('NOTION_ROOT_PAGE_ID（必須是 32 個十六進位字元的 page UUID）');
+    missing.push('NOTION_DATA_SOURCE_ID（必須是 32 個十六進位字元的 data source UUID）');
   }
 }
 

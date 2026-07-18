@@ -5,7 +5,6 @@ import { mapPageProperties } from './properties';
 import {
   NOTION_API_VERSION,
   type NotionBlock,
-  type NotionChildPage,
   type NotionListResponse,
   type NotionObject,
   type NotionPage,
@@ -239,34 +238,6 @@ export class NotionClient {
           ? { ...block, children: await this.retrieveBlockChildren(block.id) }
           : block,
       ),
-    );
-  }
-
-  /** List only direct child pages; descendants are synced as their own sources. */
-  async listChildPages(rootPageId: string): Promise<NotionChildPage[]> {
-    const blocks = await this.paginate<NotionBlock>((cursor) => {
-      const query = new URLSearchParams({ page_size: '100' });
-      if (cursor) query.set('start_cursor', cursor);
-      return this.request<NotionListResponse<NotionBlock>>(
-        `/blocks/${encodeURIComponent(rootPageId)}/children?${query}`,
-      );
-    });
-    const childPages = blocks.flatMap((block) => {
-      if (block.type !== 'child_page') return [];
-      const childPage = object(block.child_page);
-      return [{ id: block.id, title: typeof childPage?.title === 'string' ? childPage.title : '' }];
-    });
-    return Promise.all(
-      childPages.map(async (childPage) => {
-        try {
-          const page = await this.retrievePage(childPage.id);
-          return { ...childPage, lastEditedTime: page.last_edited_time ?? null };
-        } catch {
-          // Root discovery must remain useful when one child page's metadata
-          // is temporarily unavailable; null makes root sync fail open.
-          return { ...childPage, lastEditedTime: null };
-        }
-      }),
     );
   }
 
