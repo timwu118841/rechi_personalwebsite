@@ -7,14 +7,15 @@ import TagList from './TagList.astro';
 interface Props {
   article: Article;
   fallbackImage?: MediaAsset;
+  featured?: boolean;
 }
-const { article, fallbackImage } = Astro.props;
+const { article, fallbackImage, featured = false } = Astro.props;
 const image = article.cover || fallbackImage;
 const minutes = readingTimeMinutes(article.body);
 const articleUrl = articlePath(article.slug);
 ---
 
-<article class="article-card">
+<article class:list={['article-card', { 'article-card-featured': featured }]}>
   <a class="card-image" href={articleUrl} tabindex="-1" aria-hidden="true">
     {
       image ? (
@@ -28,21 +29,26 @@ const articleUrl = articlePath(article.slug);
         />
       ) : (
         <span class="card-pattern" aria-hidden="true">
-          <span>閱讀筆記</span>
+          <>
+            <span>RECHI</span>
+            <small>LEGAL NOTES</small>
+          </>
         </span>
       )
     }
   </a>
   <div class="card-body">
     <div class="card-meta">
-      <span>{article.contentTypeName} · {article.categoryName}</span>
-      <span>{formatDate(article.publishedAt)}</span><span>{minutes} 分鐘閱讀</span>
+      <span class="card-taxonomy">{article.contentTypeName} · {article.categoryName}</span>
+      <span>{formatDate(article.publishedAt)}</span><span>{minutes} 分鐘</span>
     </div>
     <h3><a href={articleUrl}>{article.title}</a></h3>
     <p>{article.description}</p>
     <div class="card-footer">
       <TagList tags={article.tags.slice(0, 2)} />
-      <a class="read-more" href={articleUrl} aria-label={`閱讀「${article.title}」`}>閱讀 →</a>
+      <a class="read-more" href={articleUrl} aria-label={`閱讀「${article.title}」`}
+        >閱讀全文 <span aria-hidden="true">↗</span></a
+      >
     </div>
   </div>
 </article>

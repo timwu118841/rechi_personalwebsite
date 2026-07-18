@@ -33,8 +33,14 @@ const basePath = `/tags/${encodeURIComponent(tag)}/`;
   description={`閱讀標記為「${tag}」的法律文章。`}
   canonical={pageCanonical(basePath, page, Astro.site!)}
   ><header class="page-hero">
-    <div class="container">
-      <p class="eyebrow">Tag</p><h1>#{tag}</h1><p>共 {result.totalItems} 篇文章</p>
+    <div class="container page-hero-grid">
+      <div>
+        <p class="page-index" aria-hidden="true">TAG</p><p class="eyebrow">Tag</p><h1>#{tag}</h1>
+      </div><div class="page-intro">
+        <p>沿著這個關鍵概念，繼續探索相關的法律實務筆記。</p><span
+          >共 {result.totalItems} 篇文章</span
+        >
+      </div>
     </div>
   </header><section class="section">
     <div class="container">

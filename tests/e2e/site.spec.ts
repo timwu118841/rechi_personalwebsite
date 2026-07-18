@@ -118,6 +118,47 @@ test.describe('公開即時閱讀體驗', () => {
     }
   });
 
+  test('公開核心頁面在手機寬度沒有橫向溢位', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+
+    for (const path of [
+      '/',
+      '/articles/',
+      welcomeArticlePath,
+      '/categories/',
+      '/tags/',
+      '/search/',
+      '/about/',
+    ]) {
+      await page.goto(path);
+      const hasHorizontalOverflow = await page.evaluate(
+        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      );
+      expect(hasHorizontalOverflow, `${path} 不應產生橫向捲動`).toBe(false);
+    }
+  });
+
+  test('文章長標題在 200% 縮放下完整換行且不撐破版面', async ({ page }) => {
+    await page.setViewportSize({ width: 640, height: 900 });
+    await page.goto(welcomeArticlePath);
+    const heading = page.locator('.article-header h1');
+    await heading.evaluate((element) => {
+      element.textContent =
+        '這是一個用來驗證法律實務文章超長標題在高倍率縮放與窄版閱讀情境下仍能完整換行的測試標題';
+      document.documentElement.style.zoom = '2';
+    });
+
+    await expect(heading).toBeVisible();
+    expect(await heading.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+      true,
+    );
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+  });
+
   test('分析被封鎖或收到多餘欄位時不影響閱讀且不送出敏感資料', async ({ page }) => {
     await page.route('**/script.js', (route) => route.abort());
     await page.addInitScript(() => {

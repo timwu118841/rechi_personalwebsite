@@ -77,30 +77,54 @@ const jsonLd = [
   jsonLd={jsonLd}
 >
   <article data-article-slug={article.slug}>
-    <header class="article-header reading-container">
-      <p class="eyebrow">{article.contentTypeName} · {article.categoryName}</p><h1>
-        {article.title}
-      </h1><p class="article-dek">{article.description}</p><div class="article-byline">
-        <span class="author-chip"
-          >{
-            settings.authorImage ? (
-              <img
-                class="author-avatar-image"
-                src={settings.authorImage.url}
-                alt=""
-                width={settings.authorImage.width}
-                height={settings.authorImage.height}
-              />
-            ) : (
-              <span class="author-avatar" aria-hidden="true">
-                {settings.authorName.slice(0, 1)}
-              </span>
-            )
-          }{settings.authorName}</span
-        ><time datetime={article.publishedAt.toISOString()}>{formatDate(article.publishedAt)}</time
-        >{article.updatedAt && <span>更新於 {formatDate(article.updatedAt)}</span>}<span
-          >{minutes} 分鐘閱讀</span
-        >
+    <header class="article-header container">
+      <nav class="breadcrumbs" aria-label="麵包屑">
+        <a href="/">首頁</a><span aria-hidden="true">/</span><a href="/articles/">文章</a><span
+          aria-hidden="true">/</span
+        ><span aria-current="page">{article.categoryName}</span>
+      </nav><div class="article-heading-grid">
+        <div class="article-heading-copy">
+          <p class="eyebrow">{article.contentTypeName} · {article.categoryName}</p><h1>
+            {article.title}
+          </h1><p class="article-dek">{article.description}</p>
+        </div><aside class="article-facts" aria-label="文章資訊">
+          <span class="article-facts-label">Article note</span><dl>
+            <div>
+              <dt>作者</dt><dd>
+                <span class="author-chip"
+                  >{
+                    settings.authorImage ? (
+                      <img
+                        class="author-avatar-image"
+                        src={settings.authorImage.url}
+                        alt=""
+                        width={settings.authorImage.width}
+                        height={settings.authorImage.height}
+                      />
+                    ) : (
+                      <span class="author-avatar" aria-hidden="true">
+                        {settings.authorName.slice(0, 1)}
+                      </span>
+                    )
+                  }{settings.authorName}</span
+                >
+              </dd>
+            </div><div>
+              <dt>發布</dt><dd>
+                <time datetime={article.publishedAt.toISOString()}
+                  >{formatDate(article.publishedAt)}</time
+                >
+              </dd>
+            </div>{
+              article.updatedAt && (
+                <div>
+                  <dt>更新</dt>
+                  <dd>{formatDate(article.updatedAt)}</dd>
+                </div>
+              )
+            }<div><dt>閱讀</dt><dd>{minutes} 分鐘</dd></div>
+          </dl>
+        </aside>
       </div>
     </header>
     {
@@ -118,24 +142,32 @@ const jsonLd = [
         </div>
       )
     }
-    <div class="reading-container">
-      <div class="prose" set:html={bodyHtml} /><div class="article-end">
-        <TagList tags={article.tags} /><LegalDisclaimer /><div
-          class="share-row"
-          aria-label="分享文章"
-        >
-          <strong>分享：</strong><a
-            href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(articleUrl)}`}
-            target="_blank"
-            rel="noopener noreferrer">Facebook</a
-          ><a
-            href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(articleUrl)}`}
-            target="_blank"
-            rel="noopener noreferrer">LinkedIn</a
-          ><a
-            href={`mailto:?subject=${encodeURIComponent(article.title)}&body=${encodeURIComponent(articleUrl)}`}
-            >Email</a
+    <div class="container article-layout">
+      <aside class="article-rail" aria-label="文章探索">
+        <p class="eyebrow">Filed under</p><a href={`/categories/${article.category}/`}
+          >{article.categoryName}</a
+        ><span class="rail-rule" aria-hidden="true"></span><a href="/articles/">← 返回所有文章</a>
+      </aside><div class="reading-container article-reading">
+        <div class="prose" set:html={bodyHtml} /><div class="article-end">
+          <div class="article-end-heading">
+            <p class="eyebrow">Continue exploring</p><h2>延伸探索</h2>
+          </div><TagList tags={article.tags} /><LegalDisclaimer /><div
+            class="share-row"
+            aria-label="分享文章"
           >
+            <strong>分享這篇文章</strong><a
+              href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(articleUrl)}`}
+              target="_blank"
+              rel="noopener noreferrer">Facebook <span aria-hidden="true">↗</span></a
+            ><a
+              href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(articleUrl)}`}
+              target="_blank"
+              rel="noopener noreferrer">LinkedIn <span aria-hidden="true">↗</span></a
+            ><a
+              href={`mailto:?subject=${encodeURIComponent(article.title)}&body=${encodeURIComponent(articleUrl)}`}
+              >Email <span aria-hidden="true">↗</span></a
+            >
+          </div>
         </div>
       </div>
     </div>

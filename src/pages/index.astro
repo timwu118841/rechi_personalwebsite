@@ -17,17 +17,22 @@ if (Astro.cache.enabled)
 <BaseLayout siteSettings={settings}>
   <section class="hero">
     <div class="container hero-grid">
-      <div>
-        <p class="eyebrow">Legal practice, clearly written</p><h1>
-          把法律經驗，寫成<em>看得懂</em>的知識。
-        </h1>
+      <div class="hero-heading">
+        <p class="eyebrow"><span>Rechi Legal Notes</span><span>Vol. 01</span></p><h1>
+          把法律經驗，寫成<span>看得懂</span>的知識。
+        </h1><div class="hero-index" aria-label="本站內容特色">
+          <span>實務視角</span><span>制度脈絡</span><span>清楚書寫</span>
+        </div>
       </div><div class="hero-copy">
-        <p>
-          從實務現場出發，整理制度、溝通與判斷背後的脈絡。少一點術語，多一點真正能帶走的理解。
-        </p><a class="button" href="/articles/">開始閱讀 <span aria-hidden="true">→</span></a><p
-          class="hero-note"
-        >
-          內容為一般資訊與經驗分享，不構成個案法律意見。
+        <span class="hero-rule" aria-hidden="true"></span><p>
+          複雜，不等於必須艱澀。這裡從實務現場出發，整理制度、溝通與判斷背後的脈絡。
+        </p><p>少一點術語，多一點真正能帶走的理解。</p><div class="hero-actions">
+          <a class="button" href="/articles/">開始閱讀 <span aria-hidden="true">→</span></a><a
+            class="text-link"
+            href="/about/">認識本站</a
+          >
+        </div><p class="hero-note">
+          <span aria-hidden="true">※</span> 內容為一般資訊與經驗分享，不構成個案法律意見。
         </p>
       </div>
     </div>
@@ -37,7 +42,10 @@ if (Astro.cache.enabled)
       <section class="section" aria-labelledby="featured-title">
         <div class="container">
           <>
-            <div class="section-heading">
+            <div class="section-heading section-heading-numbered">
+              <span class="section-number" aria-hidden="true">
+                01
+              </span>
               <div>
                 <>
                   <p class="eyebrow">Editor’s pick</p>
@@ -45,8 +53,12 @@ if (Astro.cache.enabled)
                 </>
               </div>
             </div>
-            <div class="article-grid">
-              <ArticleCard article={featured} fallbackImage={settings.defaultSocialImage} />
+            <div class="article-grid featured-grid">
+              <ArticleCard
+                article={featured}
+                fallbackImage={settings.defaultSocialImage}
+                featured={true}
+              />
             </div>
           </>
         </div>
@@ -55,9 +67,11 @@ if (Astro.cache.enabled)
   }
   <section class="section" aria-labelledby="latest-title">
     <div class="container">
-      <div class="section-heading">
-        <div><p class="eyebrow">Latest notes</p><h2 id="latest-title">最新文章</h2></div><a
-          href="/articles/">查看所有文章</a
+      <div class="section-heading section-heading-numbered">
+        <span class="section-number" aria-hidden="true">02</span><div>
+          <p class="eyebrow">Latest notes</p><h2 id="latest-title">最新文章</h2>
+        </div><a class="text-link" href="/articles/"
+          >查看所有文章 <span aria-hidden="true">→</span></a
         >
       </div>{
         latest.length > 0 ? (
