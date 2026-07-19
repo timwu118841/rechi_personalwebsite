@@ -1,5 +1,5 @@
 import './server-only';
-import { convertNotionBlocks } from './converter';
+import { convertNotionMarkdown } from './converter';
 import { NotionApiError, NotionTimeoutError } from './errors';
 import { mapPageProperties } from './properties';
 import {
@@ -8,6 +8,7 @@ import {
   type NotionListResponse,
   type NotionObject,
   type NotionPage,
+  type NotionPageMarkdown,
   type NotionProperty,
   type NotionSourceSnapshot,
 } from './types';
@@ -205,6 +206,26 @@ export class NotionClient {
     return { ...page, properties: Object.fromEntries(properties) };
   }
 
+  async retrievePageMarkdown(pageId: string): Promise<NotionPageMarkdown> {
+    const response = await this.request<NotionPageMarkdown>(
+      `/pages/${encodeURIComponent(pageId)}/markdown`,
+    );
+    if (
+      response.object !== 'page_markdown' ||
+      typeof response.markdown !== 'string' ||
+      typeof response.truncated !== 'boolean' ||
+      !Array.isArray(response.unknown_block_ids)
+    ) {
+      throw new Error('Invalid Notion Markdown response.');
+    }
+    if (response.truncated || response.unknown_block_ids.length) {
+      throw new Error(
+        `Notion Markdown response was truncated (${response.unknown_block_ids.length} unknown blocks).`,
+      );
+    }
+    return response;
+  }
+
   async queryDataSource(
     dataSourceId: string,
     body: Record<string, unknown> = {},
@@ -242,9 +263,9 @@ export class NotionClient {
   }
 
   async readSourceSnapshot(pageId: string): Promise<NotionSourceSnapshot> {
-    const [page, blocks] = await Promise.all([
+    const [page, markdown] = await Promise.all([
       this.retrievePageWithProperties(pageId),
-      this.retrieveBlockChildren(pageId),
+      this.retrievePageMarkdown(pageId),
     ]);
     return {
       pageId: page.id,
@@ -255,7 +276,7 @@ export class NotionClient {
       lastEditedTime: page.last_edited_time ?? null,
       url: page.url ?? null,
       properties: mapPageProperties(page.properties),
-      document: convertNotionBlocks(blocks),
+      document: convertNotionMarkdown(markdown.markdown),
     };
   }
 }

@@ -187,7 +187,16 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
         body = { publication: { id: jobId, candidate_id: candidateId, state: 'queued' } };
       } else if (url.pathname === `/api/admin/notion/candidates/${candidateId}/preview`) {
         body = {
-          preview: { title: longTitle, description: longContent, bodyMarkdown: longContent },
+          preview: {
+            title: longTitle,
+            description: longContent,
+            bodyMarkdown: `## 前台版型正文\n\n${longContent}`,
+            slug: 'candidate-preview',
+            categorySlug: legalCategory.slug,
+            contentTypeSlug: legalContentType.slug,
+            tags: ['勞動法', '契約'],
+            activationAt: '2026-07-19T08:00:00.000Z',
+          },
         };
       } else if (url.pathname === '/api/admin/notion/worker') {
         body = {
@@ -502,8 +511,17 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
   test('keeps the dashboard within the viewport on desktop and mobile', async ({ page }) => {
     await page.getByRole('button', { name: new RegExp(longTitle.slice(0, 12)) }).click();
     await page.getByRole('button', { name: '載入預覽' }).click();
-    await expect(page.locator('.admin-preview-content')).toContainText(longTitle);
     await expect(page.locator('.admin-preview-dialog')).toHaveAttribute('role', 'dialog');
+    const preview = page.frameLocator('iframe[title="前台文章預覽"]');
+    await expect(preview.locator('.site-header')).toBeVisible();
+    await expect(preview.locator('.article-header')).toContainText(longTitle);
+    await expect(preview.locator('.article-layout .prose')).toContainText('前台版型正文');
+    await expect(preview.locator('.site-footer')).toBeVisible();
+    expect(
+      await preview
+        .locator('.article-heading-grid')
+        .evaluate((element) => getComputedStyle(element).display),
+    ).toBe('grid');
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);

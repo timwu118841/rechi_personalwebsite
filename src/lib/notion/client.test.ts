@@ -19,7 +19,7 @@ function list(results: unknown[], nextCursor: string | null = null) {
 }
 
 describe('NotionClient', () => {
-  it('pins the API version and recursively paginates page properties, data sources, and nested blocks', async () => {
+  it('pins the API version and reads source bodies through the Markdown API', async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
@@ -43,33 +43,14 @@ describe('NotionClient', () => {
           list([{ object: 'property_item', type: 'relation', relation: { id: 'r2' } }], 'prop-2'),
         );
       }
-      if (url.includes('/blocks/page-1/children') && url.includes('start_cursor=blocks-2')) {
-        return json(
-          list([
-            {
-              object: 'block',
-              id: 'parent',
-              type: 'quote',
-              has_children: true,
-              quote: { rich_text: [{ type: 'text', plain_text: '父層' }] },
-            },
-          ]),
-        );
-      }
-      if (url.includes('/blocks/page-1/children')) {
-        return json(list([], 'blocks-2'));
-      }
-      if (url.includes('/blocks/parent/children')) {
-        return json(
-          list([
-            {
-              object: 'block',
-              id: 'child',
-              type: 'paragraph',
-              paragraph: { rich_text: [{ type: 'text', plain_text: '子層' }] },
-            },
-          ]),
-        );
+      if (url.endsWith('/pages/page-1/markdown')) {
+        return json({
+          object: 'page_markdown',
+          id: 'page-1',
+          markdown: '## 文章正文\n\n來自 Notion Markdown API。',
+          truncated: false,
+          unknown_block_ids: [],
+        });
       }
       if (url.includes('/data_sources/source/query')) {
         const body = JSON.parse(String(init?.body)) as { start_cursor?: string };
@@ -88,13 +69,37 @@ describe('NotionClient', () => {
 
     expect(snapshot.sourceState).toBe('archived');
     expect(snapshot.properties.values.Related).toEqual(['r2', 'r3']);
-    expect(snapshot.document.blocks[0]?.children?.[0]?.blockId).toBe('child');
+    expect(snapshot.document).toMatchObject({
+      version: 2,
+      markdown: '## 文章正文\n\n來自 Notion Markdown API。',
+    });
     expect(pages.map((page) => page.id)).toEqual(['p1', 'p2']);
+    expect(calls.some((call) => call.url.endsWith('/pages/page-1/markdown'))).toBe(true);
+    expect(calls.some((call) => call.url.includes('/blocks/page-1/children'))).toBe(false);
     expect(
       calls.every(
         (call) => new Headers(call.init.headers).get('Notion-Version') === NOTION_API_VERSION,
       ),
     ).toBe(true);
+  });
+
+  it('fails closed rather than storing an incomplete truncated Markdown body', async () => {
+    const client = new NotionClient({
+      token: 'secret',
+      fetch: vi.fn(async (input) =>
+        String(input).endsWith('/markdown')
+          ? json({
+              object: 'page_markdown',
+              id: 'large-page',
+              markdown: '部分內容\n\n<unknown url="https://notion.so/block" alt="paragraph"/>',
+              truncated: true,
+              unknown_block_ids: ['missing-block'],
+            })
+          : json({ object: 'page', id: 'large-page', properties: {} }),
+      ) as unknown as typeof fetch,
+    });
+
+    await expect(client.readSourceSnapshot('large-page')).rejects.toThrow(/truncated/i);
   });
 
   it('uses Retry-After for 429 and retries 529', async () => {
@@ -121,9 +126,15 @@ describe('NotionClient', () => {
     const client = new NotionClient({
       token: 'secret',
       fetch: vi.fn(async (input) =>
-        String(input).includes('/pages/')
-          ? json({ object: 'page', id: 'legacy', archived: true, properties: {} })
-          : json(list([])),
+        String(input).endsWith('/markdown')
+          ? json({
+              object: 'page_markdown',
+              id: 'legacy',
+              markdown: '正文',
+              truncated: false,
+              unknown_block_ids: [],
+            })
+          : json({ object: 'page', id: 'legacy', archived: true, properties: {} }),
       ) as unknown as typeof fetch,
     });
 

@@ -1,5 +1,7 @@
 import './server-only';
+import { createHash } from 'node:crypto';
 import { UnsupportedNotionBlockError } from './errors';
+import { validatedMediaUrl } from './media';
 import type {
   ConvertedNotionDocument,
   MediaSourceRef,
@@ -209,8 +211,68 @@ export function convertNotionBlocks(blocks: NotionBlock[]): ConvertedNotionDocum
   };
 }
 
+function markdownSearchText(markdown: string): string {
+  return markdown
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/[`*_#>~|{}()-]/g, ' ')
+    .replaceAll('[', ' ')
+    .replaceAll(']', ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Normalize Notion-flavoured Markdown while retaining Markdown as the source of
+ * truth. Signed image URLs are replaced with stable logical refs so published
+ * content does not depend on expiring Notion URLs.
+ */
+export function convertNotionMarkdown(source: string): ConvertedNotionDocument {
+  const normalized = source.replace(/\r\n?/g, '\n').trim();
+  if (/<unknown\b/i.test(normalized)) {
+    throw new UnsupportedNotionBlockError('unknown_markdown', 'markdown-response');
+  }
+
+  const mediaByCanonicalRef = new Map<string, MediaSourceRef>();
+  const markdown = normalized.replace(
+    /!\[([^\]]*)\]\(\s*(https:\/\/[^\s)]+)(?:\s+["'][^"']*["'])?\s*\)/g,
+    (_match, caption: string, fetchUrl: string) => {
+      const url = validatedMediaUrl(fetchUrl);
+      url.search = '';
+      url.hash = '';
+      const canonicalUrl = url.toString();
+      const canonicalRef = `notion-file:${canonicalUrl}`;
+      let media = mediaByCanonicalRef.get(canonicalRef);
+      if (!media) {
+        const stableId = createHash('sha256').update(canonicalUrl).digest('hex').slice(0, 24);
+        media = {
+          blockId: `markdown-image-${stableId}`,
+          kind: 'notion_file',
+          canonicalRef,
+          fetchUrl,
+          caption,
+        };
+        mediaByCanonicalRef.set(canonicalRef, media);
+      }
+      return `![${caption}](asset://notion/${media.blockId})`;
+    },
+  );
+
+  return {
+    version: 2,
+    blocks: [],
+    markdown,
+    searchText: markdownSearchText(markdown),
+    mediaSourceRefs: [...mediaByCanonicalRef.values()],
+  };
+}
+
 /** Render the normalized document using only logical asset references. */
 export function renderNotionMarkdown(document: ConvertedNotionDocument): string {
+  if (document.version === 2 && typeof document.markdown === 'string') {
+    return document.markdown.trim();
+  }
   return document.blocks
     .map((block) => markdownBlock(block, 0))
     .join('\n\n')

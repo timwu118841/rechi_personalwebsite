@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { convertNotionBlocks, renderNotionMarkdown } from './converter';
+import { convertNotionBlocks, convertNotionMarkdown, renderNotionMarkdown } from './converter';
 import { UnsupportedNotionBlockError } from './errors';
 import { computeNotionHashes } from './hash';
 import { mapPageProperties } from './properties';
@@ -13,6 +13,51 @@ const text = (plainText: string, extra: Record<string, unknown> = {}) => ({
 });
 
 describe('Notion conversion and canonical hashes', () => {
+  it('keeps enhanced Markdown as the source body and promotes signed Notion images', () => {
+    const firstUrl =
+      'https://s3.us-west-2.amazonaws.com/secure.notion-static.com/workspace/image.png?X-Amz-Signature=first';
+    const document = convertNotionMarkdown(
+      `## Markdown API\n\n![圖片說明](${firstUrl})\n\n<callout icon="💡">重點</callout>`,
+    );
+
+    expect(document).toMatchObject({
+      version: 2,
+      markdown:
+        '## Markdown API\n\n![圖片說明](asset://notion/markdown-image-580de9152d007438ec983502)\n\n<callout icon="💡">重點</callout>',
+    });
+    expect(document.mediaSourceRefs).toEqual([
+      {
+        blockId: 'markdown-image-580de9152d007438ec983502',
+        kind: 'notion_file',
+        canonicalRef:
+          'notion-file:https://s3.us-west-2.amazonaws.com/secure.notion-static.com/workspace/image.png',
+        fetchUrl: firstUrl,
+        caption: '圖片說明',
+      },
+    ]);
+    expect(renderNotionMarkdown(document)).toBe(document.markdown);
+  });
+
+  it('keeps Markdown hashes stable when only a signed image query rotates', () => {
+    const properties = mapPageProperties({
+      Name: { id: 'title', type: 'title', title: [text('文章')] } as NotionProperty,
+    });
+    const makeDocument = (signature: string) =>
+      convertNotionMarkdown(
+        `![圖](https://s3.us-west-2.amazonaws.com/secure.notion-static.com/workspace/image.png?X-Amz-Signature=${signature})`,
+      );
+
+    expect(computeNotionHashes({ properties, document: makeDocument('one') })).toEqual(
+      computeNotionHashes({ properties, document: makeDocument('two') }),
+    );
+  });
+
+  it('rejects unknown enhanced Markdown blocks instead of silently losing content', () => {
+    expect(() =>
+      convertNotionMarkdown('<unknown url="https://notion.so/block" alt="embed"/>'),
+    ).toThrow(/unsupported/i);
+  });
+
   it('converts nested allowlisted blocks, inline marks, links, and media refs', () => {
     const document = convertNotionBlocks([
       {

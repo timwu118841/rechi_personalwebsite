@@ -2,8 +2,8 @@ import './server-only';
 import { createHash } from 'node:crypto';
 import type { ConvertedNotionDocument, MappedPageProperties, MediaSourceRef } from './types';
 
-export const NOTION_CANONICALIZATION_VERSION = 1 as const;
-export const NOTION_CONVERTER_VERSION = 1 as const;
+export const NOTION_CANONICALIZATION_VERSION = 2 as const;
+export const NOTION_CONVERTER_VERSION = 2 as const;
 
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);
@@ -44,6 +44,7 @@ export function computeNotionHashes(input: {
     canonicalizationVersion: NOTION_CANONICALIZATION_VERSION,
     properties: input.properties,
     blocks: input.document.blocks,
+    markdown: input.document.markdown,
     mediaSourceRefs: canonicalMedia(input.document.mediaSourceRefs),
   };
   const sourceHash = digest(sourceCanonical);
@@ -53,6 +54,7 @@ export function computeNotionHashes(input: {
     document: {
       version: input.document.version,
       blocks: input.document.blocks,
+      markdown: input.document.markdown,
       searchText: input.document.searchText,
     },
     stagedMediaDigests: [...(input.stagedMediaDigests ?? [])].sort(),
