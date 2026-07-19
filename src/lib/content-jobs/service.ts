@@ -36,6 +36,19 @@ export interface WorkerResult {
   exhaustedBudget: boolean;
 }
 
+export interface DataSourceSyncTarget {
+  pageId: string;
+  sourceId: string | null;
+  title: string;
+  lastEditedTime: string | null;
+}
+
+export interface DataSourceSyncPlan {
+  scanned: number;
+  skipped: number;
+  targets: DataSourceSyncTarget[];
+}
+
 function throwIfError(error: { message: string; code?: string } | null): void {
   if (error) throw Object.assign(new Error(error.message), { code: error.code });
 }
@@ -220,6 +233,54 @@ export class ContentJobService {
       dedupeKey: `sync_root:${input.idempotencyKey}`,
       payload: { requested_by: input.actorId },
       priority: 10,
+    });
+  }
+
+  async planDataSourceSync(): Promise<DataSourceSyncPlan> {
+    const config = getNotionConfig();
+    if (!config) throw new Error('Notion editorial integration is not configured.');
+    const pages = await this.notionClient().queryDataSource(config.dataSourceId);
+    if (!pages.length) return { scanned: 0, skipped: 0, targets: [] };
+    const existingSources: DatabaseRecord[] = [];
+    for (let index = 0; index < pages.length; index += 100) {
+      const pageIds = pages.slice(index, index + 100).map((page) => page.id);
+      const { data, error } = await this.client
+        .from('article_sources')
+        .select('id,external_id,configuration')
+        .eq('provider', 'notion')
+        .in('external_id', pageIds);
+      throwIfError(error);
+      existingSources.push(...rows(data));
+    }
+    const byPageId = new Map(existingSources.map((source) => [String(source.external_id), source]));
+    const targets = pages.flatMap<DataSourceSyncTarget>((page) => {
+      const source = byPageId.get(page.id);
+      const title = mapPageProperties(page.properties).title;
+      if (
+        source &&
+        !shouldSyncNotionPage(source.configuration, page.last_edited_time ?? null, title)
+      ) {
+        return [];
+      }
+      return [
+        {
+          pageId: page.id,
+          sourceId: stringValue(source?.id),
+          title: title || '未命名 Notion 文章',
+          lastEditedTime: page.last_edited_time ?? null,
+        },
+      ];
+    });
+    return { scanned: pages.length, skipped: pages.length - targets.length, targets };
+  }
+
+  async syncSourceNow(input: { sourceId?: string; pageId?: string }): Promise<DatabaseRecord> {
+    return this.syncSource({
+      source_id: input.sourceId ?? null,
+      payload: {
+        source_id: input.sourceId ?? null,
+        notion_page_id: input.pageId ?? null,
+      },
     });
   }
 
@@ -805,49 +866,30 @@ export class ContentJobService {
 
   private async dispatchJob(job: DatabaseRecord): Promise<void> {
     if (job.job_type === 'sync_root') return this.syncDataSource(job);
-    if (job.job_type === 'sync_source') return this.syncSource(job);
+    if (job.job_type === 'sync_source') {
+      await this.syncSource(job);
+      return;
+    }
     if (job.job_type === 'finalize_candidate')
       return this.finalizeCandidate(String(job.candidate_id), record(job.payload));
     throw new Error(`Unsupported content job type: ${String(job.job_type)}`);
   }
 
   private async syncDataSource(job: DatabaseRecord): Promise<void> {
-    const config = getNotionConfig();
-    if (!config) throw new Error('Notion editorial integration is not configured.');
     const requestedBy = stringValue(record(job.payload)?.requested_by);
     if (!requestedBy) throw new Error('Content job is missing its requesting actor.');
-    const pages = await this.notionClient().queryDataSource(config.dataSourceId);
-    if (!pages.length) return;
-    const { data: existingSources, error } = await this.client
-      .from('article_sources')
-      .select('id,external_id,configuration')
-      .eq('provider', 'notion')
-      .in(
-        'external_id',
-        pages.map((page) => page.id),
-      );
-    throwIfError(error);
-    const byPageId = new Map(
-      rows(existingSources).map((source) => [String(source.external_id), source]),
-    );
-    for (const page of pages) {
-      const source = byPageId.get(page.id);
-      const title = mapPageProperties(page.properties).title;
-      if (
-        source &&
-        !shouldSyncNotionPage(source.configuration, page.last_edited_time ?? null, title)
-      )
-        continue;
+    const plan = await this.planDataSourceSync();
+    for (const target of plan.targets) {
       await this.enqueueSourceSync({
-        pageId: page.id,
+        pageId: target.pageId,
         actorId: requestedBy,
-        idempotencyKey: `root:${String(job.id)}:${page.id}`,
+        idempotencyKey: `root:${String(job.id)}:${target.pageId}`,
         parentJobId: String(job.id),
       });
     }
   }
 
-  private async syncSource(job: DatabaseRecord): Promise<void> {
+  private async syncSource(job: DatabaseRecord): Promise<DatabaseRecord> {
     const payload = record(job.payload) || {};
     let sourceId = stringValue(payload.source_id) || stringValue(job.source_id);
     let pageId = stringValue(payload.notion_page_id);
@@ -944,6 +986,13 @@ export class ContentJobService {
       })
       .eq('id', sourceId);
     throwIfError(sourceError);
+    return {
+      sourceId,
+      pageId,
+      title: snapshot.properties.title || '未命名 Notion 文章',
+      state: snapshot.sourceState === 'archived' ? 'archived' : 'active',
+      lastEditedTime: snapshot.lastEditedTime,
+    };
   }
 
   async linkPromotedMediaToRevision(

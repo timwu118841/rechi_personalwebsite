@@ -87,16 +87,6 @@ interface PublicationJob {
   candidate_id?: string | null;
   state?: string;
   error?: string | null;
-  job_type?: string;
-  related?: {
-    total: number;
-    queued: number;
-    running: number;
-    succeeded: number;
-    failed: number;
-    cancelled: number;
-    errors: Array<{ id: string; state: string; error: string }>;
-  };
 }
 
 interface PublicationDiagnostic {
@@ -105,8 +95,26 @@ interface PublicationDiagnostic {
 }
 
 interface SyncDiagnostic {
-  kind: 'success' | 'pending' | 'failure';
+  kind: 'success' | 'failure';
   message: string;
+}
+
+interface DirectSyncTarget {
+  pageId: string;
+  sourceId: string | null;
+  title: string;
+  lastEditedTime: string | null;
+}
+
+interface DirectSyncItem extends DirectSyncTarget {
+  status: 'queued' | 'running' | 'succeeded' | 'failed';
+  error?: string;
+}
+
+interface DirectSyncProgress {
+  scanned: number;
+  skipped: number;
+  items: DirectSyncItem[];
 }
 
 type ToastKind = 'success' | 'error';
@@ -121,7 +129,7 @@ interface ToastState {
 
 const statusLabels: Record<string, string> = {
   active: '同步完成',
-  onboarding: '等待同步',
+  onboarding: '需要同步',
   archived: '已封存',
   error: '同步異常',
   draft: '草稿',
@@ -293,50 +301,20 @@ function publicationFailureMessage(value: unknown): string {
   return diagnostic ? `發布工作未完成：${diagnostic}` : '發布工作未完成，請重新整理後再試。';
 }
 
-export function syncJobDiagnostic(label: string, job: PublicationJob): SyncDiagnostic {
-  const state = diagnosticState(job.state);
-  const error = sanitizedDiagnostic(job.error);
-  if (state === 'failed' || state === 'cancelled') {
-    return {
-      kind: 'failure',
-      message: `${label}同步失敗${error ? `：${error}` : '，請重新執行同步。'}`,
-    };
-  }
-  if (state === 'queued' || state === 'running') {
-    return {
-      kind: 'pending',
-      message: error
-        ? `${label}同步尚未完成，系統將自動重試：${error}`
-        : `${label}同步已排入背景處理，請稍後重新整理同步狀態。`,
-    };
-  }
-  if (job.job_type !== 'sync_root') {
-    return { kind: 'success', message: `${label}同步完成：本次工作已成功完成。` };
-  }
-
-  const related = job.related;
-  if (!related?.total) {
-    return { kind: 'success', message: `${label}同步完成：沒有需要更新的文章。` };
-  }
-  const pending = related.queued + related.running;
-  const failed = related.failed + related.cancelled;
-  const firstError = sanitizedDiagnostic(related.errors[0]?.error);
-  if (failed > 0) {
-    return {
-      kind: 'failure',
-      message: `${label}同步部分失敗：本次文章同步 ${related.succeeded}/${related.total} 篇成功，${failed} 篇失敗${firstError ? `：${firstError}` : '。'}`,
-    };
-  }
-  if (pending > 0) {
-    return {
-      kind: 'pending',
-      message: `${label}同步仍在處理：本次文章同步 ${related.succeeded}/${related.total} 篇成功，${pending} 篇等待背景處理。`,
-    };
-  }
-  return {
-    kind: 'success',
-    message: `${label}同步完成：本次文章同步 ${related.succeeded}/${related.total} 篇成功。`,
-  };
+async function runWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  let nextIndex = 0;
+  const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const item = items[nextIndex];
+      nextIndex += 1;
+      if (item !== undefined) await worker(item);
+    }
+  });
+  await Promise.all(runners);
 }
 
 /** Keep legacy/partially migrated rows from crashing the editor render. */
@@ -1145,6 +1123,7 @@ function NotionEditorialPanel({
     null,
   );
   const [syncDiagnostic, setSyncDiagnostic] = useState<SyncDiagnostic | null>(null);
+  const [syncProgress, setSyncProgress] = useState<DirectSyncProgress | null>(null);
   const busy = busyAction !== null;
   const canPublish = Boolean(
     selected?.state === 'prepared' || selected?.state === 'ready_to_activate',
@@ -1305,21 +1284,26 @@ function NotionEditorialPanel({
     }
   };
 
-  const enqueueAndRun = async (body: Record<string, unknown>, label: string, action: string) => {
+  const directSync = async (body: Record<string, unknown>, label: string, action: string) => {
     await runAction(action, async () => {
       setSyncDiagnostic(null);
-      const { job: enqueuedJob } = await api<{ job: PublicationJob }>('/api/admin/notion/sync', {
-        method: 'POST',
-        body: JSON.stringify(body),
-      });
-      const jobId = enqueuedJob?.id;
-      if (!jobId) throw new Error('同步工作未回傳可追蹤的工作 ID。');
-      await runWorkerNow();
-      const { job } = await api<{ job: PublicationJob }>(`/api/admin/notion/jobs/${jobId}`);
-      const diagnostic = syncJobDiagnostic(label, job);
-      setSyncDiagnostic(diagnostic);
-      await refresh();
-      showToast(diagnostic.kind === 'failure' ? 'error' : 'success', diagnostic.message);
+      try {
+        await api('/api/admin/notion/sync', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+        const diagnostic = { kind: 'success' as const, message: `${label}同步完成。` };
+        setSyncDiagnostic(diagnostic);
+        await refresh();
+        showToast('success', diagnostic.message);
+      } catch (error) {
+        const reason = sanitizedDiagnostic((error as Error).message);
+        setSyncDiagnostic({
+          kind: 'failure',
+          message: `${label}同步失敗${reason ? `：${reason}` : '，請重新執行同步。'}`,
+        });
+        throw error;
+      }
     });
   };
 
@@ -1328,27 +1312,87 @@ function NotionEditorialPanel({
       showToast('error', '請貼上 Notion page ID。');
       return;
     }
-    await enqueueAndRun(
-      { pageId: pageId.trim(), idempotencyKey: operationId() },
-      'Notion 頁面',
-      'sync-page',
-    );
+    await directSync({ pageId: pageId.trim() }, 'Notion 頁面', 'sync-page');
   };
 
   const syncDataSource = async () => {
-    await enqueueAndRun(
-      { dataSource: true, idempotencyKey: operationId() },
-      'Notion 文章資料庫',
-      'sync-database',
-    );
+    await runAction('sync-database', async () => {
+      setSyncDiagnostic(null);
+      const { plan } = await api<{
+        plan: { scanned: number; skipped: number; targets: DirectSyncTarget[] };
+      }>('/api/admin/notion/sync/plan');
+      const items: DirectSyncItem[] = plan.targets.map((target) => ({
+        ...target,
+        status: 'queued',
+      }));
+      if (!items.length) {
+        setSyncProgress(null);
+        const message = `已檢查 ${plan.scanned} 篇文章，全部都是最新版本，不需要同步。`;
+        setSyncDiagnostic({ kind: 'success', message });
+        showToast('success', message);
+        return;
+      }
+      setSyncProgress({ scanned: plan.scanned, skipped: plan.skipped, items });
+
+      const results = new Map<string, { succeeded: boolean; error?: string }>();
+      await runWithConcurrency(items, 2, async (target) => {
+        setSyncProgress((current) =>
+          current
+            ? {
+                ...current,
+                items: current.items.map((item) =>
+                  item.pageId === target.pageId ? { ...item, status: 'running' } : item,
+                ),
+              }
+            : current,
+        );
+        try {
+          await api('/api/admin/notion/sync', {
+            method: 'POST',
+            body: JSON.stringify(
+              target.sourceId ? { sourceId: target.sourceId } : { pageId: target.pageId },
+            ),
+          });
+          results.set(target.pageId, { succeeded: true });
+          setSyncProgress((current) =>
+            current
+              ? {
+                  ...current,
+                  items: current.items.map((item) =>
+                    item.pageId === target.pageId ? { ...item, status: 'succeeded' } : item,
+                  ),
+                }
+              : current,
+          );
+        } catch (error) {
+          const reason = sanitizedDiagnostic((error as Error).message) || '同步失敗，請稍後再試。';
+          results.set(target.pageId, { succeeded: false, error: reason });
+          setSyncProgress((current) =>
+            current
+              ? {
+                  ...current,
+                  items: current.items.map((item) =>
+                    item.pageId === target.pageId
+                      ? { ...item, status: 'failed', error: reason }
+                      : item,
+                  ),
+                }
+              : current,
+          );
+        }
+      });
+
+      const succeeded = [...results.values()].filter((result) => result.succeeded).length;
+      const failed = results.size - succeeded;
+      const message = `已檢查 ${plan.scanned} 篇，跳過 ${plan.skipped} 篇未變更文章；同步成功 ${succeeded} 篇${failed ? `，失敗 ${failed} 篇` : ''}。`;
+      setSyncDiagnostic({ kind: failed ? 'failure' : 'success', message });
+      await refresh();
+      showToast(failed ? 'error' : 'success', message);
+    });
   };
 
   const syncSource = async (sourceId: string) => {
-    await enqueueAndRun(
-      { sourceId, idempotencyKey: operationId() },
-      'Notion 最新內容',
-      `sync-source-${sourceId}`,
-    );
+    await directSync({ sourceId }, 'Notion 最新內容', `sync-source-${sourceId}`);
   };
 
   const publish = async () => {
@@ -1524,7 +1568,7 @@ function NotionEditorialPanel({
           <div>
             <p className="admin-section-label">同步範圍</p>
             <h3>取得 Notion 最新內容</h3>
-            <p>同步文章資料庫中的所有資料列，或指定單一 Notion 頁面。</p>
+            <p>只同步新增或已修改文章；每篇獨立完成，不等待背景 Worker 或 Cron。</p>
           </div>
           <div className="button-row admin-sync-actions">
             <LoadingButton
@@ -1556,17 +1600,77 @@ function NotionEditorialPanel({
               aria-live={syncDiagnostic.kind === 'failure' ? 'assertive' : 'polite'}
             >
               <strong>
-                {syncDiagnostic.kind === 'success'
-                  ? '本次同步完成'
-                  : syncDiagnostic.kind === 'pending'
-                    ? '本次同步仍在處理'
-                    : '本次同步需要處理'}
+                {syncDiagnostic.kind === 'success' ? '本次同步完成' : '本次同步需要處理'}
               </strong>
               <p>{syncDiagnostic.message}</p>
             </div>
           )}
         </div>
       </section>
+
+      {syncProgress && (
+        <div className="admin-dialog-backdrop" role="presentation">
+          <section
+            className="admin-dialog admin-sync-progress-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sync-progress-title"
+            aria-describedby="sync-progress-description"
+          >
+            <p className="admin-kicker">逐篇直接同步</p>
+            <h2 id="sync-progress-title">Notion 文章同步進度</h2>
+            <p id="sync-progress-description">
+              已檢查 {syncProgress.scanned} 篇，跳過 {syncProgress.skipped}{' '}
+              篇未變更文章；每次最多同步 2 篇。
+            </p>
+            <progress
+              max={Math.max(syncProgress.items.length, 1)}
+              value={
+                syncProgress.items.filter((item) => ['succeeded', 'failed'].includes(item.status))
+                  .length
+              }
+              aria-label="Notion 文章同步完成進度"
+            />
+            <p className="admin-sync-progress-summary" aria-live="polite">
+              已完成{' '}
+              {
+                syncProgress.items.filter((item) => ['succeeded', 'failed'].includes(item.status))
+                  .length
+              }{' '}
+              / {syncProgress.items.length} 篇
+            </p>
+            <ul className="admin-sync-progress-list">
+              {syncProgress.items.map((item) => (
+                <li key={item.pageId}>
+                  <div>
+                    <strong>{item.title}</strong>
+                    {item.error && <p>{item.error}</p>}
+                  </div>
+                  <span className={`status status-${item.status}`}>
+                    {item.status === 'queued'
+                      ? '等待開始'
+                      : item.status === 'running'
+                        ? '同步中'
+                        : item.status === 'succeeded'
+                          ? '完成'
+                          : '失敗'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="button-row admin-dialog-actions">
+              <button
+                type="button"
+                className="secondary"
+                disabled={busyAction === 'sync-database'}
+                onClick={() => setSyncProgress(null)}
+              >
+                {busyAction === 'sync-database' ? '同步進行中' : '關閉'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       <div
         id="article-publishing"
@@ -1644,7 +1748,7 @@ function NotionEditorialPanel({
                   >
                     {source.last_error
                       ? `最近同步錯誤：${sanitizedDiagnostic(source.last_error)}`
-                      : '文章來源已建立，正文仍在等待背景同步。'}
+                      : '文章來源已建立，但正文尚未完成同步；請重新執行此文章同步。'}
                   </p>
                 )}
                 {expandedSourceId === source.id && (
