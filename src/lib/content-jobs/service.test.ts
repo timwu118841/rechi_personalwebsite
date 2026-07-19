@@ -267,14 +267,18 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
     expect(shouldSyncNotionPage(source.configuration, nextTimestamp)).toBe(true);
   });
 
-  it('persists the canonical Notion timestamp only in the final successful source update', async () => {
+  it('resyncs a title-only article after its Notion title changes', async () => {
     const priorTimestamp = '2026-07-14T00:00:00.000Z';
     const nextTimestamp = '2026-07-15T00:00:00.000Z';
     const events: Array<{ operation: string; value: Record<string, unknown> }> = [];
     const source = {
       id: 'source-id',
       article_id: null,
-      configuration: { editorial_mode: 'shadow', notion_last_edited_time: priorTimestamp },
+      configuration: {
+        editorial_mode: 'shadow',
+        notion_last_edited_time: priorTimestamp,
+        notion_page_title: '舊標題',
+      },
     };
     let revisionRequest = 0;
     const from = vi.fn((table: string) => {
@@ -353,6 +357,8 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
     ]);
     expect(events[0]?.value).not.toHaveProperty('configuration');
     expect(events[1]?.value).toMatchObject({
+      title: '文章',
+      body_markdown: '文章',
       description: '這是一段由管理者手動設定且符合長度限制的文章摘要。',
       tags: ['管理者標籤'],
     });
@@ -360,6 +366,7 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
       configuration: {
         editorial_mode: 'shadow',
         notion_last_edited_time: nextTimestamp,
+        notion_page_title: '文章',
       },
       state: 'active',
       last_error: null,

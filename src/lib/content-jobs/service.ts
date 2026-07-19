@@ -1159,7 +1159,7 @@ export class ContentJobService {
             stringValue(current.manual_summary) ||
             stringValue(current.description) ||
             MANUAL_SUMMARY_PLACEHOLDER,
-          body_markdown: bodyMarkdown,
+          body_markdown: bodyMarkdown || text.bodyMarkdown,
           body_json: null,
           body_html: null,
           tags: Array.isArray(current.tags) ? current.tags : text.tags,
