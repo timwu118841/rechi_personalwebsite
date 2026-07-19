@@ -193,6 +193,7 @@ export class ContentJobService {
     pageId?: string;
     actorId: string;
     idempotencyKey: string;
+    parentJobId?: string;
   }): Promise<DatabaseRecord | null> {
     const target = input.sourceId ?? input.pageId;
     if (!target) throw new Error('A source or page identifier is required.');
@@ -204,7 +205,9 @@ export class ContentJobService {
         source_id: input.sourceId ?? null,
         notion_page_id: input.pageId ?? null,
         requested_by: input.actorId,
+        parent_job_id: input.parentJobId ?? null,
       },
+      priority: input.parentJobId ? 20 : 10,
     });
   }
 
@@ -216,6 +219,7 @@ export class ContentJobService {
       jobType: 'sync_root',
       dedupeKey: `sync_root:${input.idempotencyKey}`,
       payload: { requested_by: input.actorId },
+      priority: 10,
     });
   }
 
@@ -610,7 +614,7 @@ export class ContentJobService {
     throwIfError(error);
     const job = record(data);
     if (!job) return null;
-    return {
+    const status: DatabaseRecord = {
       id: job.id,
       job_type: job.job_type,
       candidate_id: job.candidate_id,
@@ -621,6 +625,34 @@ export class ContentJobService {
       locked_at: job.locked_at,
       completed_at: job.completed_at,
       error: typeof job.last_error === 'string' ? job.last_error.slice(0, 500) : null,
+    };
+    if (job.job_type !== 'sync_root') return status;
+
+    const { data: children, error: childrenError } = await this.client
+      .from('content_jobs')
+      .select('id,state,last_error')
+      .eq('payload->>parent_job_id', jobId)
+      .order('created_at', { ascending: true });
+    throwIfError(childrenError);
+    const childJobs = rows(children);
+    const count = (state: string) => childJobs.filter((child) => child.state === state).length;
+    return {
+      ...status,
+      related: {
+        total: childJobs.length,
+        queued: count('queued'),
+        running: count('running'),
+        succeeded: count('succeeded'),
+        failed: count('failed'),
+        cancelled: count('cancelled'),
+        errors: childJobs
+          .filter((child) => typeof child.last_error === 'string' && child.last_error)
+          .map((child) => ({
+            id: child.id,
+            state: child.state,
+            error: String(child.last_error).slice(0, 500),
+          })),
+      },
     };
   }
 
@@ -810,6 +842,7 @@ export class ContentJobService {
         pageId: page.id,
         actorId: requestedBy,
         idempotencyKey: `root:${String(job.id)}:${page.id}`,
+        parentJobId: String(job.id),
       });
     }
   }

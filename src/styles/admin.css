@@ -539,6 +539,39 @@ button.admin-list-item[aria-pressed='true'] {
   color: var(--admin-muted);
   font-size: 0.82rem;
 }
+.admin-sync-diagnostic {
+  grid-column: 1 / -1;
+  margin-top: 0.4rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--admin-line);
+  border-left: 0.3rem solid var(--admin-accent);
+  border-radius: 0.55rem;
+  background: var(--admin-tint);
+}
+.admin-sync-diagnostic strong,
+.admin-sync-diagnostic p {
+  display: block;
+  margin: 0;
+}
+.admin-sync-diagnostic p {
+  margin-top: 0.25rem;
+  color: var(--admin-muted);
+  overflow-wrap: anywhere;
+}
+.admin-sync-diagnostic-failure {
+  border-color: #d8aaa2;
+  border-left-color: #b42318;
+}
+.admin-source-sync-detail {
+  margin: 0;
+  padding: 0.7rem 1rem 0.85rem;
+  color: var(--admin-muted);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+.admin-source-sync-error {
+  color: #b42318;
+}
 .admin-breakable-text,
 .admin-breakable-id,
 .admin-candidate-detail,
