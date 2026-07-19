@@ -84,10 +84,20 @@ export interface MediaSourceRef {
 }
 
 export interface ConvertedNotionDocument {
-  version: 1;
+  version: 1 | 2;
   blocks: NormalizedBlock[];
+  /** Logical Markdown returned by Notion. Temporary media URLs are replaced with asset refs. */
+  markdown?: string;
   searchText: string;
   mediaSourceRefs: MediaSourceRef[];
+}
+
+export interface NotionPageMarkdown {
+  object: 'page_markdown';
+  id: string;
+  markdown: string;
+  truncated: boolean;
+  unknown_block_ids: string[];
 }
 
 export type NormalizedPropertyValue =

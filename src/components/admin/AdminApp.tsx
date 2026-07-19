@@ -10,7 +10,8 @@ import {
 } from 'react';
 import type { Category, MediaAsset, SiteSettings } from '@/lib/content/types';
 import '@/styles/admin.css';
-import { renderMarkdown } from '@/lib/content/markdown';
+import { ArticlePreviewFrame } from './ArticlePreviewFrame';
+import type { ArticlePreviewData } from './article-preview-document';
 
 interface Props {
   supabaseUrl?: string;
@@ -635,6 +636,7 @@ export function Dashboard({
               api={api}
               articles={articles}
               categories={categories}
+              settings={settings}
               onReload={reload}
             />
           )}
@@ -690,11 +692,13 @@ function ArticleManagementWorkspace({
   api,
   articles,
   categories,
+  settings,
   onReload,
 }: {
   api: DashboardApi;
   articles: AdminArticle[];
   categories: Category[];
+  settings: SiteSettings | null;
   onReload: () => Promise<void>;
 }) {
   const [focusedArticleId, setFocusedArticleId] = useState<string | null>(null);
@@ -749,6 +753,7 @@ function ArticleManagementWorkspace({
         api={api}
         articles={articles}
         categories={categories}
+        settings={settings}
         focusedArticleId={focusedArticleId}
         onFocusHandled={() => setFocusedArticleId(null)}
         showToast={showToast}
@@ -1087,6 +1092,7 @@ function NotionEditorialPanel({
   api,
   articles,
   categories,
+  settings,
   focusedArticleId,
   onFocusHandled,
   showToast,
@@ -1094,6 +1100,7 @@ function NotionEditorialPanel({
   api: DashboardApi;
   articles: AdminArticle[];
   categories: Category[];
+  settings: SiteSettings | null;
   focusedArticleId: string | null;
   onFocusHandled: () => void;
   showToast: ShowToast;
@@ -1102,11 +1109,7 @@ function NotionEditorialPanel({
   const [sources, setSources] = useState<NotionSourceStatus[]>([]);
   const [candidates, setCandidates] = useState<PublicationCandidateStatus[]>([]);
   const [selected, setSelected] = useState<PublicationCandidateStatus | null>(null);
-  const [preview, setPreview] = useState<{
-    title: string;
-    description: string;
-    bodyMarkdown: string;
-  } | null>(null);
+  const [preview, setPreview] = useState<ArticlePreviewData | null>(null);
   const [slugForSource, setSlugForSource] = useState<Record<string, string>>({});
   const [summaryForSource, setSummaryForSource] = useState<Record<string, string>>({});
   const [categoryForSource, setCategoryForSource] = useState<Record<string, string>>({});
@@ -1438,7 +1441,7 @@ function NotionEditorialPanel({
     if (!selected) return;
     await runAction('preview', async () => {
       const result = await api<{
-        preview: { title: string; description: string; bodyMarkdown: string };
+        preview: ArticlePreviewData;
       }>(`/api/admin/notion/candidates/${selected.id}/preview`);
       setPreview(result.preview);
       showToast('success', '候選版本預覽已載入。');
@@ -1997,8 +2000,11 @@ function NotionEditorialPanel({
                 aria-modal="true"
                 aria-labelledby="admin-preview-title"
               >
-                <div className="admin-title-row">
-                  <p className="admin-kicker">文章預覽</p>
+                <div className="admin-preview-toolbar">
+                  <div>
+                    <p className="admin-kicker">前台文章預覽</p>
+                    <h2 id="admin-preview-title">{preview.title}</h2>
+                  </div>
                   <button
                     type="button"
                     className="secondary admin-dialog-close"
@@ -2008,14 +2014,13 @@ function NotionEditorialPanel({
                     關閉
                   </button>
                 </div>
-                <article className="admin-preview-content">
-                  <h2 id="admin-preview-title">{preview.title}</h2>
-                  <p className="admin-preview-description">{preview.description}</p>
-                  <div
-                    className="admin-preview-body"
-                    dangerouslySetInnerHTML={{ __html: renderMarkdown(preview.bodyMarkdown) }}
-                  />
-                </article>
+                <ArticlePreviewFrame
+                  preview={preview}
+                  settings={settings}
+                  categoryName={
+                    categories.find((category) => category.slug === preview.categorySlug)?.name
+                  }
+                />
               </section>
             </div>
           )}
