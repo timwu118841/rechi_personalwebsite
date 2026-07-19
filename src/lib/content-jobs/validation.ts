@@ -59,27 +59,19 @@ export function parseLimit(value: string | null, fallback = 25, maximum = 100): 
   return limit;
 }
 
-export function parseEnqueueRequest(value: unknown): {
+export function parseDirectSyncRequest(value: unknown): {
   sourceId?: string;
   pageId?: string;
-  dataSource?: true;
-  idempotencyKey: string;
 } {
   const input = record(value);
   const sourceId =
     input.sourceId === undefined ? undefined : requiredString(input.sourceId, 'sourceId', 128);
   const pageId =
     input.pageId === undefined ? undefined : requiredString(input.pageId, 'pageId', 128);
-  const dataSource = input.dataSource === true ? true : undefined;
-  if ((sourceId ? 1 : 0) + (pageId ? 1 : 0) + (dataSource ? 1 : 0) !== 1) {
-    throw new RequestValidationError('Exactly one of sourceId, pageId, or dataSource is required.');
+  if ((sourceId ? 1 : 0) + (pageId ? 1 : 0) !== 1) {
+    throw new RequestValidationError('Exactly one of sourceId or pageId is required.');
   }
-  return {
-    sourceId,
-    pageId,
-    dataSource,
-    idempotencyKey: requiredString(input.idempotencyKey, 'idempotencyKey', 128),
-  };
+  return { sourceId, pageId };
 }
 
 export function parseBindRequest(value: unknown): { articleId: string } {

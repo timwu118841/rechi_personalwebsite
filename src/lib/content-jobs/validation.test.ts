@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseAttestationRequest,
   parseArticleClassificationRequest,
-  parseEnqueueRequest,
+  parseDirectSyncRequest,
   parseFeaturedArticleRequest,
   parseLimit,
   parsePrepareRequest,
@@ -13,14 +13,15 @@ import {
 } from './validation';
 
 describe('content job request validation', () => {
-  it('accepts data-source sync as an exclusive sync target', () => {
-    expect(parseEnqueueRequest({ dataSource: true, idempotencyKey: 'database-1' })).toEqual({
-      dataSource: true,
-      idempotencyKey: 'database-1',
+  it('accepts exactly one direct article sync target', () => {
+    expect(parseDirectSyncRequest({ pageId: 'page-1' })).toEqual({
+      pageId: 'page-1',
+      sourceId: undefined,
     });
-    expect(() =>
-      parseEnqueueRequest({ dataSource: true, pageId: 'page-1', idempotencyKey: 'database-1' }),
-    ).toThrow(/Exactly one/);
+    expect(() => parseDirectSyncRequest({ dataSource: true })).toThrow(/Exactly one/);
+    expect(() => parseDirectSyncRequest({ sourceId: 'source-1', pageId: 'page-1' })).toThrow(
+      /Exactly one/,
+    );
   });
 
   it('bounds status list limits', () => {

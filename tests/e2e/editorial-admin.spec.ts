@@ -106,6 +106,7 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
       const url = new URL(request.url());
       requests.push(`${request.method()} ${url.pathname}${url.search}`);
       let body: unknown;
+      let status = 200;
       if (url.pathname === '/api/admin/articles') body = { articles };
       else if (url.pathname === '/api/admin/settings')
         body = { settings: { shortTitle: '測試站' } };
@@ -191,63 +192,48 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
       } else if (url.pathname === '/api/admin/notion/worker') {
         body = {
           accepted: true,
-          result: testInfo.title.includes('shared worker failures')
-            ? { claimed: 5, completed: 2, failed: 3, exhaustedBudget: false }
-            : { claimed: 1, completed: 1, failed: 0, exhaustedBudget: false },
+          result: { claimed: 1, completed: 1, failed: 0, exhaustedBudget: false },
+        };
+      } else if (url.pathname === '/api/admin/notion/sync/plan') {
+        body = {
+          plan: testInfo.title.includes('no changed articles')
+            ? { scanned: 3, skipped: 3, targets: [] }
+            : {
+                scanned: 4,
+                skipped: 2,
+                targets: [
+                  {
+                    pageId: 'changed-page-1',
+                    sourceId: 'changed-source-1',
+                    title: '已更新文章一',
+                    lastEditedTime: '2026-07-19T01:00:00.000Z',
+                  },
+                  {
+                    pageId: 'changed-page-2',
+                    sourceId: null,
+                    title: '新增文章二',
+                    lastEditedTime: '2026-07-19T02:00:00.000Z',
+                  },
+                ],
+              },
         };
       } else if (url.pathname === '/api/admin/notion/sync' && request.method() === 'POST') {
         const input = request.postDataJSON();
-        requests.push(
-          `SYNC ${JSON.stringify({ sourceId: input.sourceId, dataSource: input.dataSource })}`,
-        );
-        body = { accepted: true, job: { id: 'sync-job-1', state: 'queued' } };
-      } else if (url.pathname === '/api/admin/notion/jobs/sync-job-1') {
-        body = {
-          job: testInfo.title.includes('shared worker failures')
-            ? {
-                id: 'sync-job-1',
-                job_type: 'sync_root',
-                state: 'succeeded',
-                error: null,
-                related: {
-                  total: 2,
-                  queued: 0,
-                  running: 0,
-                  succeeded: 2,
-                  failed: 0,
-                  cancelled: 0,
-                  errors: [],
-                },
-              }
-            : testInfo.title.includes('tracked article failure')
-              ? {
-                  id: 'sync-job-1',
-                  job_type: 'sync_root',
-                  state: 'succeeded',
-                  error: null,
-                  related: {
-                    total: 2,
-                    queued: 0,
-                    running: 0,
-                    succeeded: 1,
-                    failed: 1,
-                    cancelled: 0,
-                    errors: [
-                      {
-                        id: 'child-failed',
-                        state: 'failed',
-                        error: 'Notion image download failed with 403.',
-                      },
-                    ],
-                  },
-                }
-              : {
-                  id: 'sync-job-1',
-                  job_type: 'sync_source',
-                  state: 'succeeded',
-                  error: null,
-                },
-        };
+        requests.push(`SYNC ${JSON.stringify({ sourceId: input.sourceId, pageId: input.pageId })}`);
+        if (testInfo.title.includes('per-article failure') && input.pageId === 'changed-page-2') {
+          status = 502;
+          body = { message: 'Notion image download failed with 403.' };
+        } else {
+          body = {
+            accepted: true,
+            result: {
+              sourceId: input.sourceId || 'new-source-2',
+              pageId: input.pageId || 'changed-page-1',
+              title: input.pageId === 'changed-page-2' ? '新增文章二' : '已更新文章一',
+              state: 'active',
+            },
+          };
+        }
       } else if (url.pathname === `/api/admin/notion/jobs/${jobId}`) {
         body = {
           job: {
@@ -295,7 +281,7 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
         body = { ok: true };
       }
       await route.fulfill({
-        status: 200,
+        status,
         contentType: 'application/json',
         body: JSON.stringify(body),
       });
@@ -318,8 +304,12 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     const syncDatabaseButton = syncSection.getByRole('button', { name: '同步文章資料庫' });
     await expect(syncDatabaseButton).toBeVisible();
     await syncDatabaseButton.click();
-    await expect(page.getByRole('status')).toContainText('Notion 文章資料庫同步完成');
-    expect(requestLogs.get(page)).toContain('SYNC {"dataSource":true}');
+    await expect(page.getByRole('status')).toContainText('同步成功 2 篇');
+    expect(requestLogs.get(page)).toContain('GET /api/admin/notion/sync/plan');
+    await page
+      .getByRole('dialog', { name: 'Notion 文章同步進度' })
+      .getByRole('button', { name: '關閉' })
+      .click();
     await expect(syncSection.getByLabel('文章摘要')).toHaveCount(0);
     await expect(syncSection.getByLabel('手動設定網址代稱')).toHaveCount(0);
 
@@ -439,44 +429,68 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     await expect(diagnostic).not.toContainText('等待發布結果逾時');
   });
 
-  test('shows accessible feedback for a deterministic sync and worker transition', async ({
-    page,
-  }) => {
-    await page.getByLabel('Notion page ID').fill('page-fixture-1');
+  test('synchronizes one page directly without invoking the worker', async ({ page }) => {
+    const pageIdInput = page.getByLabel('Notion page ID');
+    await pageIdInput.fill('page-fixture-1');
+    await expect(pageIdInput).toHaveValue('page-fixture-1');
+    await pageIdInput.press('Tab');
     await page.getByRole('button', { name: '立即同步', exact: true }).click();
     const diagnostic = page.locator('.admin-sync-diagnostic');
     await expect(diagnostic).toContainText('Notion 頁面同步完成');
-    await expect(diagnostic).toContainText('本次工作已成功完成');
+    expect(requestLogs.get(page)).toContain('SYNC {"pageId":"page-fixture-1"}');
+    expect(requestLogs.get(page)).not.toContain('POST /api/admin/notion/worker');
   });
 
-  test('attributes sync feedback to the requested job instead of shared worker failures', async ({
+  test('synchronizes changed database articles independently with visible progress', async ({
     page,
   }) => {
     await page.getByRole('button', { name: '同步文章資料庫' }).click();
 
-    const status = page.locator('.admin-sync-diagnostic');
-    await expect(status).toContainText('Notion 文章資料庫同步完成');
-    await expect(status).toContainText('本次文章同步 2/2 篇成功');
-    await expect(status).not.toContainText('失敗 3 個');
-    expect(requestLogs.get(page)).toContain('GET /api/admin/notion/jobs/sync-job-1');
+    const progress = page.getByRole('dialog', { name: 'Notion 文章同步進度' });
+    await expect(progress).toBeVisible();
+    await expect(progress).toContainText('已完成 2 / 2 篇');
+    await expect(progress.getByText('完成', { exact: true })).toHaveCount(2);
+    await expect(page.locator('.admin-sync-diagnostic')).toContainText(
+      '已檢查 4 篇，跳過 2 篇未變更文章；同步成功 2 篇',
+    );
+    const requests = requestLogs.get(page) || [];
+    expect(requests).toContain('GET /api/admin/notion/sync/plan');
+    expect(requests).toContain('SYNC {"sourceId":"changed-source-1"}');
+    expect(requests).toContain('SYNC {"pageId":"changed-page-2"}');
+    expect(requests).not.toContain('POST /api/admin/notion/worker');
   });
 
-  test('shows the tracked article failure reason instead of an aggregate worker count', async ({
+  test('keeps per-article failure details while completing the remaining articles', async ({
     page,
   }) => {
     await page.getByRole('button', { name: '同步文章資料庫' }).click();
 
+    const progress = page.getByRole('dialog', { name: 'Notion 文章同步進度' });
+    await expect(progress).toContainText('已完成 2 / 2 篇');
+    await expect(progress).toContainText('Notion image download failed with 403');
+    await expect(progress.getByText('完成', { exact: true })).toHaveCount(1);
+    await expect(progress.getByText('失敗', { exact: true })).toHaveCount(1);
     const diagnostic = page.locator('.admin-sync-diagnostic[role="alert"]');
-    await expect(diagnostic).toContainText('本次文章同步 1/2 篇成功，1 篇失敗');
-    await expect(diagnostic).toContainText('Notion image download failed with 403');
+    await expect(diagnostic).toContainText('同步成功 1 篇，失敗 1 篇');
   });
 
-  test('explains that an onboarding source is waiting for content synchronization', async ({
+  test('finishes immediately when the database has no changed articles', async ({ page }) => {
+    await page.getByRole('button', { name: '同步文章資料庫' }).click();
+
+    await expect(page.locator('.admin-sync-diagnostic')).toContainText(
+      '已檢查 3 篇文章，全部都是最新版本，不需要同步',
+    );
+    expect(
+      requestLogs.get(page)?.filter((entry) => entry === 'POST /api/admin/notion/sync'),
+    ).toEqual([]);
+  });
+
+  test('explains that an onboarding source needs a direct content synchronization', async ({
     page,
   }) => {
     const sourceRow = page.locator('.admin-source-row');
-    await expect(sourceRow.getByLabel('狀態：等待同步')).toBeVisible();
-    await expect(sourceRow).toContainText('文章來源已建立，正文仍在等待背景同步');
+    await expect(sourceRow.getByLabel('狀態：需要同步')).toBeVisible();
+    await expect(sourceRow).toContainText('正文尚未完成同步；請重新執行此文章同步');
     await expect(sourceRow).not.toContainText('設定中');
   });
 

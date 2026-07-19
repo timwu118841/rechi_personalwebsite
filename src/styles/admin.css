@@ -602,6 +602,7 @@ button.admin-list-item[aria-pressed='true'] {
   content: '';
 }
 .status-active,
+.status-succeeded,
 .status-ready_to_activate,
 .status-published {
   color: #047857;
@@ -609,6 +610,7 @@ button.admin-list-item[aria-pressed='true'] {
 }
 .status-prepared,
 .status-queued,
+.status-running,
 .status-processing,
 .status-draft {
   color: #a16207;
@@ -1297,6 +1299,53 @@ legend {
 }
 .admin-dialog-actions {
   margin-top: 1.5rem;
+}
+.admin-sync-progress-dialog {
+  width: min(100%, 46rem);
+}
+.admin-sync-progress-dialog progress {
+  width: 100%;
+  height: 0.7rem;
+  margin-top: 1rem;
+  accent-color: var(--admin-accent);
+}
+.admin-sync-progress-summary {
+  margin-top: 0.35rem !important;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.admin-sync-progress-list {
+  display: grid;
+  max-height: min(45vh, 24rem);
+  margin: 1rem 0 0;
+  padding: 0;
+  overflow-y: auto;
+  border-block: 1px solid var(--admin-line);
+  list-style: none;
+}
+.admin-sync-progress-list li {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem 0.15rem;
+  border-bottom: 1px solid var(--admin-line);
+}
+.admin-sync-progress-list li:last-child {
+  border-bottom: 0;
+}
+.admin-sync-progress-list li > div {
+  min-width: 0;
+}
+.admin-sync-progress-list strong,
+.admin-sync-progress-list p {
+  overflow-wrap: anywhere;
+}
+.admin-sync-progress-list p {
+  margin-top: 0.2rem !important;
+  color: #b42318 !important;
+  font-size: 0.78rem;
 }
 .admin-upload-progress {
   display: inline-flex;
