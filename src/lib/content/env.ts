@@ -60,6 +60,19 @@ export function getNotionConfig() {
     : null;
 }
 
+/**
+ * Names the environment variables that keep `getNotionConfig()` from returning a
+ * config, so a failed sync can say which value is missing instead of failing
+ * with an opaque server error. Never returns values, only variable names.
+ */
+export function describeNotionConfigGap(): string[] {
+  const missing: string[] = [];
+  if (!isNotionEditorialEnabled()) missing.push('NOTION_EDITORIAL_ENABLED=true');
+  if (!read('NOTION_TOKEN')) missing.push('NOTION_TOKEN');
+  if (!read('NOTION_DATA_SOURCE_ID')) missing.push('NOTION_DATA_SOURCE_ID');
+  return missing;
+}
+
 export function getCronSecret(): string {
   return read('CRON_SECRET');
 }

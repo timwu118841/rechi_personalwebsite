@@ -1,8 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { getNotionConfig, getSupabaseEnvironment } from '@/lib/content/env';
+import {
+  describeNotionConfigGap,
+  getNotionConfig,
+  getSupabaseEnvironment,
+} from '@/lib/content/env';
 import {
   NotionClient,
+  NotionConfigurationError,
   downloadNotionImage,
   mapPageProperties,
   renderNotionMarkdown,
@@ -238,7 +243,7 @@ export class ContentJobService {
 
   async planDataSourceSync(): Promise<DataSourceSyncPlan> {
     const config = getNotionConfig();
-    if (!config) throw new Error('Notion editorial integration is not configured.');
+    if (!config) throw new NotionConfigurationError(describeNotionConfigGap());
     const pages = await this.notionClient().queryDataSource(config.dataSourceId);
     if (!pages.length) return { scanned: 0, skipped: 0, targets: [] };
     const existingSources: DatabaseRecord[] = [];
@@ -860,7 +865,7 @@ export class ContentJobService {
 
   private notionClient(): NotionClient {
     const config = getNotionConfig();
-    if (!config) throw new Error('Notion editorial integration is not configured.');
+    if (!config) throw new NotionConfigurationError(describeNotionConfigGap());
     return new NotionClient({ token: config.token });
   }
 

@@ -9,6 +9,17 @@ export class NotionApiError extends Error {
   }
 }
 
+export class NotionConfigurationError extends Error {
+  constructor(readonly missing: string[]) {
+    super(
+      missing.length
+        ? `Notion 整合尚未設定，缺少：${missing.join('、')}。`
+        : 'Notion 整合尚未設定。',
+    );
+    this.name = 'NotionConfigurationError';
+  }
+}
+
 export class NotionTimeoutError extends Error {
   constructor(readonly timeoutMs: number) {
     super(`Notion request timed out after ${timeoutMs}ms`);
