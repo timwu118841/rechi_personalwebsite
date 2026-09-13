@@ -101,6 +101,34 @@ export function parseFeaturedArticleRequest(value: unknown): { featured: boolean
   return { featured: input.featured };
 }
 
+export function parseIgnoredFlag(value: unknown): boolean {
+  const input = record(value);
+  if (typeof input.ignored !== 'boolean') {
+    throw new RequestValidationError('ignored must be a boolean.');
+  }
+  return input.ignored;
+}
+
+export function parseSourceRetirementRequest(value: unknown): {
+  sourceIds: string[];
+  ignored: boolean;
+} {
+  const input = record(value);
+  const ignored = parseIgnoredFlag(input);
+  if (!Array.isArray(input.sourceIds)) {
+    throw new RequestValidationError('sourceIds must be an array.');
+  }
+  if (input.sourceIds.length === 0 || input.sourceIds.length > 200) {
+    throw new RequestValidationError('sourceIds must contain between 1 and 200 items.');
+  }
+  const sourceIds: string[] = [];
+  for (const entry of input.sourceIds) {
+    const id = requiredString(entry, 'sourceIds', 128).trim();
+    if (!sourceIds.includes(id)) sourceIds.push(id);
+  }
+  return { sourceIds, ignored };
+}
+
 function parseClassification(value: unknown): { category: string; tags: string[] } {
   const input = record(value);
   const category = requiredString(input.category, 'category', 100).trim();

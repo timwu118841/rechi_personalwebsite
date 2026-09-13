@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { HttpRequestError } from '@/lib/admin/http';
 import { getNotionConfig, getSupabaseEnvironment } from '@/lib/content/env';
 import {
   NotionClient,
@@ -10,6 +11,7 @@ import {
   validatedMediaUrl,
   validatedPublicMediaUrl,
   type MediaSourceRef,
+  type NotionPage,
   type NotionSourceSnapshot,
 } from '@/lib/notion';
 import { computeNotionHashes } from '@/lib/notion/hash';
@@ -109,6 +111,37 @@ export function shouldSyncNotionPage(
   }
   const current = currentConfiguration?.[NOTION_LAST_EDITED_TIME_KEY];
   return !validNotionTimestamp(current) || current !== lastEditedTime;
+}
+
+/**
+ * Chooses which data source pages a discovery run should enqueue, given the sources
+ * already stored. A retired source never becomes a target: without this the next
+ * discovery would silently revive it.
+ */
+export function selectDataSourceSyncTargets(
+  pages: NotionPage[],
+  sources: DatabaseRecord[],
+): DataSourceSyncTarget[] {
+  const byPageId = new Map(sources.map((source) => [String(source.external_id), source]));
+  return pages.flatMap<DataSourceSyncTarget>((page) => {
+    const source = byPageId.get(page.id);
+    const title = mapPageProperties(page.properties).title;
+    if (source?.ignored_at) return [];
+    if (
+      source &&
+      !shouldSyncNotionPage(source.configuration, page.last_edited_time ?? null, title)
+    ) {
+      return [];
+    }
+    return [
+      {
+        pageId: page.id,
+        sourceId: stringValue(source?.id),
+        title: title || '未命名 Notion 文章',
+        lastEditedTime: page.last_edited_time ?? null,
+      },
+    ];
+  });
 }
 
 export interface PromotedMedia {
@@ -246,31 +279,13 @@ export class ContentJobService {
       const pageIds = pages.slice(index, index + 100).map((page) => page.id);
       const { data, error } = await this.client
         .from('article_sources')
-        .select('id,external_id,configuration')
+        .select('id,external_id,configuration,ignored_at')
         .eq('provider', 'notion')
         .in('external_id', pageIds);
       throwIfError(error);
       existingSources.push(...rows(data));
     }
-    const byPageId = new Map(existingSources.map((source) => [String(source.external_id), source]));
-    const targets = pages.flatMap<DataSourceSyncTarget>((page) => {
-      const source = byPageId.get(page.id);
-      const title = mapPageProperties(page.properties).title;
-      if (
-        source &&
-        !shouldSyncNotionPage(source.configuration, page.last_edited_time ?? null, title)
-      ) {
-        return [];
-      }
-      return [
-        {
-          pageId: page.id,
-          sourceId: stringValue(source?.id),
-          title: title || '未命名 Notion 文章',
-          lastEditedTime: page.last_edited_time ?? null,
-        },
-      ];
-    });
+    const targets = selectDataSourceSyncTargets(pages, existingSources);
     return { scanned: pages.length, skipped: pages.length - targets.length, targets };
   }
 
@@ -434,6 +449,33 @@ export class ContentJobService {
     return record(data);
   }
 
+  /**
+   * Retire or restore synced sources. Retiring stops synchronization and candidate
+   * creation for the source while keeping its revisions, working copy, and any
+   * published article intact.
+   */
+  async setSourcesIgnored(
+    sourceIds: string[],
+    ignored: boolean,
+    actorId: string,
+  ): Promise<DatabaseRecord[]> {
+    const { data, error } = await this.client.rpc('set_article_sources_ignored', {
+      p_source_ids: sourceIds,
+      p_ignored: ignored,
+      p_actor_id: actorId,
+    });
+    if (error?.code === 'PGRST202') {
+      throw Object.assign(new Error('來源忽略功能尚未套用，請執行最新 Supabase migration。'), {
+        code: error.code,
+      });
+    }
+    if (error?.code === 'P0002') {
+      throw new HttpRequestError(404, '找不到指定的文章來源，請重新載入後再試。');
+    }
+    throwIfError(error);
+    return rows(data);
+  }
+
   async updateSourceSummary(
     sourceId: string,
     expectedWorkingCopyVersion: number,
@@ -552,6 +594,12 @@ export class ContentJobService {
     expectedPublicationVersion?: number,
     requestedSlug?: string,
   ): Promise<unknown> {
+    // Checked before any write so the slug below is never mutated for a source the
+    // database would refuse to publish anyway.
+    const source = await this.getSourceStatus(sourceId);
+    if (source?.ignored_at) {
+      throw new HttpRequestError(409, '這個來源已被忽略，無法建立發布候選；請先復原來源。');
+    }
     const { data: workingCopy, error: workingError } = await this.client
       .from('article_working_copies')
       .select('id,version,article_id,slug,description,manual_summary')
@@ -893,14 +941,14 @@ export class ContentJobService {
     const payload = record(job.payload) || {};
     let sourceId = stringValue(payload.source_id) || stringValue(job.source_id);
     let pageId = stringValue(payload.notion_page_id);
-    if (sourceId && !pageId) {
-      const source = await this.getSourceStatus(sourceId);
-      pageId = stringValue(source?.external_id);
+    let source: DatabaseRecord | null = sourceId ? await this.getSourceStatus(sourceId) : null;
+    if (source?.ignored_at) {
+      throw new HttpRequestError(409, '這個來源已被忽略，同步已停止；請先復原來源再同步。');
     }
+    if (sourceId && !pageId) pageId = stringValue(source?.external_id);
     if (!pageId) throw new Error('A Notion page id is required for source sync.');
 
     const snapshot = await this.notionClient().readSourceSnapshot(pageId);
-    let source: DatabaseRecord | null = sourceId ? await this.getSourceStatus(sourceId) : null;
     if (!sourceId) {
       const { data, error } = await this.client
         .from('article_sources')

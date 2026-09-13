@@ -1,12 +1,25 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
+import type { NotionPage } from '@/lib/notion';
 import {
   buildNotionRevisionInsert,
   ContentJobService,
   mergeNotionSourceConfiguration,
   notionWorkingCopyText,
+  selectDataSourceSyncTargets,
   shouldSyncNotionPage,
 } from './service';
+
+function notionPage(id: string, lastEditedTime: string, title: string): NotionPage {
+  return {
+    object: 'page',
+    id,
+    last_edited_time: lastEditedTime,
+    properties: {
+      Name: { id: 'title', type: 'title', title: [{ type: 'text', plain_text: title }] },
+    },
+  } as unknown as NotionPage;
+}
 
 function clientWith(overrides: {
   from?: (table: string) => unknown;
@@ -610,6 +623,18 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
       error: null,
     }));
     const from = vi.fn((table: string) => {
+      if (table === 'article_sources') {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: { id: 'source-id', ignored_at: null },
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
       if (table === 'articles') throw new Error('articles must not be read for an unbound copy');
       if (table === 'article_source_revisions') {
         return {
@@ -733,6 +758,18 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
 
   it('refuses candidate preparation until an Admin summary has been saved', async () => {
     const from = vi.fn((table: string) => {
+      if (table === 'article_sources') {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: { id: 'source-id', ignored_at: null },
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
       expect(table).toBe('article_working_copies');
       return {
         select: () => ({
@@ -756,6 +793,18 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
     const rpc = vi.fn(async () => ({ data: [{ id: 'candidate-id' }], error: null }));
     const updates: unknown[] = [];
     const from = vi.fn((table: string) => {
+      if (table === 'article_sources') {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: { id: 'source-id', ignored_at: null },
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
       if (table === 'article_working_copies') {
         return {
           select: () => ({
@@ -813,6 +862,18 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
       error: null,
     }));
     const from = vi.fn((table: string) => {
+      if (table === 'article_sources') {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: { id: 'source-id', ignored_at: null },
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
       if (table === 'article_working_copies') {
         return {
           select: () => ({
@@ -1139,5 +1200,101 @@ describe('ContentJobService idempotency and unbound-source behavior', () => {
       { code: '409' },
     );
     expect(rpc).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Retired synced sources', () => {
+  it('retires and restores sources through the database RPC', async () => {
+    const rpc = vi.fn(async () => ({
+      data: [{ id: 'source-1', ignored_at: '2026-09-13T00:00:00.000Z' }],
+      error: null,
+    }));
+    const service = new ContentJobService(clientWith({ rpc }));
+
+    await expect(service.setSourcesIgnored(['source-1'], true, 'admin-id')).resolves.toEqual([
+      { id: 'source-1', ignored_at: '2026-09-13T00:00:00.000Z' },
+    ]);
+    expect(rpc).toHaveBeenCalledWith('set_article_sources_ignored', {
+      p_source_ids: ['source-1'],
+      p_ignored: true,
+      p_actor_id: 'admin-id',
+    });
+  });
+
+  it('explains when the retirement migration is missing from PostgREST', async () => {
+    const rpc = vi.fn(async () => ({
+      data: null,
+      error: { code: 'PGRST202', message: 'function missing from schema cache' },
+    }));
+    const service = new ContentJobService(clientWith({ rpc }));
+
+    await expect(service.setSourcesIgnored(['source-1'], true, 'admin-id')).rejects.toThrow(
+      '尚未套用',
+    );
+  });
+
+  it('reports an unknown source id as not found instead of a server error', async () => {
+    const rpc = vi.fn(async () => ({
+      data: null,
+      error: { code: 'P0002', message: 'source not found' },
+    }));
+    const service = new ContentJobService(clientWith({ rpc }));
+
+    await expect(service.setSourcesIgnored(['missing'], true, 'admin-id')).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+
+  it('keeps a retired source out of the discovery plan even when Notion changed it', () => {
+    const pages = [
+      notionPage('page-1', '2026-09-01T00:00:00.000Z', '已忽略文章'),
+      notionPage('page-2', '2026-09-01T00:00:00.000Z', '新文章'),
+    ];
+    const staleConfiguration = { notion_last_edited_time: '2026-01-01T00:00:00.000Z' };
+    const active = { id: 'source-1', external_id: 'page-1', configuration: staleConfiguration };
+
+    expect(selectDataSourceSyncTargets(pages, [active])).toEqual([
+      {
+        pageId: 'page-1',
+        sourceId: 'source-1',
+        title: '已忽略文章',
+        lastEditedTime: '2026-09-01T00:00:00.000Z',
+      },
+      {
+        pageId: 'page-2',
+        sourceId: null,
+        title: '新文章',
+        lastEditedTime: '2026-09-01T00:00:00.000Z',
+      },
+    ]);
+
+    expect(
+      selectDataSourceSyncTargets(pages, [{ ...active, ignored_at: '2026-09-13T00:00:00.000Z' }]),
+    ).toEqual([
+      {
+        pageId: 'page-2',
+        sourceId: null,
+        title: '新文章',
+        lastEditedTime: '2026-09-01T00:00:00.000Z',
+      },
+    ]);
+  });
+
+  it('refuses to synchronize a retired source', async () => {
+    const from = vi.fn(() => ({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: async () => ({
+            data: { id: 'source-1', external_id: 'page-1', ignored_at: '2026-09-13T00:00:00.000Z' },
+            error: null,
+          }),
+        }),
+      }),
+    }));
+    const service = new ContentJobService(clientWith({ from }));
+
+    await expect(service.syncSourceNow({ sourceId: 'source-1' })).rejects.toMatchObject({
+      status: 409,
+    });
   });
 });

@@ -62,6 +62,7 @@ interface NotionSourceStatus {
   title?: string | null;
   page_title?: string | null;
   last_error?: string | null;
+  ignored_at?: string | null;
 }
 
 interface PublicationCandidateStatus {
@@ -132,6 +133,7 @@ const statusLabels: Record<string, string> = {
   active: '同步完成',
   onboarding: '需要同步',
   archived: '已封存',
+  ignored: '已忽略',
   error: '同步異常',
   draft: '草稿',
   prepared: '待發布',
@@ -1116,6 +1118,8 @@ function NotionEditorialPanel({
   const [tagsForSource, setTagsForSource] = useState<Record<string, string>>({});
   const [articleForSource, setArticleForSource] = useState<Record<string, string>>({});
   const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
+  const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
+  const [showIgnoredSources, setShowIgnoredSources] = useState(false);
   const [republishSourceId, setRepublishSourceId] = useState<string | null>(null);
   const [sourcesLoaded, setSourcesLoaded] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -1141,6 +1145,17 @@ function NotionEditorialPanel({
     () => new Map(articles.map((article) => [article.id, article])),
     [articles],
   );
+  const ignoredSources = useMemo(
+    () => sources.filter((source) => Boolean(source.ignored_at)),
+    [sources],
+  );
+  const visibleSources = useMemo(
+    () => (showIgnoredSources ? sources : sources.filter((source) => !source.ignored_at)),
+    [showIgnoredSources, sources],
+  );
+  const allVisibleSourcesSelected =
+    visibleSources.length > 0 &&
+    visibleSources.every((source) => selectedSourceIds.includes(source.id));
 
   const refresh = async (): Promise<void> => {
     const [sourceData, candidateData] = await Promise.all([
@@ -1464,6 +1479,40 @@ function NotionEditorialPanel({
     });
   };
 
+  const toggleSourceSelection = (sourceId: string) => {
+    setSelectedSourceIds((current) =>
+      current.includes(sourceId) ? current.filter((id) => id !== sourceId) : [...current, sourceId],
+    );
+  };
+
+  const toggleAllVisibleSources = () => {
+    setSelectedSourceIds(
+      allVisibleSourcesSelected ? [] : visibleSources.map((source) => source.id),
+    );
+  };
+
+  const setSourcesIgnored = async (sourceIds: string[], ignored: boolean) => {
+    if (sourceIds.length === 0) return;
+    const actionKey =
+      sourceIds.length === 1
+        ? `${ignored ? 'retire' : 'restore'}-source-${sourceIds[0]}`
+        : `${ignored ? 'retire' : 'restore'}-sources`;
+    await runAction(actionKey, async () => {
+      await api('/api/admin/notion/sources', {
+        method: 'POST',
+        body: JSON.stringify({ sourceIds, ignored }),
+      });
+      setSelectedSourceIds([]);
+      await refresh();
+      showToast(
+        'success',
+        ignored
+          ? `已忽略 ${sourceIds.length} 個來源：停止同步與發布候選，已發布文章不受影響。`
+          : `已復原 ${sourceIds.length} 個來源，可重新同步。`,
+      );
+    });
+  };
+
   const saveSummary = async (source: NotionSourceStatus) => {
     const summary = (summaryForSource[source.id] || '').trim().replace(/\s+/g, ' ');
     if (summary.length < 20 || summary.length > 180) {
@@ -1705,15 +1754,63 @@ function NotionEditorialPanel({
               <p className="admin-section-label">已連接內容</p>
               <h2>資料庫文章來源</h2>
             </div>
-            <span className="admin-count">{sources.length}</span>
+            <span className="admin-count">{visibleSources.length}</span>
           </div>
           <p className="admin-source-list-description">
-            顯示 Notion 文章資料庫已同步的全部資料列，包括已發布與已下架內容。
+            顯示 Notion
+            文章資料庫已同步的全部資料列，包括已發布與已下架內容。忽略來源會停止同步並取消未上線的發布候選，但不會下架已發布文章。
           </p>
+          {ignoredSources.length > 0 && (
+            <button
+              type="button"
+              className="secondary admin-source-ignored-toggle"
+              aria-pressed={showIgnoredSources}
+              onClick={() => setShowIgnoredSources((current) => !current)}
+            >
+              {showIgnoredSources
+                ? `隱藏已忽略來源（${ignoredSources.length}）`
+                : `顯示已忽略來源（${ignoredSources.length}）`}
+            </button>
+          )}
+          {visibleSources.length > 0 && (
+            <div className="admin-source-bulk">
+              <label className="admin-source-bulk-select">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSourcesSelected}
+                  onChange={toggleAllVisibleSources}
+                />
+                已選 {selectedSourceIds.length} 筆
+              </label>
+              <LoadingButton
+                className="secondary"
+                disabled={busy || selectedSourceIds.length === 0}
+                loading={busyAction === 'retire-sources'}
+                onClick={() => void setSourcesIgnored(selectedSourceIds, true)}
+              >
+                忽略選取來源
+              </LoadingButton>
+              <LoadingButton
+                className="secondary"
+                disabled={busy || selectedSourceIds.length === 0}
+                loading={busyAction === 'restore-sources'}
+                onClick={() => void setSourcesIgnored(selectedSourceIds, false)}
+              >
+                復原選取來源
+              </LoadingButton>
+            </div>
+          )}
           <div className="admin-source-list">
-            {sources.map((source) => (
+            {visibleSources.map((source) => (
               <div className="admin-source-row" key={source.id}>
                 <div className="admin-source-summary">
+                  <input
+                    type="checkbox"
+                    className="admin-source-select"
+                    checked={selectedSourceIds.includes(source.id)}
+                    onChange={() => toggleSourceSelection(source.id)}
+                    aria-label={`選取來源 ${source.name || source.title || source.page_title || source.external_id}`}
+                  />
                   <span className="admin-source-name">
                     <strong>
                       {source.name ||
@@ -1725,24 +1822,41 @@ function NotionEditorialPanel({
                       Slug：{source.slug || '尚未設定'}
                     </small>
                     <small>最近同步：{formatAdminDate(source.last_synced_at)}</small>
+                    {source.ignored_at && (
+                      <small>已於 {formatAdminDate(source.ignored_at)} 忽略</small>
+                    )}
                   </span>
                   <span className="admin-source-statuses">
                     <StatusBadge state={source.state} />
+                    {source.ignored_at && <StatusBadge state="ignored" />}
                     {source.article_id && articlesById.get(source.article_id) && (
                       <StatusBadge state={articlesById.get(source.article_id)?.status || 'draft'} />
                     )}
                   </span>
-                  <button
-                    type="button"
-                    className="secondary admin-source-toggle"
-                    aria-expanded={expandedSourceId === source.id}
-                    aria-controls={`source-controls-${source.id}`}
-                    onClick={() =>
-                      setExpandedSourceId((current) => (current === source.id ? null : source.id))
-                    }
-                  >
-                    {expandedSourceId === source.id ? '收起' : '管理'}
-                  </button>
+                  <span className="admin-source-row-actions">
+                    <LoadingButton
+                      className="secondary admin-source-toggle"
+                      disabled={busy}
+                      loading={
+                        busyAction === `retire-source-${source.id}` ||
+                        busyAction === `restore-source-${source.id}`
+                      }
+                      onClick={() => void setSourcesIgnored([source.id], !source.ignored_at)}
+                    >
+                      {source.ignored_at ? '復原來源' : '忽略來源'}
+                    </LoadingButton>
+                    <button
+                      type="button"
+                      className="secondary admin-source-toggle"
+                      aria-expanded={expandedSourceId === source.id}
+                      aria-controls={`source-controls-${source.id}`}
+                      onClick={() =>
+                        setExpandedSourceId((current) => (current === source.id ? null : source.id))
+                      }
+                    >
+                      {expandedSourceId === source.id ? '收起' : '管理'}
+                    </button>
+                  </span>
                 </div>
                 {(source.state === 'onboarding' || source.last_error) && (
                   <p
