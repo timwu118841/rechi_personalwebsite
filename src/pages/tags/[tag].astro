@@ -3,10 +3,11 @@ import ArticleCard from '@/components/ArticleCard.astro';
 import Pagination from '@/components/Pagination.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { getPublicContentRepository } from '@/lib/content/repository';
+import { decodeSlugPathParam, taxonomyCacheTag } from '@/lib/content/slug';
 import { DEFAULT_PAGE_SIZE, pageCanonical, parsePage } from '@/lib/pagination';
 const page = parsePage(Astro.url.searchParams.get('page'));
 if (page === null) return Astro.rewrite('/404');
-const tag = decodeURIComponent(Astro.params.tag || '');
+const tag = decodeSlugPathParam(Astro.params.tag || '');
 const repository = getPublicContentRepository();
 const [knownTags, result, settings] = await Promise.all([
   repository.listTags(),
@@ -22,7 +23,7 @@ if (Astro.cache.enabled)
   Astro.cache.set({
     maxAge: 86400,
     swr: 604800,
-    tags: ['content', 'site-settings', 'taxonomies', `tag:${tag}`],
+    tags: ['content', 'site-settings', 'taxonomies', taxonomyCacheTag('tag', tag)],
   });
 const basePath = `/tags/${encodeURIComponent(tag)}/`;
 ---

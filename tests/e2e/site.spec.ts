@@ -7,6 +7,8 @@ const unicodeArticleSlug = '中文網址代稱測試';
 const unicodeArticleTitle = '中文網址代稱測試文章';
 const encodedUnicodeArticlePath = buildArticlePath(unicodeArticleSlug);
 const rawUnicodeArticlePath = `/articles/${unicodeArticleSlug}/`;
+const unicodeTagName = '法律工作';
+const encodedUnicodeTagPath = `/tags/${encodeURIComponent(unicodeTagName)}/`;
 
 test.describe('公開即時閱讀體驗', () => {
   test('公開頁面與後台回應包含必要的瀏覽器安全標頭', async ({ request }) => {
@@ -305,6 +307,26 @@ test('encoded 中文 article URL returns 200 and renders the title', async ({ pa
 test('直接 Unicode 中文 article URL 也可正常開啟', async ({ page }) => {
   await page.goto(rawUnicodeArticlePath);
   await expect(page.getByRole('heading', { level: 1, name: unicodeArticleTitle })).toBeVisible();
+});
+
+test('encoded 中文 tag URL returns 200 and keeps the cache tag header ASCII only', async ({
+  page,
+  request,
+}) => {
+  const response = await request.get(encodedUnicodeTagPath);
+  expect(response.status()).toBe(200);
+  const cacheTag = response.headers()['vercel-cache-tag'];
+  expect(cacheTag).toContain(`tag:${encodeURIComponent(unicodeTagName)}`);
+  expect(cacheTag).not.toContain(unicodeTagName);
+  expect([...cacheTag].every((character) => character.codePointAt(0)! <= 0x7f)).toBe(true);
+
+  await page.goto(encodedUnicodeTagPath);
+  await expect(page.getByRole('heading', { level: 1, name: `#${unicodeTagName}` })).toBeVisible();
+});
+
+test('直接 Unicode 中文 tag URL 也可正常開啟', async ({ page }) => {
+  await page.goto(`/tags/${unicodeTagName}/`);
+  await expect(page.getByRole('heading', { level: 1, name: `#${unicodeTagName}` })).toBeVisible();
 });
 
 test('停用 JavaScript 時仍能導覽、搜尋與閱讀全文', async ({ browser }, testInfo) => {

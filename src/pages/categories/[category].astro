@@ -3,10 +3,11 @@ import ArticleCard from '@/components/ArticleCard.astro';
 import Pagination from '@/components/Pagination.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { getPublicContentRepository } from '@/lib/content/repository';
+import { decodeSlugPathParam, taxonomyCacheTag } from '@/lib/content/slug';
 import { DEFAULT_PAGE_SIZE, pageCanonical, parsePage } from '@/lib/pagination';
 const page = parsePage(Astro.url.searchParams.get('page'));
 if (page === null) return Astro.rewrite('/404');
-const slug = Astro.params.category || '';
+const slug = decodeSlugPathParam(Astro.params.category || '');
 const repository = getPublicContentRepository();
 const [categories, result, settings] = await Promise.all([
   repository.listCategories(),
@@ -19,7 +20,7 @@ if (Astro.cache.enabled)
   Astro.cache.set({
     maxAge: 86400,
     swr: 604800,
-    tags: ['content', 'site-settings', 'taxonomies', `category:${slug}`],
+    tags: ['content', 'site-settings', 'taxonomies', taxonomyCacheTag('category', slug)],
   });
 const basePath = `/categories/${slug}/`;
 ---

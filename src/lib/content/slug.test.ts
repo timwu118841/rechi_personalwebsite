@@ -6,6 +6,7 @@ import {
   encodeSlugPathSegment,
   normalizeSlug,
   slugFromTitle,
+  taxonomyCacheTag,
   withCollisionSuffix,
 } from './slug';
 
@@ -50,5 +51,25 @@ describe('unicode article slugs', () => {
     expect(() => normalizeSlug('🙂')).toThrow();
     expect(() => normalizeSlug('bad\u200Bslug')).toThrow();
     expect(() => normalizeSlug('a'.repeat(121))).toThrow();
+  });
+});
+
+describe('taxonomy cache tags', () => {
+  it('percent-encodes reader-facing taxonomy names', () => {
+    expect(taxonomyCacheTag('tag', '勞動法')).toBe('tag:%E5%8B%9E%E5%8B%95%E6%B3%95');
+    expect(taxonomyCacheTag('category', 'legal-practice')).toBe('category:legal-practice');
+  });
+
+  it('produces values a cache tag header can carry', () => {
+    // The Vercel cache provider joins every tag into the Vercel-Cache-Tag header,
+    // whose values must be ByteStrings. A raw Chinese name throws there and the
+    // page fails with a 500, so the encoded form is the contract.
+    for (const tag of [
+      taxonomyCacheTag('tag', '勞動法'),
+      taxonomyCacheTag('category', '法律實務'),
+    ]) {
+      expect(() => new Headers({ 'Vercel-Cache-Tag': tag })).not.toThrow();
+    }
+    expect(() => new Headers({ 'Vercel-Cache-Tag': 'tag:勞動法' })).toThrow();
   });
 });
