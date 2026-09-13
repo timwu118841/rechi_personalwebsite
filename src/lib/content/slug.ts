@@ -22,6 +22,15 @@ export function articleCacheTag(slug: string): string {
   return `article:${encodeURIComponent(slug)}`;
 }
 
+/**
+ * Taxonomy names are reader-facing and usually non-ASCII. Cache tags travel in an
+ * HTTP header, whose values must be ByteStrings, so a raw Chinese tag name makes
+ * the cache provider throw and the page fail with a 500. Encode every tag name.
+ */
+export function taxonomyCacheTag(kind: 'tag' | 'category', value: string): string {
+  return `${kind}:${encodeURIComponent(value)}`;
+}
+
 export function articlePath(slug: string): string {
   return `/articles/${encodeSlugPathSegment(slug)}/`;
 }
