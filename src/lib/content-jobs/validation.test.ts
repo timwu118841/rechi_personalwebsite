@@ -4,9 +4,11 @@ import {
   parseArticleClassificationRequest,
   parseDirectSyncRequest,
   parseFeaturedArticleRequest,
+  parseIgnoredFlag,
   parseLimit,
   parsePrepareRequest,
   parsePublishRequest,
+  parseSourceRetirementRequest,
   parseSourceSummaryRequest,
   parseSourceClassificationRequest,
   parseUnpublishRequest,
@@ -126,5 +128,39 @@ describe('content job request validation', () => {
     expect(() =>
       parseArticleClassificationRequest({ category: 'legal-practice', tags: ['x'.repeat(41)] }),
     ).toThrow(/tags/);
+  });
+});
+
+describe('source retirement request validation', () => {
+  it('accepts a batch of source ids and de-duplicates them', () => {
+    expect(
+      parseSourceRetirementRequest({
+        sourceIds: ['source-1', 'source-1', 'source-2'],
+        ignored: true,
+      }),
+    ).toEqual({ sourceIds: ['source-1', 'source-2'], ignored: true });
+  });
+
+  it('rejects an empty batch, an oversized batch, and a non-boolean flag', () => {
+    expect(() => parseSourceRetirementRequest({ sourceIds: [], ignored: true })).toThrow(
+      'sourceIds must contain between 1 and 200 items.',
+    );
+    expect(() =>
+      parseSourceRetirementRequest({
+        sourceIds: Array.from({ length: 201 }, (_value, index) => `source-${index}`),
+        ignored: true,
+      }),
+    ).toThrow('sourceIds must contain between 1 and 200 items.');
+    expect(() => parseSourceRetirementRequest({ sourceIds: ['source-1'], ignored: 'yes' })).toThrow(
+      'ignored must be a boolean.',
+    );
+    expect(() =>
+      parseSourceRetirementRequest({ sourceIds: ['source-1', 7], ignored: true }),
+    ).toThrow('sourceIds is invalid.');
+  });
+
+  it('reads the single-source flag used by the retirement route', () => {
+    expect(parseIgnoredFlag({ ignored: false })).toBe(false);
+    expect(() => parseIgnoredFlag({})).toThrow('ignored must be a boolean.');
   });
 });

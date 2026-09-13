@@ -79,7 +79,7 @@ Notion integration 只讀取指定文章資料庫及其中的頁面；同步先�
 
 ### 4. Cron 與 Storage 前置條件
 
-- 依序套用全部 migration，包含 `supabase/migrations/202607150001_notion_content_pipeline.sql` 與其後的 `supabase/migrations/202607150002_enqueue_content_job_rpc.sql`。前者建立內容工作佇列、審查資料表與 private `notion-staging` bucket；後者提供 partial-index-safe 的 durable job enqueue RPC。
+- 依序套用全部 migration，包含 `supabase/migrations/202607150001_notion_content_pipeline.sql` 與其後的 `supabase/migrations/202607150002_enqueue_content_job_rpc.sql`。前者建立內容工作佇列、審查資料表與 private `notion-staging` bucket；後者提供 partial-index-safe 的 durable job enqueue RPC。來源忽略功能另需要 `supabase/migrations/202609130001_ignore_article_sources.sql`（`article_sources.ignored_at`、`set_article_sources_ignored` 與 `prepare_publication_candidate` 的忽略檢查）。
 - `vercel.json` 每天以 GET 呼叫 `/api/internal/content-worker`（`0 0 * * *`，UTC 00:00／台灣時間 08:00；Hobby 方案可能在該小時內觸發）。在 Vercel Production 設定 `CRON_SECRET` 後，Vercel 會自動送出 `Authorization: Bearer <CRON_SECRET>`；端點缺少或不符合時回應 `503` 或 `401`。詳見 [Vercel Cron Jobs](https://vercel.com/docs/cron-jobs/manage-cron-jobs)。
 - 每輪 worker 最多 claim 及處理 5 個 `sync_root`、`sync_source` 或 `finalize_candidate` jobs；管理員從後台按下同步時會立即觸發一次 worker，Vercel Cron 則作為每日備援，資料庫列數較多時後續執行會繼續清空佇列。`sync_root` 是相容既有佇列的內部工作名稱，實際同步目標已是 Data Source。
 - 確認目標 Supabase project 已啟用 Storage，且全域檔案上限至少 25 MB；bucket 上限不能高於全域上限。
@@ -94,6 +94,7 @@ Notion integration 只讀取指定文章資料庫及其中的頁面；同步先�
 4. 頁面含圖片時，worker 會先下載並驗證，再以內容 digest 產生穩定路徑、promotion 到公開 `site-media`，最後把 working copy 中的 logical asset reference 換成公開 URL；任何必要圖片失敗時，整個 source job 失敗，不會留下部分完成的 working copy。
 5. 建立發布候選並檢查預覽；候選必須分別通過隱私與法律審查。
 6. 按下立即發布後，worker 會立刻重新讀取 Notion、下載圖片並比對來源及媒體 hash；內容已變更或頁面已移到垃圾桶時會取消舊候選，不會發布過期版本。後台不提供排程發布。
+7. 不需要的資料列可在 **資料庫文章來源** 清單按 **忽略來源**（可勾選多列後批次處理）。忽略會讓該來源退出同步計畫、取消尚未上線的發布候選與排隊中的工作，但**不會下架已發布文章**，也不會刪除 revision 或 working copy。已忽略的來源預設隱藏，可切換「顯示已忽略來源」檢視再按 **復原來源**；這是軟刪除，資料列不會從資料庫移除。
 
 每輪 worker 最多處理 5 個 jobs。資料庫 discovery 本身也算一個 job；若 database 有多筆資料列，立即執行最多先處理 5 個，剩餘工作會由下一次手動同步或每日 Cron 繼續處理。一般單頁同步不需要等待 Cron。
 

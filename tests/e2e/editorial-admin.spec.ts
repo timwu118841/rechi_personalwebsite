@@ -57,11 +57,16 @@ const activeSource = {
   tags: ['既有標籤'],
   page_title: '勞動法實務筆記',
   last_synced_at: '2026-07-17T12:00:00.000Z',
+  ignored_at: null,
 };
-type FixtureSource = Omit<typeof activeSource, 'working_copy_id' | 'working_copy_version'> & {
+type FixtureSource = Omit<
+  typeof activeSource,
+  'working_copy_id' | 'working_copy_version' | 'ignored_at'
+> & {
   working_copy_id: string | null;
   working_copy_version: number | null;
   last_error: string | null;
+  ignored_at: string | null;
 };
 const legalCategory = {
   slug: 'legal-practice',
@@ -93,6 +98,18 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
           last_error: null,
         }
       : { ...activeSource, last_error: null as string | null };
+    let secondarySource: FixtureSource | null = testInfo.title.includes(
+      'retires several selected sources',
+    )
+      ? {
+          ...activeSource,
+          id: 'source-active-2',
+          external_id: 'notion-page-2',
+          page_title: '契約審閱筆記',
+          slug: 'contract-review',
+          last_error: null,
+        }
+      : null;
     let categories = [{ ...legalCategory }];
     let publishRequested = false;
     let articles = [
@@ -125,8 +142,18 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
         } else {
           body = { categories, contentTypes: [legalContentType] };
         }
-      } else if (url.pathname === '/api/admin/notion/sources') body = { sources: [source] };
-      else if (
+      } else if (url.pathname === '/api/admin/notion/sources') {
+        if (request.method() === 'POST') {
+          const input = request.postDataJSON();
+          requests.push(`RETIREMENT ${JSON.stringify(input)}`);
+          const ignoredAt = input.ignored ? '2026-09-13T00:00:00.000Z' : null;
+          const applyIgnored = (entry: FixtureSource) =>
+            input.sourceIds.includes(entry.id) ? { ...entry, ignored_at: ignoredAt } : entry;
+          source = applyIgnored(source);
+          if (secondarySource) secondarySource = applyIgnored(secondarySource);
+        }
+        body = { sources: [source, ...(secondarySource ? [secondarySource] : [])] };
+      } else if (
         url.pathname === `/api/admin/notion/sources/${activeSource.id}` &&
         request.method() === 'PATCH'
       ) {
@@ -353,6 +380,59 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     await expect(page.getByText(longTitle)).toHaveCount(0);
     await page.getByRole('tab', { name: '進行中' }).click();
     await expect(page.getByText(longTitle)).toBeVisible();
+  });
+
+  test('retires a source, hides it by default, and restores it', async ({ page }) => {
+    const sourceRow = page.locator('.admin-source-row');
+    await expect(sourceRow).toHaveCount(1);
+
+    await page.getByRole('button', { name: '忽略來源', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('已忽略 1 個來源');
+    expect(requestLogs.get(page)).toContain(
+      'RETIREMENT {"sourceIds":["source-active-1"],"ignored":true}',
+    );
+
+    await expect(sourceRow).toHaveCount(0);
+    await page.getByRole('button', { name: /顯示已忽略來源（1）/ }).click();
+    await expect(sourceRow).toHaveCount(1);
+    await expect(page.getByLabel('狀態：已忽略')).toBeVisible();
+    await expect(sourceRow).toContainText('已發布');
+    await expect(page.getByRole('button', { name: '忽略來源', exact: true })).toHaveCount(0);
+
+    await page.getByRole('button', { name: '復原來源' }).click();
+    await expect(page.getByRole('status')).toContainText('已復原 1 個來源');
+    expect(requestLogs.get(page)).toContain(
+      'RETIREMENT {"sourceIds":["source-active-1"],"ignored":false}',
+    );
+    await expect(page.getByLabel('狀態：已忽略')).toHaveCount(0);
+  });
+
+  test('retires several selected sources at once', async ({ page }) => {
+    const sourceRow = page.locator('.admin-source-row');
+    await expect(sourceRow).toHaveCount(2);
+
+    await page.getByLabel('選取來源 勞動法實務筆記').check();
+    await expect(page.getByText('已選 1 筆')).toBeVisible();
+    await page.getByLabel('選取來源 契約審閱筆記').check();
+    await expect(page.getByText('已選 2 筆')).toBeVisible();
+
+    await page.getByRole('button', { name: '忽略選取來源' }).click();
+    await expect(page.getByRole('status')).toContainText('已忽略 2 個來源');
+    expect(requestLogs.get(page)).toContain(
+      'RETIREMENT {"sourceIds":["source-active-1","source-active-2"],"ignored":true}',
+    );
+    await expect(sourceRow).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /顯示已忽略來源（2）/ })).toBeVisible();
+
+    await page.getByRole('button', { name: /顯示已忽略來源（2）/ }).click();
+    await expect(sourceRow).toHaveCount(2);
+    await page.getByLabel('選取來源 勞動法實務筆記').check();
+    await page.getByLabel('選取來源 契約審閱筆記').check();
+    await page.getByRole('button', { name: '復原選取來源' }).click();
+    await expect(page.getByRole('status')).toContainText('已復原 2 個來源');
+    expect(requestLogs.get(page)).toContain(
+      'RETIREMENT {"sourceIds":["source-active-1","source-active-2"],"ignored":false}',
+    );
   });
 
   test('keeps sources compact and reveals controls only for the selected row', async ({ page }) => {
