@@ -502,6 +502,9 @@ export class ContentJobService {
     if (error?.code === '22023') {
       throw new HttpRequestError(409, '請先忽略來源，再刪除同步紀錄。');
     }
+    if (error?.code === '55000') {
+      throw new HttpRequestError(409, '資料庫仍啟用唯讀保護，請先套用最新的 Supabase migration。');
+    }
     throwIfError(error);
     // The RPC returns the deleted ids as a uuid set.
     return Array.isArray(data) ? data.map((id) => String(id)) : [];
@@ -915,6 +918,9 @@ export class ContentJobService {
     }
     if (error?.code === '40001') {
       throw new HttpRequestError(409, '文章狀態已變更，請重新載入後再試。');
+    }
+    if (error?.code === '55000') {
+      throw new HttpRequestError(409, '資料庫仍啟用唯讀保護，請先套用最新的 Supabase migration。');
     }
     throwIfError(error);
     return Array.isArray(data) && data.length === 1 ? data[0] : data;
