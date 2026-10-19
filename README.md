@@ -22,10 +22,69 @@ npm run dev
 1. 建立 Supabase project。
 2. 新 Supabase project 可直接在 SQL Editor 執行整合檔 `supabase/all-migrations.sql`；若使用 Supabase CLI，則改為依序執行 `supabase/migrations/` 下的 migration。兩種方式擇一，不要在同一個空間重複執行。
    - 已有部分 migration 的 project 不要直接執行整合檔，請從尚未套用的 migration 接續執行。
-3. 在 Supabase Authentication 啟用 Google provider，並將 Google Cloud OAuth redirect URI 設為 `https://<project-ref>.supabase.co/auth/v1/callback`；Supabase Redirect URLs 加入本機與正式站的 `/admin` URL。
-   - 建議同時在 **Authentication → Providers → Email** 停用 Email／密碼登入，讓密碼完全不可能通過 Supabase 驗證。
+3. 完成 Google 登入設定：Google Cloud 的 OAuth 用戶端 + Supabase 的 Google provider 與 Redirect URLs，步驟見下方「Google 登入設定」。
 4. 將 `.env.example` 的 Supabase 變數填入 `.env`；正式站也要在 Vercel 設定相同環境變數。管理權限不再由部署環境變數控制，而是由 `public.admin_users` 資料表控制。
 5. 登入只用 Google：`PUBLIC_ADMIN_PASSWORD_LOGIN` 只有明確設為 `true` 才會啟用 Supabase 密碼登入，預設（未設定或 `false`）都停用。需要恢復密碼登入時才設為 `true`，且該路徑仍要求 HTTPS。
+6. 如需匯入目前的示範文章，執行 `npm run content:import`。
+
+### Google 登入設定
+
+Google 登入要三個地方的設定一致：Google Cloud 的 OAuth 用戶端、Supabase 專案的 provider 與網址允許清單、本機 stack（`supabase/config.toml`）。
+
+#### 1. Google Cloud Console
+
+1. 建立（或選擇）一個 project，設定 **APIs & Services → OAuth consent screen**：
+   - User type 選 **External**（要同組織 Workspace 才能選 Internal），填 app 名稱與支援信箱。
+   - Scopes 維持 `openid`、`email`、`profile` 即可。
+   - 發布狀態是 **Testing** 時，只有列在 **Test users** 的 Google 帳號可以登入；要給正式管理員用時按 **Publish app**。
+2. **APIs & Services → Credentials → Create credentials → OAuth client ID**，Application type 選 **Web application**。
+3. **Authorized redirect URIs** 必須包含 Supabase Auth 的 callback（這是 Supabase 的網址，不是本站網址）：
+   - 正式站：`https://<project-ref>.supabase.co/auth/v1/callback`
+   - 本機 Supabase CLI：`http://127.0.0.1:54321/auth/v1/callback`
+4. 複製 **Client ID** 與 **Client secret**，下一步要用。
+
+#### 2. Supabase 專案（正式站）
+
+- **Authentication → Providers → Google**：Enable，貼上 Client ID／Client secret 後 Save。
+- **Authentication → URL Configuration**：
+  - **Site URL**：正式站網址，例如 `https://<你的網域>`。
+  - **Redirect URLs**：加入 `https://<你的網域>/admin` 與 `http://localhost:4321/admin`。未列入時 Supabase 會退回 Site URL，`/admin` 就收不到登入回呼。
+- 建議同時停用 **Email** provider，只留 Google。
+
+#### 3. 本機 Supabase CLI
+
+`supabase/config.toml` 的 `site_url` 與 `additional_redirect_urls` 已指向本機 dev server，並保留 `[auth.external.google]` 區塊（預設 `enabled = false`，`skip_nonce_check = true` 是本機 Google 登入必需的設定）：
+
+```bash
+brew install supabase/tap/supabase          # 這台機器目前沒有安裝 CLI
+export SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID=<client id>
+export SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET=<client secret>
+# 將 supabase/config.toml 的 [auth.external.google] enabled 改成 true
+supabase stop && supabase start
+```
+
+`.env` 的 `PUBLIC_SUPABASE_URL` 必須與實際使用的 Supabase 相符：本機 stack 是 `http://127.0.0.1:54321`（loopback 允許 http），正式站是 `https://<project-ref>.supabase.co`。
+
+#### 快速確認 provider 是否啟用
+
+GoTrue 的設定端點會列出已啟用的登入方式，用 publishable key 就能查（`google: true` 才代表 provider 已啟用）：
+
+```bash
+curl -s "$PUBLIC_SUPABASE_URL/auth/v1/settings" \
+  -H "apikey: $PUBLIC_SUPABASE_PUBLISHABLE_KEY" | python3 -m json.tool
+```
+
+#### 登入失敗對照
+
+| 看到的訊息                                                                               | 原因                                             | 處理                                                    |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------- |
+| `provider is not enabled`／`Unsupported provider`                                        | Supabase 沒有啟用 Google provider                | 上面的第 2 或第 3 步                                    |
+| Google 頁面 `redirect_uri_mismatch`                                                      | Google 端沒有這個 callback 網址                  | 第 1 步第 3 點，字串需完全相同                          |
+| `Access blocked: … has not completed the Google verification process`                    | consent screen 還在 Testing                      | 把帳號加進 Test users 或 Publish app                    |
+| 登入後回到首頁、`/admin` 沒有登入                                                        | `/admin` 不在 Supabase Redirect URLs             | 第 2 步的 URL Configuration                             |
+| 前端顯示「Google 登入失敗，請稍後再試。」且 console 有 `Failed to fetch`／`ECONNREFUSED` | 連不到 Supabase（`.env` 指到沒在跑的本機 stack） | `supabase start`，或把 `PUBLIC_SUPABASE_URL` 改成正式站 |
+| 登入成功但顯示「這個帳號沒有管理權限」                                                   | `admin_users` 沒有這個 Google email 的列         | 下一節的 SQL                                            |
+
 6. 如需匯入目前的示範文章，執行 `npm run content:import`。
 
 ### 管理者安全佈署與增刪

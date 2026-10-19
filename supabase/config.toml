@@ -156,11 +156,11 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
-site_url = "http://127.0.0.1:3000"
+site_url = "http://localhost:4321"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+additional_redirect_urls = ["http://localhost:4321/admin", "http://127.0.0.1:4321/admin"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -334,6 +334,23 @@ skip_nonce_check = false
 # If enabled, it will allow the user to successfully authenticate when the provider does not return an email address.
 email_optional = false
 
+# Google 是這個專案唯一的登入方式。本機要啟用時：
+# 1. 在 Google Cloud Console 建立 OAuth 2.0 用戶端（Web application），
+#    Authorized redirect URI 加入 http://127.0.0.1:54321/auth/v1/callback。
+# 2. 匯出 SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID 與 SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET。
+# 3. 把下面的 enabled 改成 true，再執行 `supabase stop && supabase start`。
+# 正式站請改在 Supabase Dashboard → Authentication → Providers 設定，不要依賴這個檔案。
+[auth.external.google]
+enabled = false
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+# DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+# Overrides the default auth callback URL derived from auth.external_url.
+redirect_uri = ""
+# If enabled, the nonce check will be skipped. Required for local sign in with Google auth.
+skip_nonce_check = true
+# If enabled, it will allow the user to successfully authenticate when the provider does not return an email address.
+email_optional = false
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.
 # You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.
 [auth.web3.solana]
