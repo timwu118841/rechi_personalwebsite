@@ -379,7 +379,9 @@ export default function AdminApp({ supabaseUrl, supabasePublishableKey }: Props)
   const [checking, setChecking] = useState(true);
   const [loginNotice, setLoginNotice] = useState<string | null>(null);
   const [gate, setGate] = useState<ConsoleGate>({ state: 'checking' });
-  const [gateAttempt, setGateAttempt] = useState(0);
+  const [gateRetry, setGateRetry] = useState(0);
+  const grantedUserId = useRef<string | null>(null);
+  const appliedRetry = useRef(0);
 
   useEffect(() => {
     if (!client) {
@@ -396,14 +398,23 @@ export default function AdminApp({ supabaseUrl, supabasePublishableKey }: Props)
 
   // The console is only rendered for accounts the admin API accepts, so an
   // unauthorised visitor never sees the editing surface.
+  //
+  // Supabase hands back a new session object every time it refreshes the access
+  // token (including when the tab regains focus), so the check is keyed to the
+  // account rather than the session: re-running it for the same user would
+  // unmount the console and reload all of its data on every refresh.
   useEffect(() => {
     if (!client) return;
-    if (!session) {
+    const userId = session?.user?.id;
+    if (!userId) {
+      grantedUserId.current = null;
       setGate({ state: 'checking' });
       return;
     }
+    if (grantedUserId.current === userId && appliedRetry.current === gateRetry) return;
+    appliedRetry.current = gateRetry;
     let cancelled = false;
-    setGate({ state: 'checking' });
+    if (grantedUserId.current !== userId) setGate({ state: 'checking' });
     void (async () => {
       try {
         const response = await fetch('/api/admin/session', {
@@ -415,9 +426,11 @@ export default function AdminApp({ supabaseUrl, supabasePublishableKey }: Props)
         } | null;
         if (cancelled) return;
         if (response.ok) {
+          grantedUserId.current = userId;
           setGate({ state: 'granted' });
           return;
         }
+        grantedUserId.current = null;
         if (response.status === 401 || data?.code === 'google_identity_required') {
           setLoginNotice(data?.message || '登入已失效，請重新登入。');
           // Local scope so a session the API refuses is dropped even when the
@@ -432,6 +445,7 @@ export default function AdminApp({ supabaseUrl, supabasePublishableKey }: Props)
         });
       } catch {
         if (!cancelled) {
+          grantedUserId.current = null;
           setGate({ state: 'blocked', message: '無法確認管理權限，請稍後再試。', retryable: true });
         }
       }
@@ -439,7 +453,7 @@ export default function AdminApp({ supabaseUrl, supabasePublishableKey }: Props)
     return () => {
       cancelled = true;
     };
-  }, [client, session, gateAttempt]);
+  }, [client, session, gateRetry]);
 
   if (!client) {
     return (
@@ -465,7 +479,7 @@ export default function AdminApp({ supabaseUrl, supabasePublishableKey }: Props)
               type="button"
               loading={false}
               disabled={false}
-              onClick={() => setGateAttempt((attempt) => attempt + 1)}
+              onClick={() => setGateRetry((attempt) => attempt + 1)}
             >
               重新確認
             </LoadingButton>
