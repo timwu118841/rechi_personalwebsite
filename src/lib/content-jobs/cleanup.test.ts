@@ -101,4 +101,20 @@ describe('admin content cleanup', () => {
       p_actor_id: 'admin-id',
     });
   });
+
+  it('explains when the purge guard migration has not been applied', async () => {
+    const rpc = vi.fn(async () => ({
+      data: null,
+      error: { code: '55000', message: 'publication_review_attestations rows are append-only' },
+    }));
+    const service = new ContentJobService(clientWith({ rpc }));
+
+    await expect(service.deleteSources(['source-1'], 'admin-id')).rejects.toMatchObject({
+      status: 409,
+      message: '資料庫仍啟用唯讀保護，請先套用最新的 Supabase migration。',
+    });
+    await expect(service.deleteArticle('article-id', 'admin-id', 3)).rejects.toMatchObject({
+      status: 409,
+    });
+  });
 });
