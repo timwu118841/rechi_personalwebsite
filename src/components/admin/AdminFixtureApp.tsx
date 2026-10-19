@@ -24,5 +24,11 @@ export default function AdminFixtureApp() {
     },
   } as unknown as Session;
 
-  return <Dashboard session={session} onSignOut={async () => undefined} />;
+  return (
+    <Dashboard
+      session={session}
+      onSignOut={async () => undefined}
+      onSessionRejected={async () => undefined}
+    />
+  );
 }

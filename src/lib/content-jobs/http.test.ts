@@ -9,7 +9,7 @@ import {
 
 describe('content job error responses', () => {
   it('reports a Notion data source lookup failure instead of a generic server error', async () => {
-    const response = contentJobErrorResponse(
+    const response = await contentJobErrorResponse(
       new NotionApiError('Could not find data source with ID: 0000.', 404, 'object_not_found'),
     );
 
@@ -22,7 +22,7 @@ describe('content job error responses', () => {
   });
 
   it('keeps Notion rate limiting distinguishable from other upstream failures', async () => {
-    const response = contentJobErrorResponse(
+    const response = await contentJobErrorResponse(
       new NotionApiError('rate limited', 429, 'rate_limited'),
     );
 
@@ -30,7 +30,7 @@ describe('content job error responses', () => {
   });
 
   it('names the missing environment variables when editorial sync is not configured', async () => {
-    const response = contentJobErrorResponse(
+    const response = await contentJobErrorResponse(
       new NotionConfigurationError(['NOTION_EDITORIAL_ENABLED=true', 'NOTION_TOKEN']),
     );
 
@@ -41,7 +41,9 @@ describe('content job error responses', () => {
   });
 
   it('reports unsupported Notion blocks with the offending block type', async () => {
-    const response = contentJobErrorResponse(new UnsupportedNotionBlockError('table', 'block-1'));
+    const response = await contentJobErrorResponse(
+      new UnsupportedNotionBlockError('table', 'block-1'),
+    );
 
     expect(response.status).toBe(422);
     const { message } = await response.json();
@@ -49,7 +51,7 @@ describe('content job error responses', () => {
   });
 
   it('reports Notion timeouts as a gateway timeout', async () => {
-    const response = contentJobErrorResponse(new NotionTimeoutError(10_000));
+    const response = await contentJobErrorResponse(new NotionTimeoutError(10_000));
 
     expect(response.status).toBe(504);
     await expect(response.json()).resolves.toEqual({
@@ -58,7 +60,7 @@ describe('content job error responses', () => {
   });
 
   it('still hides unexpected server error details', async () => {
-    const response = contentJobErrorResponse(
+    const response = await contentJobErrorResponse(
       new Error('password authentication failed for internal_db'),
     );
 
