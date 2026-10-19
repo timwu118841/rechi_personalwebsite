@@ -108,7 +108,9 @@ on conflict (user_id) do update set email = excluded.email, updated_at = now();
 
 ### 登入方式與傳輸限制
 
-後台只提供 Google 登入，程式碼內沒有密碼欄位與 password grant，`requireAdmin` 也會拒絕以 Supabase `email` provider 取得的 session；請在 Supabase **Authentication → Providers → Email** 一起停用 Email／密碼登入，讓密碼登入在來源就不可能成立。
+後台只提供 Google 登入，程式碼內沒有密碼欄位與 password grant；`requireAdmin` 會要求帳號本身具備 Google 身分（`app_metadata.providers` 或 identities 內含 `google`），沒有 Google 身分的帳號會被登出並回到登入頁。**注意**：Supabase 會把 Google 身分連結到相同 email 的既有帳號，這類帳號的 `app_metadata.provider` 仍是 `email`，因此判斷依據是連結後的 provider 清單，不是單一 `provider` 欄位。另請在 Supabase **Authentication → Providers → Email** 停用 Email／密碼登入。
+
+登入後、渲染後台之前，前端會先呼叫 `/api/admin/session` 確認管理權限：不在 `admin_users` 的帳號只會看到「無法進入管理後台」提示與登出按鈕，看不到編輯介面。真正的權限邊界仍是 `/api/admin/*`（每個請求都會重新驗證），前端這層只是避免未授權者看到介面。
 
 - 正式站的 `/admin` 與 `/api/admin/*` 一律需透過 HTTPS；部署環境收到純 HTTP 請求時會以 `308` 導向對應的 https 網址，並回傳 HSTS，避免 session token 走明文。本機 loopback（`localhost`、`127.0.0.1`、`::1`）維持可用，方便開發。
 
