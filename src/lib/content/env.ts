@@ -64,8 +64,12 @@ export function getCronSecret(): string {
   return read('CRON_SECRET');
 }
 
+/**
+ * Google is the project's sign-in method; the Supabase password grant is opt-in
+ * so a missing or mistyped environment variable can never re-enable it.
+ */
 export function isPasswordLoginEnabled(): boolean {
-  return read('PUBLIC_ADMIN_PASSWORD_LOGIN') !== 'false';
+  return read('PUBLIC_ADMIN_PASSWORD_LOGIN') === 'true';
 }
 
 export function getSupabaseEnvironment(): SupabaseEnvironment | null {

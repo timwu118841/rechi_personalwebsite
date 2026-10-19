@@ -322,7 +322,7 @@ async function imageDimensions(file: File) {
 export default function AdminApp({
   supabaseUrl,
   supabasePublishableKey,
-  passwordLoginEnabled = true,
+  passwordLoginEnabled = false,
   passwordLoginDisabledReason,
 }: Props) {
   const client = useMemo(

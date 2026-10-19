@@ -21,13 +21,15 @@ describe('Supabase admin environment', () => {
     process.env.PUBLIC_SUPABASE_URL = 'https://project.supabase.co';
     process.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'publishable';
     process.env.SUPABASE_SECRET_KEY = 'secret';
-    expect(getSupabaseEnvironment()?.passwordLoginEnabled).toBe(true);
+    expect(getSupabaseEnvironment()?.passwordLoginEnabled).toBe(false);
   });
 
-  it('keeps password fallback enabled by default and supports explicit disablement', () => {
+  it('disables password sign-in unless it is explicitly enabled', () => {
     delete process.env.PUBLIC_ADMIN_PASSWORD_LOGIN;
-    expect(isPasswordLoginEnabled()).toBe(true);
+    expect(isPasswordLoginEnabled()).toBe(false);
     process.env.PUBLIC_ADMIN_PASSWORD_LOGIN = 'false';
+    expect(isPasswordLoginEnabled()).toBe(false);
+    process.env.PUBLIC_ADMIN_PASSWORD_LOGIN = 'yes';
     expect(isPasswordLoginEnabled()).toBe(false);
     process.env.PUBLIC_ADMIN_PASSWORD_LOGIN = 'true';
     expect(isPasswordLoginEnabled()).toBe(true);
