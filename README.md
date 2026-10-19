@@ -43,6 +43,14 @@ on conflict (user_id) do update set email = excluded.email, updated_at = now();
 
 `SUPABASE_SECRET_KEY` 只能放在本機或 Vercel server environment，不可加上 `PUBLIC_`，也不可放進瀏覽器程式。
 
+### 密碼登入的傳輸限制
+
+密碼登入會把原始密碼交給 Supabase Auth 的 password grant，因此只有在加密通道上才可能安全：
+
+- 正式站的 `/admin` 與 `/api/admin/*` 一律需透過 HTTPS；部署環境收到純 HTTP 請求時會以 `308` 導向對應的 https 網址，並回傳 HSTS。本機 loopback（`localhost`、`127.0.0.1`、`::1`）維持可用，方便開發。
+- 若頁面本身或 `PUBLIC_SUPABASE_URL` 不是 HTTPS（loopback 除外），`/admin` 會停用密碼登入並在登入區顯示原因，只保留 Google 登入，避免密碼以明文送出。
+- 需要完全避免密碼在瀏覽器送出時，請把 `PUBLIC_ADMIN_PASSWORD_LOGIN` 設為 `false`，只使用 Google 登入。
+
 ## 啟用 Notion 編輯來源
 
 Notion integration 只讀取指定文章資料庫及其中的頁面；同步先建立不可變來源版本，不會直接覆寫公開文章。設定前先完成 Supabase migration 與 Storage 前置條件。
