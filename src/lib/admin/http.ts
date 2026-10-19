@@ -7,6 +7,7 @@ export class HttpRequestError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly code?: string,
   ) {
     super(message);
     this.name = 'HttpRequestError';
@@ -20,16 +21,22 @@ export function json(data: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(data), { ...init, headers });
 }
 
-export function errorResponse(error: unknown) {
+/**
+ * Admin API failures must always reach the browser as JSON; the console reads
+ * `message` and `code` to decide what to show. A thrown `Response` carries a
+ * plain-text body, so it is converted here rather than passed through.
+ */
+export async function errorResponse(error: unknown) {
   if (error instanceof Response) {
-    const headers = new Headers(error.headers);
-    headers.set('Cache-Control', 'private, no-store');
-    headers.set('X-Robots-Tag', 'noindex, nofollow');
-    return new Response(error.body, {
-      status: error.status,
-      statusText: error.statusText,
-      headers,
-    });
+    const message = (await error.text().catch(() => '')).trim();
+    return json(
+      { message: message || '操作未完成，請稍後再試。' },
+      {
+        status: error.status,
+        statusText: error.statusText,
+        headers: { 'X-Robots-Tag': 'noindex, nofollow' },
+      },
+    );
   }
   if (error && typeof error === 'object' && 'issues' in error) {
     return json(
@@ -38,7 +45,10 @@ export function errorResponse(error: unknown) {
     );
   }
   if (error instanceof HttpRequestError) {
-    return json({ message: error.message }, { status: error.status });
+    return json(
+      { message: error.message, ...(error.code ? { code: error.code } : {}) },
+      { status: error.status },
+    );
   }
   const value = error as {
     code?: string;

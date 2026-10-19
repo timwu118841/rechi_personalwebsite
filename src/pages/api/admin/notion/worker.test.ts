@@ -42,7 +42,8 @@ describe('admin Notion worker endpoint', () => {
     const response = await POST({ request: new Request('https://example.com') } as never);
 
     expect(response.status).toBe(403);
-    expect(await response.text()).toBe('Forbidden');
+    expect(response.headers.get('content-type')).toContain('application/json');
+    await expect(response.json()).resolves.toEqual({ message: 'Forbidden' });
     expect(getContentJobService).not.toHaveBeenCalled();
   });
 });

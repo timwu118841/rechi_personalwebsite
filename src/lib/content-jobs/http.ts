@@ -35,7 +35,7 @@ function notionApiResponse(error: NotionApiError): Response {
   );
 }
 
-export function contentJobErrorResponse(error: unknown): Response {
+export async function contentJobErrorResponse(error: unknown): Promise<Response> {
   if (error instanceof RequestValidationError) {
     return json({ message: error.message }, { status: error.status });
   }

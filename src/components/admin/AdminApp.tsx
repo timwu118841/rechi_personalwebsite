@@ -1,6 +1,7 @@
 import { createClient, type Session, type SupabaseClient } from '@supabase/supabase-js';
 import {
   type ButtonHTMLAttributes,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -16,6 +17,11 @@ interface Props {
   supabaseUrl?: string;
   supabasePublishableKey?: string;
 }
+
+type ConsoleGate =
+  | { state: 'checking' }
+  | { state: 'granted' }
+  | { state: 'blocked'; message: string; retryable: boolean };
 
 interface AdminArticle {
   id: string;
@@ -371,6 +377,9 @@ export default function AdminApp({ supabaseUrl, supabasePublishableKey }: Props)
   );
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(true);
+  const [loginNotice, setLoginNotice] = useState<string | null>(null);
+  const [gate, setGate] = useState<ConsoleGate>({ state: 'checking' });
+  const [gateAttempt, setGateAttempt] = useState(0);
 
   useEffect(() => {
     if (!client) {
@@ -385,6 +394,53 @@ export default function AdminApp({ supabaseUrl, supabasePublishableKey }: Props)
     return () => data.subscription.unsubscribe();
   }, [client]);
 
+  // The console is only rendered for accounts the admin API accepts, so an
+  // unauthorised visitor never sees the editing surface.
+  useEffect(() => {
+    if (!client) return;
+    if (!session) {
+      setGate({ state: 'checking' });
+      return;
+    }
+    let cancelled = false;
+    setGate({ state: 'checking' });
+    void (async () => {
+      try {
+        const response = await fetch('/api/admin/session', {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        const data = (await response.json().catch(() => null)) as {
+          message?: string;
+          code?: string;
+        } | null;
+        if (cancelled) return;
+        if (response.ok) {
+          setGate({ state: 'granted' });
+          return;
+        }
+        if (response.status === 401 || data?.code === 'google_identity_required') {
+          setLoginNotice(data?.message || '登入已失效，請重新登入。');
+          // Local scope so a session the API refuses is dropped even when the
+          // sign-out request itself cannot reach Supabase.
+          await client.auth.signOut({ scope: 'local' });
+          return;
+        }
+        setGate({
+          state: 'blocked',
+          message: data?.message || '伺服器暫時無法完成操作。',
+          retryable: response.status >= 500,
+        });
+      } catch {
+        if (!cancelled) {
+          setGate({ state: 'blocked', message: '無法確認管理權限，請稍後再試。', retryable: true });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [client, session, gateAttempt]);
+
   if (!client) {
     return (
       <AdminNotice
@@ -394,7 +450,41 @@ export default function AdminApp({ supabaseUrl, supabasePublishableKey }: Props)
     );
   }
   if (checking) return <AdminNotice title="正在確認登入狀態…" message="請稍候。" />;
-  if (!session) return <Login client={client} />;
+  if (!session) return <Login client={client} notice={loginNotice ?? undefined} />;
+  if (gate.state === 'checking') {
+    return <AdminNotice title="正在確認管理權限…" message="請稍候。" />;
+  }
+  if (gate.state === 'blocked') {
+    return (
+      <AdminNotice
+        title="無法進入管理後台"
+        message={gate.message}
+        action={
+          gate.retryable ? (
+            <LoadingButton
+              type="button"
+              loading={false}
+              disabled={false}
+              onClick={() => setGateAttempt((attempt) => attempt + 1)}
+            >
+              重新確認
+            </LoadingButton>
+          ) : (
+            <LoadingButton
+              type="button"
+              loading={false}
+              disabled={false}
+              onClick={() => {
+                void client.auth.signOut();
+              }}
+            >
+              登出並改用其他帳號
+            </LoadingButton>
+          )
+        }
+      />
+    );
+  }
   return (
     <Dashboard
       session={session}
@@ -402,24 +492,40 @@ export default function AdminApp({ supabaseUrl, supabasePublishableKey }: Props)
         const { error } = await client.auth.signOut();
         if (error) throw error;
       }}
+      onSessionRejected={async (message) => {
+        setLoginNotice(message);
+        await client.auth.signOut({ scope: 'local' });
+      }}
     />
   );
 }
 
-function AdminNotice({ title, message }: { title: string; message: string }) {
+function AdminNotice({
+  title,
+  message,
+  action,
+}: {
+  title: string;
+  message: string;
+  action?: ReactNode;
+}) {
   return (
     <section className="admin-notice">
       <p className="admin-kicker">Admin</p>
       <h1>{title}</h1>
       <p>{message}</p>
+      {action}
       <a href="/">回到網站</a>
     </section>
   );
 }
 
-function Login({ client }: { client: SupabaseClient }) {
+function Login({ client, notice }: { client: SupabaseClient; notice?: string }) {
   const [busy, setBusy] = useState(false);
   const { toast, showToast, dismissToast } = useToast();
+  useEffect(() => {
+    if (notice) showToast('error', notice);
+  }, [notice, showToast]);
   useEffect(() => {
     const search = new URLSearchParams(window.location.search);
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
@@ -466,9 +572,11 @@ function Login({ client }: { client: SupabaseClient }) {
 export function Dashboard({
   session,
   onSignOut,
+  onSessionRejected,
 }: {
   session: Session;
   onSignOut: () => Promise<void>;
+  onSessionRejected: (message: string) => Promise<void>;
 }) {
   const [tab, setTab] = useState<Tab>('articles');
   const [articles, setArticles] = useState<AdminArticle[]>([]);
@@ -486,9 +594,20 @@ export function Dashboard({
         ...init.headers,
       },
     });
-    const data = await response.json().catch(() => ({ message: '伺服器回應格式錯誤。' }));
-    if (!response.ok) throw new Error(data.message || '操作失敗。');
-    return data;
+    const data = (await response.json().catch(() => null)) as {
+      message?: string;
+      code?: string;
+    } | null;
+    if (!response.ok) {
+      // An expired token or a session the admin API refuses can never succeed,
+      // so drop it and return to the sign-in panel with the server's reason.
+      if (response.status === 401 || data?.code === 'google_identity_required') {
+        await onSessionRejected(data?.message || '登入已失效，請重新登入。');
+      }
+      throw new Error(data?.message || '伺服器暫時無法完成操作。');
+    }
+    if (!data) throw new Error('伺服器回應格式錯誤。');
+    return data as T;
   };
 
   const reload = async () => {

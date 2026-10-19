@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import { HttpRequestError } from '@/lib/admin/http';
+import { hasGoogleIdentity } from '@/lib/admin/identity';
 import { getSupabaseEnvironment, normalizeAdminEmail } from '@/lib/content/env';
 
 export interface AdminIdentity {
@@ -22,10 +24,13 @@ export async function requireAdmin(request: Request): Promise<AdminIdentity> {
   if (!user.email_confirmed_at) {
     throw new Response('管理帳號的電子郵件尚未驗證。', { status: 403 });
   }
-  // The console only offers Google sign-in, so a session created through the
-  // Supabase email/password grant must never reach the admin API.
-  if (user.app_metadata?.provider === 'email') {
-    throw new Response('請使用 Google 帳號登入。', { status: 403 });
+  // The console only offers Google sign-in, so an account without a Google
+  // identity must never reach the admin API. The code lets the console drop
+  // that unusable session instead of retrying it. (A password signup that later
+  // linked Google keeps `provider: 'email'`, which is why the linked provider
+  // list decides this, not `app_metadata.provider`.)
+  if (!hasGoogleIdentity(user)) {
+    throw new HttpRequestError(403, '請使用 Google 帳號登入。', 'google_identity_required');
   }
   const adminClient = createClient(environment.url, environment.secretKey, {
     auth: { autoRefreshToken: false, persistSession: false },
