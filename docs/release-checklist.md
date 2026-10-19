@@ -13,6 +13,7 @@
 - [ ] 已依序套用 `supabase/migrations/202607110005_admin_users_status.sql`，並確認管理員狀態欄位與索引已建立
 - [ ] 已依序套用 `supabase/migrations/202607150001_notion_content_pipeline.sql`，並確認內容工作、來源 revision、候選、審查與媒體資料表已建立
 - [ ] 已依序套用 `supabase/migrations/202607150002_enqueue_content_job_rpc.sql`，並確認 `enqueue_content_job` RPC 可對 active job 去重、對已完成 dedupe key 重新排程
+- [ ] 已套用 `supabase/migrations/202610190001_admin_content_cleanup.sql`，並確認後台的「刪除已忽略來源」、「重新上架」與「永久刪除」動作可用（刪除只影響本站資料庫，Notion 不受影響）
 - [ ] Supabase 已啟用 Google provider、callback URI 與 `/admin` Redirect URL；Email provider 已停用（後台只有 Google 登入）
 - [ ] Vercel 已設定 `SITE_URL`、`PUBLIC_SUPABASE_URL`、`PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`SUPABASE_SECRET_KEY`、`CRON_SECRET` 與 `NOTION_EDITORIAL_ENABLED`；未設定 `ALLOW_FIXTURE_CONTENT=true`
 - [ ] `SUPABASE_SECRET_KEY`、`CRON_SECRET` 與 `NOTION_TOKEN` 只存在 server environment，未加上 `PUBLIC_`、未提交到 Git、未出現在瀏覽器 bundle
@@ -36,7 +37,7 @@
 
 ## 功能驗收
 
-- [ ] `/admin` 可登入、建立草稿、發布、下架與重新編輯，不產生 Git commit 或 deployment
+- [ ] `/admin` 可登入、建立草稿、發布、下架、重新上架、刪除已下架文章與重新編輯，不產生 Git commit 或 deployment
 - [ ] 資料庫同步能為每個新增或變更的 Data Source row page 排入 source job，且立即執行後每頁都能建立或更新 source、不可變 revision 與 working copy；同步不會改變目前公開文章
 - [ ] 單頁 page ID 同步仍可獨立排入；候選需完成隱私與法律審查才可發布
 - [ ] Notion 內容在候選建立後變更或移到垃圾桶時，freshness gate 會取消舊候選

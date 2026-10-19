@@ -2,7 +2,11 @@ import type { APIRoute } from 'astro';
 import { requireAdmin } from '@/lib/admin/auth';
 import { contentJobErrorResponse, readJson } from '@/lib/content-jobs/http';
 import { getContentJobService } from '@/lib/content-jobs/service';
-import { parseLimit, parseSourceRetirementRequest } from '@/lib/content-jobs/validation';
+import {
+  parseLimit,
+  parseSourceIdsRequest,
+  parseSourceRetirementRequest,
+} from '@/lib/content-jobs/validation';
 import { json } from '@/lib/admin/http';
 
 export const prerender = false;
@@ -16,6 +20,22 @@ export const GET: APIRoute = async ({ request, url }) => {
     const normalizedView = view === 'active' || view === 'history' ? view : 'all';
     return json({
       sources: await getContentJobService().listSourceStatus(limit, articleId, normalizedView),
+    });
+  } catch (error) {
+    return contentJobErrorResponse(error);
+  }
+};
+
+/**
+ * Permanently remove retired sources from this site's database. The Notion page
+ * is untouched, so syncing it again re-creates the source.
+ */
+export const DELETE: APIRoute = async ({ request }) => {
+  try {
+    const admin = await requireAdmin(request);
+    const sourceIds = parseSourceIdsRequest(await readJson(request));
+    return json({
+      deletedSourceIds: await getContentJobService().deleteSources(sourceIds, admin.id),
     });
   } catch (error) {
     return contentJobErrorResponse(error);

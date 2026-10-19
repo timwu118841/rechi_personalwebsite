@@ -481,6 +481,32 @@ export class ContentJobService {
     return rows(data);
   }
 
+  /**
+   * Permanently remove retired sources from this site's database. Notion is not
+   * touched: only the local sync history is deleted, so a later sync re-creates
+   * the source from the Notion page.
+   */
+  async deleteSources(sourceIds: string[], actorId: string): Promise<string[]> {
+    const { data, error } = await this.client.rpc('delete_article_sources', {
+      p_source_ids: sourceIds,
+      p_actor_id: actorId,
+    });
+    if (error?.code === 'PGRST202') {
+      throw Object.assign(new Error('來源刪除功能尚未套用，請執行最新 Supabase migration。'), {
+        code: error.code,
+      });
+    }
+    if (error?.code === 'P0002') {
+      throw new HttpRequestError(404, '找不到指定的文章來源，請重新載入後再試。');
+    }
+    if (error?.code === '22023') {
+      throw new HttpRequestError(409, '請先忽略來源，再刪除同步紀錄。');
+    }
+    throwIfError(error);
+    // The RPC returns the deleted ids as a uuid set.
+    return Array.isArray(data) ? data.map((id) => String(id)) : [];
+  }
+
   async updateSourceSummary(
     sourceId: string,
     expectedWorkingCopyVersion: number,
@@ -837,6 +863,59 @@ export class ContentJobService {
       p_expected_publication_version: input.expectedPublicationVersion,
       p_actor_id: actorId,
     });
+    throwIfError(error);
+    return Array.isArray(data) && data.length === 1 ? data[0] : data;
+  }
+
+  async republish(
+    articleId: string,
+    actorId: string,
+    expectedPublicationVersion: number,
+  ): Promise<unknown> {
+    const { data, error } = await this.client.rpc('republish_article', {
+      p_article_id: articleId,
+      p_expected_publication_version: expectedPublicationVersion,
+      p_actor_id: actorId,
+    });
+    if (error?.code === 'PGRST202') {
+      throw Object.assign(new Error('重新上架功能尚未套用，請執行最新 Supabase migration。'), {
+        code: error.code,
+      });
+    }
+    if (error?.code === 'P0002') {
+      throw new HttpRequestError(404, '找不到文章。');
+    }
+    if (error?.code === '40001') {
+      throw new HttpRequestError(409, '文章狀態已變更，請重新載入後再試。');
+    }
+    throwIfError(error);
+    return Array.isArray(data) && data.length === 1 ? data[0] : data;
+  }
+
+  async deleteArticle(
+    articleId: string,
+    actorId: string,
+    expectedPublicationVersion: number,
+  ): Promise<unknown> {
+    const { data, error } = await this.client.rpc('delete_unpublished_article', {
+      p_article_id: articleId,
+      p_expected_publication_version: expectedPublicationVersion,
+      p_actor_id: actorId,
+    });
+    if (error?.code === 'PGRST202') {
+      throw Object.assign(new Error('文章刪除功能尚未套用，請執行最新 Supabase migration。'), {
+        code: error.code,
+      });
+    }
+    if (error?.code === 'P0002') {
+      throw new HttpRequestError(404, '找不到文章。');
+    }
+    if (error?.code === '22023') {
+      throw new HttpRequestError(409, '只有已下架的文章可以永久刪除。');
+    }
+    if (error?.code === '40001') {
+      throw new HttpRequestError(409, '文章狀態已變更，請重新載入後再試。');
+    }
     throwIfError(error);
     return Array.isArray(data) && data.length === 1 ? data[0] : data;
   }

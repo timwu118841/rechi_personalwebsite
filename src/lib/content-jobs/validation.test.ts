@@ -8,6 +8,7 @@ import {
   parseLimit,
   parsePrepareRequest,
   parsePublishRequest,
+  parseSourceIdsRequest,
   parseSourceRetirementRequest,
   parseSourceSummaryRequest,
   parseSourceClassificationRequest,
@@ -162,5 +163,16 @@ describe('source retirement request validation', () => {
   it('reads the single-source flag used by the retirement route', () => {
     expect(parseIgnoredFlag({ ignored: false })).toBe(false);
     expect(() => parseIgnoredFlag({})).toThrow('ignored must be a boolean.');
+  });
+
+  it('parses and de-duplicates source ids for deletion', () => {
+    expect(parseSourceIdsRequest({ sourceIds: ['source-1', 'source-1', 'source-2'] })).toEqual([
+      'source-1',
+      'source-2',
+    ]);
+    expect(() => parseSourceIdsRequest({ sourceIds: [] })).toThrow(
+      'sourceIds must contain between 1 and 200 items.',
+    );
+    expect(() => parseSourceIdsRequest({ sourceIds: [7] })).toThrow('sourceIds is invalid.');
   });
 });
