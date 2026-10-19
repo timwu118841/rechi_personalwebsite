@@ -13,7 +13,7 @@
 - [ ] 已依序套用 `supabase/migrations/202607110005_admin_users_status.sql`，並確認管理員狀態欄位與索引已建立
 - [ ] 已依序套用 `supabase/migrations/202607150001_notion_content_pipeline.sql`，並確認內容工作、來源 revision、候選、審查與媒體資料表已建立
 - [ ] 已依序套用 `supabase/migrations/202607150002_enqueue_content_job_rpc.sql`，並確認 `enqueue_content_job` RPC 可對 active job 去重、對已完成 dedupe key 重新排程
-- [ ] Supabase 已啟用 Google provider、callback URI 與 `/admin` Redirect URL；`PUBLIC_ADMIN_PASSWORD_LOGIN` 已依相容期策略設定
+- [ ] Supabase 已啟用 Google provider、callback URI 與 `/admin` Redirect URL；Email provider 已停用（後台只有 Google 登入）
 - [ ] Vercel 已設定 `SITE_URL`、`PUBLIC_SUPABASE_URL`、`PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`SUPABASE_SECRET_KEY`、`CRON_SECRET` 與 `NOTION_EDITORIAL_ENABLED`；未設定 `ALLOW_FIXTURE_CONTENT=true`
 - [ ] `SUPABASE_SECRET_KEY`、`CRON_SECRET` 與 `NOTION_TOKEN` 只存在 server environment，未加上 `PUBLIC_`、未提交到 Git、未出現在瀏覽器 bundle
 - [ ] 若啟用 Notion：使用者已提供 internal integration secret／API key 作為 `NOTION_TOKEN`、文章資料庫的 Data Source UUID 作為 `NOTION_DATA_SOURCE_ID`，並設定 `NOTION_EDITORIAL_ENABLED=true`、`NOTION_VERSION=2026-03-11`

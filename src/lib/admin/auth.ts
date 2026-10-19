@@ -22,8 +22,10 @@ export async function requireAdmin(request: Request): Promise<AdminIdentity> {
   if (!user.email_confirmed_at) {
     throw new Response('管理帳號的電子郵件尚未驗證。', { status: 403 });
   }
-  if (!environment.passwordLoginEnabled && user.app_metadata?.provider === 'email') {
-    throw new Response('密碼登入已停用，請使用 Google 登入。', { status: 403 });
+  // The console only offers Google sign-in, so a session created through the
+  // Supabase email/password grant must never reach the admin API.
+  if (user.app_metadata?.provider === 'email') {
+    throw new Response('請使用 Google 帳號登入。', { status: 403 });
   }
   const adminClient = createClient(environment.url, environment.secretKey, {
     auth: { autoRefreshToken: false, persistSession: false },
