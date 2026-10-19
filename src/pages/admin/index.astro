@@ -1,26 +1,11 @@
 ---
 import AdminApp from '@/components/admin/AdminApp';
-import {
-  checkPasswordLoginTransport,
-  type CredentialTransportCheck,
-} from '@/lib/admin/credential-transport';
-import { getPublicSupabaseConfig, isPasswordLoginEnabled } from '@/lib/content/env';
+import { getPublicSupabaseConfig } from '@/lib/content/env';
 
 export const prerender = false;
 const config = getPublicSupabaseConfig();
 Astro.response.headers.set('Cache-Control', 'private, no-store');
 Astro.response.headers.set('X-Robots-Tag', 'noindex, nofollow');
-
-const passwordLoginRequested = isPasswordLoginEnabled();
-const transport: CredentialTransportCheck = config
-  ? checkPasswordLoginTransport(Astro.url.origin, config.url)
-  : { ok: true };
-const passwordLoginDisabledReason =
-  passwordLoginRequested && !transport.ok
-    ? transport.failure === 'supabase'
-      ? 'Supabase 連線不是 HTTPS，為避免密碼以明文傳送，已停用密碼登入。請改用 Google 登入，或將 PUBLIC_SUPABASE_URL 改為 https://。'
-      : '這個頁面不是 HTTPS 安全連線，為避免密碼以明文傳送，已停用密碼登入。請改用 Google 登入，或以 https:// 重新開啟管理後台。'
-    : undefined;
 ---
 
 <!doctype html>
@@ -36,8 +21,6 @@ const passwordLoginDisabledReason =
       client:load
       supabaseUrl={config?.url}
       supabasePublishableKey={config?.publishableKey}
-      passwordLoginEnabled={passwordLoginRequested && transport.ok}
-      passwordLoginDisabledReason={passwordLoginDisabledReason}
     />
   </body>
 </html>

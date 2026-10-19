@@ -1,7 +1,6 @@
 import { createClient, type Session, type SupabaseClient } from '@supabase/supabase-js';
 import {
   type ButtonHTMLAttributes,
-  type SyntheticEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -15,8 +14,6 @@ import { renderMarkdown } from '@/lib/content/markdown';
 interface Props {
   supabaseUrl?: string;
   supabasePublishableKey?: string;
-  passwordLoginEnabled?: boolean;
-  passwordLoginDisabledReason?: string;
 }
 
 interface AdminArticle {
@@ -319,12 +316,7 @@ async function imageDimensions(file: File) {
   return dimensions;
 }
 
-export default function AdminApp({
-  supabaseUrl,
-  supabasePublishableKey,
-  passwordLoginEnabled = false,
-  passwordLoginDisabledReason,
-}: Props) {
+export default function AdminApp({ supabaseUrl, supabasePublishableKey }: Props) {
   const client = useMemo(
     () =>
       supabaseUrl && supabasePublishableKey
@@ -359,14 +351,7 @@ export default function AdminApp({
     );
   }
   if (checking) return <AdminNotice title="正在確認登入狀態…" message="請稍候。" />;
-  if (!session)
-    return (
-      <Login
-        client={client}
-        passwordLoginEnabled={passwordLoginEnabled}
-        passwordLoginDisabledReason={passwordLoginDisabledReason}
-      />
-    );
+  if (!session) return <Login client={client} />;
   return (
     <Dashboard
       session={session}
@@ -389,18 +374,8 @@ function AdminNotice({ title, message }: { title: string; message: string }) {
   );
 }
 
-function Login({
-  client,
-  passwordLoginEnabled,
-  passwordLoginDisabledReason,
-}: {
-  client: SupabaseClient;
-  passwordLoginEnabled: boolean;
-  passwordLoginDisabledReason?: string;
-}) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [busyAction, setBusyAction] = useState<'google' | 'password' | null>(null);
+function Login({ client }: { client: SupabaseClient }) {
+  const [busy, setBusy] = useState(false);
   const { toast, showToast, dismissToast } = useToast();
   useEffect(() => {
     const search = new URLSearchParams(window.location.search);
@@ -416,7 +391,7 @@ function Login({
     }
   }, [showToast]);
   async function signInWithGoogle() {
-    setBusyAction('google');
+    setBusy(true);
     try {
       const { error } = await client.auth.signInWithOAuth({
         provider: 'google',
@@ -425,20 +400,7 @@ function Login({
       if (error) throw error;
     } catch {
       showToast('error', 'Google 登入失敗，請稍後再試。');
-      setBusyAction(null);
-    }
-  }
-  async function submit(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusyAction('password');
-    try {
-      const { error } = await client.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      showToast('success', '登入成功。');
-    } catch {
-      showToast('error', '登入失敗，請檢查帳號密碼與管理權限。');
-    } finally {
-      setBusyAction(null);
+      setBusy(false);
     }
   }
   return (
@@ -447,46 +409,13 @@ function Login({
       <div>
         <p className="admin-kicker">Private publishing</p>
         <h1>內容管理登入</h1>
-        <p>只有列入管理者名單的帳號可以編輯或發布內容。</p>
+        <p>只有列入管理者名單的帳號可以編輯或發布內容，請使用 Google 帳號登入。</p>
       </div>
-      <form onSubmit={submit}>
-        {!passwordLoginEnabled && passwordLoginDisabledReason && (
-          <p className="admin-login-warning">{passwordLoginDisabledReason}</p>
-        )}
-        <LoadingButton
-          type="button"
-          onClick={signInWithGoogle}
-          disabled={busyAction !== null}
-          loading={busyAction === 'google'}
-        >
+      <div className="admin-login-actions">
+        <LoadingButton type="button" onClick={signInWithGoogle} disabled={busy} loading={busy}>
           使用 Google 登入
         </LoadingButton>
-        {passwordLoginEnabled && (
-          <>
-            <label>
-              電子郵件
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              密碼
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-            </label>
-            <LoadingButton disabled={busyAction !== null} loading={busyAction === 'password'}>
-              登入
-            </LoadingButton>
-          </>
-        )}
-      </form>
+      </div>
     </section>
   );
 }

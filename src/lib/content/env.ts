@@ -2,13 +2,11 @@ export interface SupabaseEnvironment {
   url: string;
   publishableKey: string;
   secretKey: string;
-  passwordLoginEnabled: boolean;
 }
 
 export interface PublicSupabaseEnvironment {
   url: string;
   publishableKey: string;
-  passwordLoginEnabled: boolean;
 }
 
 export function normalizeAdminEmail(email: string): string {
@@ -23,9 +21,7 @@ function read(name: string): string {
 export function getPublicSupabaseConfig() {
   const url = read('PUBLIC_SUPABASE_URL');
   const publishableKey = read('PUBLIC_SUPABASE_PUBLISHABLE_KEY');
-  return url && publishableKey
-    ? { url, publishableKey, passwordLoginEnabled: isPasswordLoginEnabled() }
-    : null;
+  return url && publishableKey ? { url, publishableKey } : null;
 }
 
 export function getPublicSupabaseEnvironment(): PublicSupabaseEnvironment | null {
@@ -64,23 +60,11 @@ export function getCronSecret(): string {
   return read('CRON_SECRET');
 }
 
-/**
- * Google is the project's sign-in method; the Supabase password grant is opt-in
- * so a missing or mistyped environment variable can never re-enable it.
- */
-export function isPasswordLoginEnabled(): boolean {
-  return read('PUBLIC_ADMIN_PASSWORD_LOGIN') === 'true';
-}
-
 export function getSupabaseEnvironment(): SupabaseEnvironment | null {
   const publicConfig = getPublicSupabaseConfig();
   const secretKey = read('SUPABASE_SECRET_KEY');
   if (!publicConfig || !secretKey) return null;
-  return {
-    ...publicConfig,
-    secretKey,
-    passwordLoginEnabled: isPasswordLoginEnabled(),
-  };
+  return { ...publicConfig, secretKey };
 }
 
 export function isProductionRuntime(): boolean {

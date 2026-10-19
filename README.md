@@ -24,7 +24,7 @@ npm run dev
    - 已有部分 migration 的 project 不要直接執行整合檔，請從尚未套用的 migration 接續執行。
 3. 完成 Google 登入設定：Google Cloud 的 OAuth 用戶端 + Supabase 的 Google provider 與 Redirect URLs，步驟見下方「Google 登入設定」。
 4. 將 `.env.example` 的 Supabase 變數填入 `.env`；正式站也要在 Vercel 設定相同環境變數。管理權限不再由部署環境變數控制，而是由 `public.admin_users` 資料表控制。
-5. 登入只用 Google：`PUBLIC_ADMIN_PASSWORD_LOGIN` 只有明確設為 `true` 才會啟用 Supabase 密碼登入，預設（未設定或 `false`）都停用。需要恢復密碼登入時才設為 `true`，且該路徑仍要求 HTTPS。
+5. 登入只用 Google：登入頁只有「使用 Google 登入」按鈕，沒有帳號密碼欄位；`/api/admin/*` 也會拒絕以 Supabase `email` provider 取得的 session。
 6. 如需匯入目前的示範文章，執行 `npm run content:import`。
 
 ### Google 登入設定
@@ -106,14 +106,11 @@ on conflict (user_id) do update set email = excluded.email, updated_at = now();
 
 `SUPABASE_SECRET_KEY` 只能放在本機或 Vercel server environment，不可加上 `PUBLIC_`，也不可放進瀏覽器程式。
 
-### 登入方式與密碼傳輸限制
+### 登入方式與傳輸限制
 
-專案只使用 Google 登入：`PUBLIC_ADMIN_PASSWORD_LOGIN` 未設定或不是 `true` 時，`/admin` 不會顯示密碼表單，`requireAdmin` 也會拒絕以 `email` provider 取得的 session；請在 Supabase **Authentication → Providers → Email** 一併停用 Email／密碼登入。
+後台只提供 Google 登入，程式碼內沒有密碼欄位與 password grant，`requireAdmin` 也會拒絕以 Supabase `email` provider 取得的 session；請在 Supabase **Authentication → Providers → Email** 一起停用 Email／密碼登入，讓密碼登入在來源就不可能成立。
 
-保留的密碼登入路徑（僅在明確設為 `true` 時）仍受下列限制，因為它會把原始密碼交給 Supabase Auth 的 password grant：
-
-- 正式站的 `/admin` 與 `/api/admin/*` 一律需透過 HTTPS；部署環境收到純 HTTP 請求時會以 `308` 導向對應的 https 網址，並回傳 HSTS。本機 loopback（`localhost`、`127.0.0.1`、`::1`）維持可用，方便開發。
-- 若頁面本身或 `PUBLIC_SUPABASE_URL` 不是 HTTPS（loopback 除外），`/admin` 會停用密碼登入並在登入區顯示原因，只保留 Google 登入，避免密碼以明文送出。
+- 正式站的 `/admin` 與 `/api/admin/*` 一律需透過 HTTPS；部署環境收到純 HTTP 請求時會以 `308` 導向對應的 https 網址，並回傳 HSTS，避免 session token 走明文。本機 loopback（`localhost`、`127.0.0.1`、`::1`）維持可用，方便開發。
 
 ## 啟用 Notion 編輯來源
 
@@ -138,7 +135,6 @@ Notion integration 只讀取指定文章資料庫及其中的頁面；同步先�
 | --------------------------------- | -------------------------- | --------------------------------------------------------------------- |
 | `PUBLIC_SUPABASE_URL`             | 本機、Vercel；可送到瀏覽器 | Supabase project URL                                                  |
 | `PUBLIC_SUPABASE_PUBLISHABLE_KEY` | 本機、Vercel；可送到瀏覽器 | Supabase publishable key                                              |
-| `PUBLIC_ADMIN_PASSWORD_LOGIN`     | 本機、Vercel；可送到瀏覽器 | 只有設為 `true` 才啟用 Supabase 密碼登入；預設停用，只允許 Google     |
 | `SUPABASE_SECRET_KEY`             | 僅 server environment      | 後台、worker 與 Storage 的高權限 key                                  |
 | `CRON_SECRET`                     | 僅 server environment      | 保護 `/api/internal/content-worker`；使用至少 16 字元的隨機值         |
 | `NOTION_EDITORIAL_ENABLED`        | server environment         | 啟用 Notion editorial pipeline 時必須設為 `true`                      |
