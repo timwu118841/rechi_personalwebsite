@@ -67,6 +67,7 @@ type FixtureSource = Omit<
   working_copy_version: number | null;
   last_error: string | null;
   ignored_at: string | null;
+  deleted?: boolean;
 };
 const legalCategory = {
   slug: 'legal-practice',
@@ -143,7 +144,13 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
           body = { categories, contentTypes: [legalContentType] };
         }
       } else if (url.pathname === '/api/admin/notion/sources') {
-        if (request.method() === 'POST') {
+        if (request.method() === 'DELETE') {
+          const input = request.postDataJSON();
+          requests.push(`SOURCE_DELETE ${JSON.stringify(input)}`);
+          const matches = (entry: FixtureSource) => input.sourceIds.includes(entry.id);
+          if (matches(source)) source = { ...source, deleted: true };
+          if (secondarySource && matches(secondarySource)) secondarySource = null;
+        } else if (request.method() === 'POST') {
           const input = request.postDataJSON();
           requests.push(`RETIREMENT ${JSON.stringify(input)}`);
           const ignoredAt = input.ignored ? '2026-09-13T00:00:00.000Z' : null;
@@ -152,7 +159,12 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
           source = applyIgnored(source);
           if (secondarySource) secondarySource = applyIgnored(secondarySource);
         }
-        body = { sources: [source, ...(secondarySource ? [secondarySource] : [])] };
+        body = {
+          sources: [
+            ...(source.deleted ? [] : [source]),
+            ...(secondarySource ? [secondarySource] : []),
+          ],
+        };
       } else if (
         url.pathname === `/api/admin/notion/sources/${activeSource.id}` &&
         request.method() === 'PATCH'
@@ -287,9 +299,35 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
         const input = request.postDataJSON();
         requests.push(`UNPUBLISH ${JSON.stringify(input)}`);
         articles = articles.map((article) =>
-          article.id === publishedArticle.id ? { ...article, status: 'unpublished' } : article,
+          article.id === publishedArticle.id
+            ? { ...article, status: 'unpublished', publicationVersion: 4 }
+            : article,
         );
         body = { publication: { article_id: publishedArticle.id, publication_version: 4 } };
+      } else if (
+        url.pathname === `/api/admin/articles/${publishedArticle.id}/republish` &&
+        request.method() === 'POST'
+      ) {
+        const input = request.postDataJSON();
+        requests.push(`REPUBLISH ${JSON.stringify(input)}`);
+        articles = articles.map((article) =>
+          article.id === publishedArticle.id
+            ? {
+                ...article,
+                status: 'published',
+                publicationVersion: article.publicationVersion + 1,
+              }
+            : article,
+        );
+        body = { publication: { id: publishedArticle.id, status: 'published' } };
+      } else if (
+        url.pathname === `/api/admin/articles/${publishedArticle.id}/delete` &&
+        request.method() === 'POST'
+      ) {
+        const input = request.postDataJSON();
+        requests.push(`DELETE_ARTICLE ${JSON.stringify(input)}`);
+        articles = articles.filter((article) => article.id !== publishedArticle.id);
+        body = { deleted: { id: publishedArticle.id } };
       } else if (
         url.pathname === `/api/admin/articles/${publishedArticle.id}/featured` &&
         request.method() === 'PATCH'
@@ -357,12 +395,12 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     await expect(publishingSection.getByLabel('文章分類')).toBeVisible();
     await expect(publishingSection.getByLabel('文章標籤')).toBeVisible();
     await expect(page.locator('#published-articles')).toContainText(publishedArticle.title);
-    const articleCard = page.locator('.admin-article-card').first();
-    expect(await articleCard.evaluate((card) => card.scrollWidth <= card.clientWidth)).toBe(true);
+    const articleRow = page.locator('.admin-article-list tbody tr').first();
+    await expect(articleRow).toContainText(publishedArticle.title);
     expect(
-      await articleCard
-        .locator('p')
-        .evaluate((summary) => summary.scrollWidth <= summary.clientWidth),
+      await page
+        .locator('.admin-article-list-wrap')
+        .evaluate((wrap) => wrap.scrollWidth <= wrap.clientWidth),
     ).toBe(true);
   });
 
@@ -597,14 +635,18 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     await expect(preview.locator('.article-header')).toContainText(longTitle);
     await expect(preview.locator('.article-layout .prose')).toContainText('前台版型正文');
     await expect(preview.locator('.site-footer')).toBeVisible();
-    expect(
-      await preview
-        .locator('.article-heading-grid')
-        .evaluate((element) => getComputedStyle(element).display),
-    ).toBe('grid');
-    expect(
-      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
-    ).toBe(true);
+    // The preview iframe loads its stylesheet after the markup, so wait for the
+    // layout contract instead of sampling computed styles once.
+    await expect
+      .poll(() =>
+        preview
+          .locator('.article-heading-grid')
+          .evaluate((element) => getComputedStyle(element).display),
+      )
+      .toBe('grid');
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+      .toBe(true);
   });
 
   test('keeps an unpublished article manageable and directs republishing through fresh Notion sync', async ({
@@ -622,11 +664,9 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     await page.getByRole('button', { name: '確認下架' }).click();
 
     await expect(page.getByRole('dialog', { name: '確定要下架這篇文章？' })).toBeHidden();
-    await expect(
-      publishedSection.getByRole('heading', { name: publishedArticle.title }),
-    ).toBeVisible();
+    await expect(publishedSection.getByText(publishedArticle.title)).toBeVisible();
     await expect(publishedSection.getByLabel('狀態：已下架')).toBeVisible();
-    await publishedSection.getByRole('button', { name: '從 Notion 重新發布' }).click();
+    await publishedSection.getByRole('button', { name: '從 Notion 同步最新內容' }).click();
     await expect(page.getByRole('heading', { name: '文章管理', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: '同步 Notion 最新內容' })).toBeVisible();
     await page.getByRole('button', { name: '同步 Notion 最新內容' }).click();
@@ -648,9 +688,9 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
   test('sets and clears the featured article from the published article list', async ({ page }) => {
     const publishedSection = page.locator('#published-articles');
 
-    await publishedSection.getByRole('button', { name: '設為精選文章' }).click();
+    await publishedSection.getByRole('button', { name: '設為精選' }).click();
     await expect(publishedSection.getByText('精選文章', { exact: true })).toBeVisible();
-    await expect(publishedSection.getByRole('button', { name: '取消精選文章' })).toHaveAttribute(
+    await expect(publishedSection.getByRole('button', { name: '取消精選' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
@@ -682,13 +722,14 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     await expect(page.getByRole('status')).toContainText('分類與標籤已儲存');
 
     const publishedSection = page.locator('#published-articles');
-    const articleCard = publishedSection.locator('.admin-article-card').first();
-    await articleCard.getByRole('button', { name: '編輯分類與標籤' }).click();
-    await articleCard.getByLabel('文章分類').selectOption('legal-practice');
-    await articleCard.getByLabel('文章標籤').fill('公司法、訴訟');
-    await articleCard.getByRole('button', { name: '儲存分類與標籤' }).click();
+    const articleRow = publishedSection.locator('.admin-article-list tbody tr').first();
+    await articleRow.getByRole('button', { name: '分類與標籤' }).click();
+    const editor = publishedSection.locator('.admin-article-row-editor');
+    await editor.getByLabel('文章分類').selectOption('legal-practice');
+    await editor.getByLabel('文章標籤').fill('公司法、訴訟');
+    await editor.getByRole('button', { name: '儲存分類與標籤' }).click();
     await expect(page.getByRole('status')).toContainText('文章分類與標籤已更新');
-    await expect(articleCard).toContainText('公司法、訴訟');
+    await expect(articleRow).toContainText('公司法、訴訟');
 
     const requests = requestLogs.get(page) || [];
     expect(requests).toContain(`PATCH /api/admin/notion/sources/${activeSource.id}/classification`);
@@ -706,6 +747,53 @@ test.describe('受保護的 Notion 編輯發布後台', () => {
     await expect(page.getByRole('button', { name: '立即發布', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: '排入發布' })).toHaveCount(0);
     await expect(page.getByText(/預定：|排程發布/)).toHaveCount(0);
+  });
+
+  test('republishes an unpublished article without a Notion sync', async ({ page }) => {
+    const publishedSection = page.locator('#published-articles');
+    await publishedSection.getByRole('button', { name: '下架文章' }).click();
+    await page.getByRole('button', { name: '確認下架' }).click();
+    await expect(publishedSection.getByLabel('狀態：已下架')).toBeVisible();
+
+    await publishedSection.getByRole('button', { name: '重新上架' }).click();
+    await expect(page.getByRole('dialog', { name: '確定要重新上架這篇文章？' })).toBeVisible();
+    await page.getByRole('button', { name: '確認重新上架' }).click();
+    await expect(publishedSection.getByLabel('狀態：已發布')).toBeVisible();
+
+    const requests = requestLogs.get(page) || [];
+    expect(requests).toContain(`POST /api/admin/articles/${publishedArticle.id}/republish`);
+    expect(
+      requests.some((entry) => entry.startsWith('REPUBLISH {"expectedPublicationVersion":4}')),
+    ).toBe(true);
+  });
+
+  test('permanently deletes an unpublished article without touching Notion', async ({ page }) => {
+    const publishedSection = page.locator('#published-articles');
+    await publishedSection.getByRole('button', { name: '下架文章' }).click();
+    await page.getByRole('button', { name: '確認下架' }).click();
+    await expect(publishedSection.getByLabel('狀態：已下架')).toBeVisible();
+
+    await publishedSection.getByRole('button', { name: '永久刪除' }).click();
+    const dialog = page.getByRole('dialog', { name: '確定要永久刪除這篇文章？' });
+    await expect(dialog).toContainText('Notion 頁面不會被刪除');
+    await page.getByRole('button', { name: '確認永久刪除' }).click();
+    await expect(publishedSection.getByText(publishedArticle.title)).toHaveCount(0);
+
+    const requests = requestLogs.get(page) || [];
+    expect(requests).toContain(`POST /api/admin/articles/${publishedArticle.id}/delete`);
+  });
+
+  test('deletes an ignored source after it was retired', async ({ page }) => {
+    const sourceRow = page.locator('.admin-source-row');
+    await expect(sourceRow).toHaveCount(1);
+
+    await page.getByRole('button', { name: '忽略來源', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('已忽略 1 個來源');
+    await page.getByRole('button', { name: /顯示已忽略來源（1）/ }).click();
+    await page.getByRole('button', { name: '刪除同步紀錄' }).click();
+    await expect(page.getByRole('status')).toContainText('已刪除 1 筆同步紀錄');
+    await expect(sourceRow).toHaveCount(0);
+    expect(requestLogs.get(page)).toContain('SOURCE_DELETE {"sourceIds":["source-active-1"]}');
   });
 
   test('edits reader-facing categories without exposing the redundant content-type editor', async ({

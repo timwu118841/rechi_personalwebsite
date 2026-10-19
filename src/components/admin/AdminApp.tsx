@@ -1,5 +1,6 @@
 import { createClient, type Session, type SupabaseClient } from '@supabase/supabase-js';
 import {
+  Fragment,
   type ButtonHTMLAttributes,
   type ReactNode,
   useCallback,
@@ -873,6 +874,10 @@ function PublishedArticlesPanel({
   const [selected, setSelected] = useState<AdminArticle | null>(null);
   const [reason, setReason] = useState('');
   const [unpublishing, setUnpublishing] = useState(false);
+  const [republishTarget, setRepublishTarget] = useState<AdminArticle | null>(null);
+  const [republishing, setRepublishing] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<AdminArticle | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [featuredArticleId, setFeaturedArticleId] = useState<string | null>(null);
   const [classificationArticleId, setClassificationArticleId] = useState<string | null>(null);
   const [articleCategory, setArticleCategory] = useState('');
@@ -913,6 +918,46 @@ function PublishedArticlesPanel({
       showToast('error', error instanceof Error ? error.message : '文章下架失敗。');
     } finally {
       setUnpublishing(false);
+    }
+  };
+
+  const republish = async () => {
+    if (!republishTarget) return;
+    setRepublishing(true);
+    try {
+      await api(`/api/admin/articles/${republishTarget.id}/republish`, {
+        method: 'POST',
+        body: JSON.stringify({
+          expectedPublicationVersion: republishTarget.publicationVersion || 0,
+        }),
+      });
+      await onReload();
+      setRepublishTarget(null);
+      showToast('success', '文章已重新上架，公開頁面會立即更新。');
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : '文章重新上架失敗。');
+    } finally {
+      setRepublishing(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api(`/api/admin/articles/${deleteTarget.id}/delete`, {
+        method: 'POST',
+        body: JSON.stringify({
+          expectedPublicationVersion: deleteTarget.publicationVersion || 0,
+        }),
+      });
+      await onReload();
+      setDeleteTarget(null);
+      showToast('success', '已從本站刪除文章；Notion 頁面不受影響，之後同步仍可重新建立。');
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : '文章刪除失敗。');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -984,7 +1029,7 @@ function PublishedArticlesPanel({
           <p className="admin-kicker">步驟 3 · 公開內容</p>
           <h2 id="published-articles-title">已發布與已下架文章</h2>
           <p className="admin-page-description">
-            管理網站上的文章；重新發布會直接展開同一頁內綁定的 Notion 來源。
+            以列表管理公開文章：檢視、下架、重新上架，或刪除本站不再需要的已下架文章。
           </p>
         </div>
         <span className="admin-count">{managedArticles.length}</span>
@@ -1000,116 +1045,163 @@ function PublishedArticlesPanel({
             placeholder="輸入標題或網址代稱"
           />
         </label>
-        <p>文章內容以 Notion 為準；已下架文章仍保留，可同步最新內容後重新發布。</p>
+        <p>文章內容以 Notion 為準；重新上架會沿用上次發布的內容，需要最新版本時請先同步 Notion。</p>
       </div>
 
-      <div className="admin-article-grid" aria-live="polite">
-        {managedArticles.map((article) => (
-          <article
-            className={`admin-article-card${article.featured ? ' admin-article-card-featured' : ''}`}
-            key={article.id}
-          >
-            <div className="admin-article-card-topline">
-              <div className="admin-article-badges">
-                <StatusBadge state={article.status} />
-                {article.featured && <span className="admin-featured-badge">精選文章</span>}
-              </div>
-              <time dateTime={article.publishedAt}>
-                {article.status === 'published' ? '發布於 ' : '最後發布於 '}
-                {formatAdminDate(article.publishedAt)}
-              </time>
-            </div>
-            <div>
-              <h2>{article.title}</h2>
-              <p>{article.description || '尚未設定文章摘要。'}</p>
-            </div>
-            <div className="admin-article-meta">
-              <span>網址</span>
-              <strong>/articles/{article.slug}</strong>
-              <span>分類</span>
-              <strong>
-                {categories.find((category) => category.slug === article.category)?.name ||
-                  article.category}
-              </strong>
-              <span>標籤</span>
-              <strong>{article.tags.length ? article.tags.join('、') : '尚未設定'}</strong>
-            </div>
-            <button
-              type="button"
-              className="secondary admin-classification-toggle"
-              aria-expanded={classificationArticleId === article.id}
-              onClick={() => editClassification(article)}
-            >
-              {classificationArticleId === article.id ? '收起分類與標籤' : '編輯分類與標籤'}
-            </button>
-            {classificationArticleId === article.id && (
-              <div className="admin-article-classification-form">
-                <label htmlFor={`article-category-${article.id}`}>文章分類</label>
-                <select
-                  id={`article-category-${article.id}`}
-                  value={articleCategory}
-                  onChange={(event) => setArticleCategory(event.target.value)}
-                >
-                  <option value="">選擇分類</option>
-                  {categories.map((category) => (
-                    <option value={category.slug} key={category.slug}>
-                      {category.name}
-                      {category.visible ? '' : '（隱藏）'}
-                    </option>
-                  ))}
-                </select>
-                <label htmlFor={`article-tags-${article.id}`}>文章標籤</label>
-                <input
-                  id={`article-tags-${article.id}`}
-                  value={articleTags}
-                  onChange={(event) => setArticleTags(event.target.value)}
-                  placeholder="例如：勞動法、契約、訴訟"
-                />
-                <small>使用逗號或頓號分隔，最多 20 個。</small>
-                <LoadingButton
-                  type="button"
-                  loading={savingClassification}
-                  onClick={() => void saveClassification(article)}
-                >
-                  儲存分類與標籤
-                </LoadingButton>
-              </div>
-            )}
-            {article.status === 'published' && (
-              <LoadingButton
-                type="button"
-                className={`admin-featured-control${article.featured ? ' active' : ''}`}
-                loading={featuredArticleId === article.id}
-                disabled={featuredArticleId !== null && featuredArticleId !== article.id}
-                aria-pressed={article.featured}
-                onClick={() => void updateFeatured(article)}
-              >
-                {article.featured ? '取消精選文章' : '設為精選文章'}
-              </LoadingButton>
-            )}
-            <div className="admin-article-actions">
-              {article.status === 'published' ? (
-                <>
-                  <a
-                    className="admin-link-button"
-                    href={`/articles/${encodeURIComponent(article.slug)}/`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    檢視文章
-                  </a>
-                  <button className="admin-danger-button" onClick={() => setSelected(article)}>
-                    下架文章
-                  </button>
-                </>
-              ) : (
-                <button type="button" onClick={() => onRepublish(article.id)}>
-                  從 Notion 重新發布
-                </button>
-              )}
-            </div>
-          </article>
-        ))}
+      <div className="admin-article-list-wrap">
+        <table className="admin-article-list" aria-live="polite">
+          <caption className="sr-only">已發布與已下架文章清單</caption>
+          <thead>
+            <tr>
+              <th scope="col">文章</th>
+              <th scope="col">狀態</th>
+              <th scope="col">分類與標籤</th>
+              <th scope="col">發布時間</th>
+              <th scope="col">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {managedArticles.map((article) => (
+              <Fragment key={article.id}>
+                <tr className={article.featured ? 'admin-article-row-featured' : undefined}>
+                  <th scope="row" className="admin-article-cell-title">
+                    <span className="admin-article-row-title">{article.title}</span>
+                    <small>/articles/{article.slug}</small>
+                  </th>
+                  <td data-label="狀態">
+                    <span className="admin-article-badges">
+                      <StatusBadge state={article.status} />
+                      {article.featured && <span className="admin-featured-badge">精選文章</span>}
+                    </span>
+                  </td>
+                  <td className="admin-article-cell-taxonomy" data-label="分類與標籤">
+                    <span>
+                      {categories.find((category) => category.slug === article.category)?.name ||
+                        article.category}
+                    </span>
+                    <small>{article.tags.length ? article.tags.join('、') : '尚未設定標籤'}</small>
+                  </td>
+                  <td className="admin-article-cell-date" data-label="發布時間">
+                    <time dateTime={article.publishedAt}>
+                      {formatAdminDate(article.publishedAt)}
+                    </time>
+                    <small>{article.status === 'published' ? '已發布' : '已下架'}</small>
+                  </td>
+                  <td data-label="操作">
+                    <div className="admin-article-row-actions">
+                      {article.status === 'published' ? (
+                        <>
+                          <a
+                            className="admin-link-button"
+                            href={`/articles/${encodeURIComponent(article.slug)}/`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            檢視文章
+                          </a>
+                          <LoadingButton
+                            type="button"
+                            className={`admin-featured-control${article.featured ? ' active' : ''}`}
+                            loading={featuredArticleId === article.id}
+                            disabled={
+                              featuredArticleId !== null && featuredArticleId !== article.id
+                            }
+                            aria-pressed={article.featured}
+                            onClick={() => void updateFeatured(article)}
+                          >
+                            {article.featured ? '取消精選' : '設為精選'}
+                          </LoadingButton>
+                          <button
+                            type="button"
+                            className="secondary"
+                            aria-expanded={classificationArticleId === article.id}
+                            onClick={() => editClassification(article)}
+                          >
+                            {classificationArticleId === article.id ? '收起分類' : '分類與標籤'}
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-danger-button"
+                            onClick={() => setSelected(article)}
+                          >
+                            下架文章
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <LoadingButton
+                            type="button"
+                            loading={republishing && republishTarget?.id === article.id}
+                            disabled={republishing || deleting}
+                            onClick={() => setRepublishTarget(article)}
+                          >
+                            重新上架
+                          </LoadingButton>
+                          <button
+                            type="button"
+                            className="secondary"
+                            aria-expanded={classificationArticleId === article.id}
+                            onClick={() => editClassification(article)}
+                          >
+                            {classificationArticleId === article.id ? '收起分類' : '分類與標籤'}
+                          </button>
+                          <button type="button" onClick={() => onRepublish(article.id)}>
+                            從 Notion 同步最新內容
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-danger-button"
+                            disabled={deleting}
+                            onClick={() => setDeleteTarget(article)}
+                          >
+                            永久刪除
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+                {classificationArticleId === article.id && (
+                  <tr className="admin-article-row-editor">
+                    <td colSpan={5}>
+                      <div className="admin-article-classification-form">
+                        <label htmlFor={`article-category-${article.id}`}>文章分類</label>
+                        <select
+                          id={`article-category-${article.id}`}
+                          value={articleCategory}
+                          onChange={(event) => setArticleCategory(event.target.value)}
+                        >
+                          <option value="">選擇分類</option>
+                          {categories.map((category) => (
+                            <option value={category.slug} key={category.slug}>
+                              {category.name}
+                              {category.visible ? '' : '（隱藏）'}
+                            </option>
+                          ))}
+                        </select>
+                        <label htmlFor={`article-tags-${article.id}`}>文章標籤</label>
+                        <input
+                          id={`article-tags-${article.id}`}
+                          value={articleTags}
+                          onChange={(event) => setArticleTags(event.target.value)}
+                          placeholder="例如：勞動法、契約、訴訟"
+                        />
+                        <small>使用逗號或頓號分隔，最多 20 個。</small>
+                        <LoadingButton
+                          type="button"
+                          loading={savingClassification}
+                          onClick={() => void saveClassification(article)}
+                        >
+                          儲存分類與標籤
+                        </LoadingButton>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
         {!managedArticles.length && (
           <div className="admin-form-card admin-empty admin-article-empty">
             <strong>{query.trim() ? '找不到符合條件的文章' : '目前沒有可管理文章'}</strong>
@@ -1163,6 +1255,74 @@ function PublishedArticlesPanel({
                 onClick={() => void unpublish()}
               >
                 確認下架
+              </LoadingButton>
+            </div>
+          </section>
+        </div>
+      )}
+      {republishTarget && (
+        <div className="admin-dialog-backdrop" role="presentation">
+          <section
+            className="admin-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="republish-confirm-title"
+            aria-describedby="republish-confirm-description"
+          >
+            <p className="admin-kicker">文章重新上架</p>
+            <h2 id="republish-confirm-title">確定要重新上架這篇文章？</h2>
+            <p id="republish-confirm-description">
+              「{republishTarget.title}」會立即回到公開網站，使用的是上次發布的內容；需要最新 Notion
+              內容時，請先同步再重新發布。
+            </p>
+            <div className="button-row admin-dialog-actions">
+              <button
+                type="button"
+                className="secondary"
+                disabled={republishing}
+                onClick={() => setRepublishTarget(null)}
+              >
+                取消
+              </button>
+              <LoadingButton type="button" loading={republishing} onClick={() => void republish()}>
+                確認重新上架
+              </LoadingButton>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="admin-dialog-backdrop" role="presentation">
+          <section
+            className="admin-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-confirm-title"
+            aria-describedby="delete-confirm-description"
+          >
+            <p className="admin-kicker">永久刪除文章</p>
+            <h2 id="delete-confirm-title">確定要永久刪除這篇文章？</h2>
+            <p id="delete-confirm-description">
+              「{deleteTarget.title}」會從本站資料庫移除，網址立即失效且無法復原。Notion
+              頁面不會被刪除；之後同步該頁面仍可重新建立文章。
+            </p>
+            <div className="button-row admin-dialog-actions">
+              <button
+                type="button"
+                className="secondary"
+                disabled={deleting}
+                onClick={() => setDeleteTarget(null)}
+              >
+                取消
+              </button>
+              <LoadingButton
+                type="button"
+                className="admin-danger-button"
+                loading={deleting}
+                onClick={() => void remove()}
+              >
+                確認永久刪除
               </LoadingButton>
             </div>
           </section>
@@ -1238,6 +1398,10 @@ function NotionEditorialPanel({
   const allVisibleSourcesSelected =
     visibleSources.length > 0 &&
     visibleSources.every((source) => selectedSourceIds.includes(source.id));
+  const selectedIgnoredSourceIds = useMemo(
+    () => selectedSourceIds.filter((id) => ignoredSources.some((source) => source.id === id)),
+    [ignoredSources, selectedSourceIds],
+  );
 
   const refresh = async (): Promise<void> => {
     const [sourceData, candidateData] = await Promise.all([
@@ -1595,6 +1759,23 @@ function NotionEditorialPanel({
     });
   };
 
+  const deleteSources = async (sourceIds: string[]) => {
+    if (sourceIds.length === 0) return;
+    const actionKey = sourceIds.length === 1 ? `delete-source-${sourceIds[0]}` : 'delete-sources';
+    await runAction(actionKey, async () => {
+      await api('/api/admin/notion/sources', {
+        method: 'DELETE',
+        body: JSON.stringify({ sourceIds }),
+      });
+      setSelectedSourceIds([]);
+      await refresh();
+      showToast(
+        'success',
+        `已刪除 ${sourceIds.length} 筆同步紀錄；Notion 頁面不受影響，之後同步仍可重新建立。`,
+      );
+    });
+  };
+
   const saveSummary = async (source: NotionSourceStatus) => {
     const summary = (summaryForSource[source.id] || '').trim().replace(/\s+/g, ' ');
     if (summary.length < 20 || summary.length > 180) {
@@ -1840,7 +2021,8 @@ function NotionEditorialPanel({
           </div>
           <p className="admin-source-list-description">
             顯示 Notion
-            文章資料庫已同步的全部資料列，包括已發布與已下架內容。忽略來源會停止同步並取消未上線的發布候選，但不會下架已發布文章。
+            文章資料庫已同步的全部資料列，包括已發布與已下架內容。忽略來源會停止同步並取消未上線的發布候選，但不會下架已發布文章；刪除同步紀錄只會移除本站的同步資料，Notion
+            頁面不受影響。
           </p>
           {ignoredSources.length > 0 && (
             <button
@@ -1879,6 +2061,14 @@ function NotionEditorialPanel({
                 onClick={() => void setSourcesIgnored(selectedSourceIds, false)}
               >
                 復原選取來源
+              </LoadingButton>
+              <LoadingButton
+                className="admin-danger-button"
+                disabled={busy || selectedIgnoredSourceIds.length === 0}
+                loading={busyAction === 'delete-sources'}
+                onClick={() => void deleteSources(selectedIgnoredSourceIds)}
+              >
+                刪除已忽略來源（{selectedIgnoredSourceIds.length}）
               </LoadingButton>
             </div>
           )}
@@ -1927,6 +2117,16 @@ function NotionEditorialPanel({
                     >
                       {source.ignored_at ? '復原來源' : '忽略來源'}
                     </LoadingButton>
+                    {source.ignored_at && (
+                      <LoadingButton
+                        className="admin-danger-button admin-source-toggle"
+                        disabled={busy}
+                        loading={busyAction === `delete-source-${source.id}`}
+                        onClick={() => void deleteSources([source.id])}
+                      >
+                        刪除同步紀錄
+                      </LoadingButton>
+                    )}
                     <button
                       type="button"
                       className="secondary admin-source-toggle"

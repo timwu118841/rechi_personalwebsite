@@ -109,12 +109,8 @@ export function parseIgnoredFlag(value: unknown): boolean {
   return input.ignored;
 }
 
-export function parseSourceRetirementRequest(value: unknown): {
-  sourceIds: string[];
-  ignored: boolean;
-} {
+export function parseSourceIdsRequest(value: unknown): string[] {
   const input = record(value);
-  const ignored = parseIgnoredFlag(input);
   if (!Array.isArray(input.sourceIds)) {
     throw new RequestValidationError('sourceIds must be an array.');
   }
@@ -126,7 +122,16 @@ export function parseSourceRetirementRequest(value: unknown): {
     const id = requiredString(entry, 'sourceIds', 128).trim();
     if (!sourceIds.includes(id)) sourceIds.push(id);
   }
-  return { sourceIds, ignored };
+  return sourceIds;
+}
+
+export function parseSourceRetirementRequest(value: unknown): {
+  sourceIds: string[];
+  ignored: boolean;
+} {
+  const input = record(value);
+  const ignored = parseIgnoredFlag(input);
+  return { sourceIds: parseSourceIdsRequest(input), ignored };
 }
 
 function parseClassification(value: unknown): { category: string; tags: string[] } {
@@ -218,6 +223,18 @@ export function parsePublishRequest(value: unknown): PublishRequest {
       256,
     ),
     idempotencyKey: requiredString(input.idempotencyKey, 'idempotencyKey', 128),
+  };
+}
+
+export function parseArticleVersionRequest(value: unknown): {
+  expectedPublicationVersion: number;
+} {
+  const input = record(value);
+  return {
+    expectedPublicationVersion: nonNegativeInteger(
+      input.expectedPublicationVersion,
+      'expectedPublicationVersion',
+    ),
   };
 }
 
