@@ -1,4 +1,4 @@
-import { createClient, type Session } from '@supabase/supabase-js';
+import { createClient, type Session, type SupabaseClient } from '@supabase/supabase-js';
 import {
   type ButtonHTMLAttributes,
   type SyntheticEvent,
@@ -16,6 +16,7 @@ interface Props {
   supabaseUrl?: string;
   supabasePublishableKey?: string;
   passwordLoginEnabled?: boolean;
+  passwordLoginDisabledReason?: string;
 }
 
 interface AdminArticle {
@@ -322,6 +323,7 @@ export default function AdminApp({
   supabaseUrl,
   supabasePublishableKey,
   passwordLoginEnabled = true,
+  passwordLoginDisabledReason,
 }: Props) {
   const client = useMemo(
     () =>
@@ -357,7 +359,14 @@ export default function AdminApp({
     );
   }
   if (checking) return <AdminNotice title="正在確認登入狀態…" message="請稍候。" />;
-  if (!session) return <Login client={client} passwordLoginEnabled={passwordLoginEnabled} />;
+  if (!session)
+    return (
+      <Login
+        client={client}
+        passwordLoginEnabled={passwordLoginEnabled}
+        passwordLoginDisabledReason={passwordLoginDisabledReason}
+      />
+    );
   return (
     <Dashboard
       session={session}
@@ -380,7 +389,15 @@ function AdminNotice({ title, message }: { title: string; message: string }) {
   );
 }
 
-function Login({ client, passwordLoginEnabled }: { client: any; passwordLoginEnabled: boolean }) {
+function Login({
+  client,
+  passwordLoginEnabled,
+  passwordLoginDisabledReason,
+}: {
+  client: SupabaseClient;
+  passwordLoginEnabled: boolean;
+  passwordLoginDisabledReason?: string;
+}) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busyAction, setBusyAction] = useState<'google' | 'password' | null>(null);
@@ -433,6 +450,9 @@ function Login({ client, passwordLoginEnabled }: { client: any; passwordLoginEna
         <p>只有列入管理者名單的帳號可以編輯或發布內容。</p>
       </div>
       <form onSubmit={submit}>
+        {!passwordLoginEnabled && passwordLoginDisabledReason && (
+          <p className="admin-login-warning">{passwordLoginDisabledReason}</p>
+        )}
         <LoadingButton
           type="button"
           onClick={signInWithGoogle}
