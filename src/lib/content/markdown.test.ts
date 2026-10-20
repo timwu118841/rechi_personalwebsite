@@ -165,4 +165,27 @@ describe('safe Markdown rendering', () => {
   it('creates plain search text without markup', () => {
     expect(markdownToPlainText('**法律** `工作`')).toBe('法律 工作');
   });
+
+  it('keeps Notion enhanced markdown structures instead of flattening them', () => {
+    expect(renderMarkdown('<callout icon="💡">\n重點提醒\n</callout>')).toContain(
+      '<div class="callout" data-icon="💡">',
+    );
+    expect(renderMarkdown('<details><summary>延伸閱讀</summary>\n\n內容\n</details>')).toContain(
+      '<summary>延伸閱讀</summary>',
+    );
+    expect(
+      renderMarkdown('<mention-page url="https://www.notion.so/page">相關頁面</mention-page>'),
+    ).toContain('href="https://www.notion.so/page"');
+    expect(renderMarkdown('<equation>E = mc^2</equation>')).toContain(
+      '<span class="equation">E = mc^2</span>',
+    );
+  });
+
+  it('keeps Notion soft line breaks inside a paragraph', () => {
+    expect(renderMarkdown('第一行\n第二行')).toBe('<p>第一行<br />第二行</p>\n');
+  });
+
+  it('still drops tags that are not part of the enhanced-markdown contract', () => {
+    expect(renderMarkdown('<script>alert(1)</script>')).not.toContain('<script');
+  });
 });

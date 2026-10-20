@@ -2281,13 +2281,17 @@ function NotionEditorialPanel({
                             onChange={(event) =>
                               setSlugForSource((current) => ({
                                 ...current,
-                                [source.id]: event.target.value.normalize('NFC'),
+                                [source.id]: event.target.value.toLowerCase(),
                               }))
                             }
                             maxLength={120}
-                            placeholder="依 Notion 設定或標題產生"
+                            pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+                            autoCapitalize="none"
+                            spellCheck={false}
+                            placeholder="小寫英文、數字與連字號，例如 lease-contract"
                             aria-label="手動設定網址代稱"
                           />
+                          <small>網址代稱只能使用小寫英文字母、數字與連字號。</small>
                           <LoadingButton
                             className="secondary"
                             disabled={

@@ -1,5 +1,9 @@
 const ZERO_WIDTH = /[\u200B-\u200D\u2060\uFEFF]/u;
-const ALLOWED = /^[\p{L}\p{N}-]$/u;
+// Article slugs are English-only by product decision: lowercase ASCII letters,
+// digits and single hyphens. Existing unicode slugs (and their redirects) are
+// still readable through the decode/encode helpers below.
+const ALLOWED = /^[a-z0-9-]$/;
+const SLUG_MAX_LENGTH = 120;
 
 /**
  * Astro may expose rest-route params in either encoded or decoded form,
@@ -36,7 +40,7 @@ export function articlePath(slug: string): string {
 }
 
 export function normalizeSlug(value: string): string {
-  const normalized = value.normalize('NFC').trim();
+  const normalized = value.normalize('NFC').trim().toLowerCase();
   if (!normalized || ZERO_WIDTH.test(normalized)) {
     throw new Error('網址代稱含有不支援的字元。');
   }
@@ -44,18 +48,24 @@ export function normalizeSlug(value: string): string {
     .map((character) => {
       if (/\s/u.test(character)) return '-';
       if (ALLOWED.test(character)) return character;
-      throw new Error('網址代稱必須只包含文字、數字、空白與連字號。');
+      throw new Error('網址代稱只能使用小寫英文字母、數字與連字號。');
     })
     .join('')
-    .replace(/-+/g, '-');
-  if (!slug || slug.startsWith('-') || slug.endsWith('-') || Array.from(slug).length > 120) {
-    throw new Error('網址代稱必須是 1 至 120 個 Unicode 字元，且只能包含文字、數字與連字號。');
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  if (!slug || slug.length > SLUG_MAX_LENGTH) {
+    throw new Error('網址代稱必須是 1 至 120 個小寫英文字母、數字與連字號。');
   }
   return slug;
 }
 
+/**
+ * Derive an English slug from a title. Non-ASCII characters are dropped, so a
+ * Chinese title yields the fallback slug and the admin should set the slug
+ * explicitly on the publishing step.
+ */
 export function slugFromTitle(title: string, fallback = 'article'): string {
-  const normalized = title.normalize('NFC').trim();
+  const normalized = title.normalize('NFC').trim().toLowerCase();
   const generated = Array.from(normalized)
     .map((character) => {
       if (/\s/u.test(character)) return '-';
@@ -63,8 +73,9 @@ export function slugFromTitle(title: string, fallback = 'article'): string {
       return '';
     })
     .join('')
-    .replace(/-+/g, '-');
-  const value = generated.replace(/^-|-$/g, '').slice(0, 120).replace(/-$/, '');
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  const value = generated.slice(0, SLUG_MAX_LENGTH).replace(/-$/, '');
   return value || `${fallback}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
