@@ -175,7 +175,7 @@ Notion integration 只讀取指定文章資料庫及其中的頁面；同步先�
 
 - 目前轉換器只接受 paragraph、heading 1–3、bulleted/numbered list、quote、code、divider 與 image block；遇到 table、file、PDF block、mention、equation 或不安全連結時，整個 revision 會失敗，不會部分發布。
 - image block 只接受 Notion-hosted file；caption 會成為圖片替代文字。Notion-hosted 短期下載網址只用於抓取，不會直接存進公開文章。
-- 內文直接沿用 Notion Markdown API 的輸出，並保留 callout、toggle（`details`）、mention 與 equation 的結構；這些在公開頁面會以對應樣式呈現，不會被壓成純文字。
+- 內文直接沿用 Notion Markdown API 的輸出，並保留 callout、toggle（`details`）、mention、equation 與文字顏色的結構；這些在公開頁面會以對應樣式呈現，不會被壓成純文字。Notion 的 `<empty-block/>`（空白段落）與 `<span color="…">` 會在渲染前正規化，因此即使 Notion 以單一換行分隔區塊，標題、清單與粗體仍會正確解析。
 - 網址代稱只接受小寫英文字母、數字與連字號（`^[a-z0-9]+(?:-[a-z0-9]+)*$`）。標題若沒有英文，系統會產生 `article-xxxxxxxx` 的備用代稱，請在「網址代稱」欄位手動指定。既有含中文的舊網址仍可讀取與轉址，但不能再新增或修改成非英文格式。
 - worker 只接受 Notion API 回傳的 `s3.us-west-2.amazonaws.com/secure.notion-static.com/` 圖片 URL，不接受外部圖片網域；下載 timeout 為 10 秒。
 - 圖片只接受 JPEG、PNG、WebP、AVIF，必須介於 1 byte 與 5 MB，且回應 `Content-Type` 必須和實際檔案 signature 相符。驗證成功後才 promotion 到公開 `site-media`。

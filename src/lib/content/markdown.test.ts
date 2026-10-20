@@ -188,4 +188,24 @@ describe('safe Markdown rendering', () => {
   it('still drops tags that are not part of the enhanced-markdown contract', () => {
     expect(renderMarkdown('<script>alert(1)</script>')).not.toContain('<script');
   });
+
+  it('parses Notion documents that start with an empty block', () => {
+    const html = renderMarkdown('<empty-block/>\n第一段\n## 標題\n- 項目一\n- 項目二');
+
+    expect(html).toContain('<p>第一段</p>');
+    expect(html).toContain('<h2>標題</h2>');
+    expect(html).toContain('<li>項目一</li>');
+    expect(html).not.toContain('<empty-block');
+    expect(html).not.toContain('## 標題');
+  });
+
+  it('parses markdown inside Notion colour spans instead of showing it literally', () => {
+    const html = renderMarkdown('<span color="green_bg">**重要**</span>');
+
+    expect(html).toBe('<p><span data-notion-color="green_bg"><strong>重要</strong></span></p>\n');
+  });
+
+  it('keeps ordinary markdown working', () => {
+    expect(renderMarkdown('**粗體**')).toBe('<p><strong>粗體</strong></p>\n');
+  });
 });

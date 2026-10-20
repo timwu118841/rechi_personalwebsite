@@ -694,6 +694,77 @@ html[data-theme='dark'] .prose span[data-editor-color='danger'] {
   background: var(--color-tint);
   text-decoration: none;
 }
+/* Notion text colours. Background variants use translucent fills so they work in
+   both light and dark themes; text variants use mid-tone colours with enough
+   contrast on either background. */
+.prose [data-notion-color] {
+  border-radius: 0.2rem;
+  padding: 0.05rem 0.2rem;
+  box-decoration-break: clone;
+}
+.prose [data-notion-color='gray'] {
+  color: #6b7280;
+}
+.prose [data-notion-color='brown'] {
+  color: #92400e;
+}
+.prose [data-notion-color='orange'] {
+  color: #b45309;
+}
+.prose [data-notion-color='yellow'] {
+  color: #a16207;
+}
+.prose [data-notion-color='green'] {
+  color: #15803d;
+}
+.prose [data-notion-color='blue'] {
+  color: #2563eb;
+}
+.prose [data-notion-color='purple'] {
+  color: #7e22ce;
+}
+.prose [data-notion-color='pink'] {
+  color: #be185d;
+}
+.prose [data-notion-color='red'] {
+  color: #b91c1c;
+}
+.prose [data-notion-color='gray_bg'],
+.prose [data-notion-color='gray_background'] {
+  background: rgb(107 114 128 / 0.2);
+}
+.prose [data-notion-color='brown_bg'],
+.prose [data-notion-color='brown_background'] {
+  background: rgb(146 64 14 / 0.18);
+}
+.prose [data-notion-color='orange_bg'],
+.prose [data-notion-color='orange_background'] {
+  background: rgb(234 88 12 / 0.2);
+}
+.prose [data-notion-color='yellow_bg'],
+.prose [data-notion-color='yellow_background'] {
+  background: rgb(234 179 8 / 0.24);
+}
+.prose [data-notion-color='green_bg'],
+.prose [data-notion-color='green_background'] {
+  background: rgb(34 197 94 / 0.2);
+}
+.prose [data-notion-color='blue_bg'],
+.prose [data-notion-color='blue_background'] {
+  background: rgb(59 130 246 / 0.2);
+}
+.prose [data-notion-color='purple_bg'],
+.prose [data-notion-color='purple_background'] {
+  background: rgb(168 85 247 / 0.2);
+}
+.prose [data-notion-color='pink_bg'],
+.prose [data-notion-color='pink_background'] {
+  background: rgb(236 72 153 / 0.2);
+}
+.prose [data-notion-color='red_bg'],
+.prose [data-notion-color='red_background'] {
+  background: rgb(239 68 68 / 0.2);
+}
 .prose .equation {
   padding: 0.12rem 0.35rem;
   border-radius: 0.3rem;
