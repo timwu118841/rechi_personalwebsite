@@ -1,11 +1,29 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro';
+import { defaultSiteSettings } from '@/lib/content/defaults';
+import { getPublicContentRepository, type SiteSettings } from '@/lib/content/repository';
+
 Astro.response.status = 404;
 // A route that directly returns a 404 Response can render this page without a cache API in dev.
 Astro.cache?.set(false);
+
+// The error page must stay renderable even when the content database is
+// unreachable (or not configured, as in CI), otherwise a missing page becomes a
+// 500 from BaseLayout's settings lookup.
+let siteSettings: SiteSettings;
+try {
+  siteSettings = await getPublicContentRepository().getSiteSettings();
+} catch {
+  siteSettings = defaultSiteSettings;
+}
 ---
 
-<BaseLayout title="找不到頁面" description="你造訪的頁面不存在或已被移動。" noindex={true}>
+<BaseLayout
+  title="找不到頁面"
+  description="你造訪的頁面不存在或已被移動。"
+  noindex={true}
+  siteSettings={siteSettings}
+>
   <section class="section">
     <div class="reading-container empty-state error-state">
       <span class="error-code" aria-hidden="true">404</span><p class="eyebrow">Page not found</p><h1
