@@ -10,7 +10,7 @@ import {
   withCollisionSuffix,
 } from './slug';
 
-describe('unicode article slugs', () => {
+describe('article slugs', () => {
   it('decodes encoded route params exactly once and tolerates malformed input', () => {
     expect(decodeSlugPathParam('%E7%A7%9F%E8%B3%83%E5%A5%91%E7%B4%84-%E6%B3%A8%E6%84%8F')).toBe(
       '租賃契約-注意',
@@ -34,15 +34,19 @@ describe('unicode article slugs', () => {
     );
   });
 
-  it('normalizes NFC and supports Chinese and Latin text', () => {
-    expect(normalizeSlug('租賃契約注意事項')).toBe('租賃契約注意事項');
-    expect(normalizeSlug('e\u0301-契約')).toBe('é-契約');
-    expect(normalizeSlug('  租賃   契約  注意事項  ')).toBe('租賃-契約-注意事項');
+  it('accepts only lowercase English letters, digits and hyphens', () => {
+    expect(normalizeSlug('Lease-Contract-Notes')).toBe('lease-contract-notes');
+    expect(() => normalizeSlug('  租賃 lease   contract  ')).toThrow(
+      '網址代稱只能使用小寫英文字母、數字與連字號。',
+    );
+    expect(normalizeSlug('lease--contract')).toBe('lease-contract');
   });
 
-  it('generates title slugs and deterministic collision suffixes', () => {
-    expect(slugFromTitle('租賃契約 注意事項')).toBe('租賃契約-注意事項');
-    expect(withCollisionSuffix('租賃契約注意事項', 2)).toBe('租賃契約注意事項-2');
+  it('generates an English title slug and a deterministic fallback for non-English titles', () => {
+    expect(slugFromTitle('Lease Contract Notes')).toBe('lease-contract-notes');
+    expect(slugFromTitle('租賃契約 注意事項')).toMatch(/^article-[0-9a-f]{8}$/);
+    expect(slugFromTitle('租賃 lease')).toBe('lease');
+    expect(withCollisionSuffix('lease-contract', 2)).toBe('lease-contract-2');
   });
 
   it('rejects unsafe characters and code-point overflow', () => {

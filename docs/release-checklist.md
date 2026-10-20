@@ -13,6 +13,7 @@
 - [ ] 已依序套用 `supabase/migrations/202607110005_admin_users_status.sql`，並確認管理員狀態欄位與索引已建立
 - [ ] 已依序套用 `supabase/migrations/202607150001_notion_content_pipeline.sql`，並確認內容工作、來源 revision、候選、審查與媒體資料表已建立
 - [ ] 已依序套用 `supabase/migrations/202607150002_enqueue_content_job_rpc.sql`，並確認 `enqueue_content_job` RPC 可對 active job 去重、對已完成 dedupe key 重新排程
+- [ ] 已套用 `supabase/migrations/202610200001_english_article_slugs.sql`，並確認新文章的網址代稱只能是小寫英文字母、數字與連字號
 - [ ] 已依序套用 `supabase/migrations/202610190001_admin_content_cleanup.sql` 與 `202610190002_content_purge_guards.sql`，並確認後台的「刪除已忽略來源」、「重新上架」與「永久刪除」動作可用（刪除只影響本站資料庫，Notion 不受影響）
 - [ ] Supabase 已啟用 Google provider、callback URI 與 `/admin` Redirect URL；Email provider 已停用（後台只有 Google 登入）
 - [ ] Vercel 已設定 `SITE_URL`、`PUBLIC_SUPABASE_URL`、`PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`SUPABASE_SECRET_KEY`、`CRON_SECRET` 與 `NOTION_EDITORIAL_ENABLED`；未設定 `ALLOW_FIXTURE_CONTENT=true`
@@ -41,7 +42,7 @@
 - [ ] 資料庫同步能為每個新增或變更的 Data Source row page 排入 source job，且立即執行後每頁都能建立或更新 source、不可變 revision 與 working copy；同步不會改變目前公開文章
 - [ ] 單頁 page ID 同步仍可獨立排入；候選需完成隱私與法律審查才可發布
 - [ ] Notion 內容在候選建立後變更或移到垃圾桶時，freshness gate 會取消舊候選
-- [ ] 新文章立即出現在文章頁、列表、搜尋、RSS 與 sitemap
+- [ ] 新文章立即出現在文章頁、列表、搜尋、RSS 與 sitemap（發布完成後 `content` 快取標籤會被失效，不需等 24 小時 TTL）
 - [ ] 封面、作者圖片、網站標題與作者簡介更新後能出現在前台
 - [ ] 未登入／不在 `public.admin_users` 的帳號無法讀取草稿或呼叫管理 API
 - [ ] 後台 `site-media` 上傳只接受 JPEG、PNG、WebP、AVIF，5 MB 上限正常

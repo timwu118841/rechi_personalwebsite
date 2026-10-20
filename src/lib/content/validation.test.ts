@@ -22,7 +22,10 @@ describe('runtime article validation', () => {
   });
 
   it('rejects an unsafe slug and unchecked publication', () => {
-    expect(articleInputSchema.parse({ ...input, slug: '有 空格' }).slug).toBe('有-空格');
+    expect(articleInputSchema.parse({ ...input, slug: 'Some Article' }).slug).toBe('some-article');
+    expect(() => articleInputSchema.parse({ ...input, slug: '有 空格' })).toThrow(
+      /只能使用小寫英文字母/,
+    );
     expect(() => articleInputSchema.parse({ ...input, slug: '有_空格' })).toThrow();
     expect(() => articleInputSchema.parse({ ...input, privacyReviewed: false })).toThrow(
       /發布前必須完成隱私與法律內容檢查/,

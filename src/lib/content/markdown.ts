@@ -6,7 +6,42 @@ import {
   normalizeTextMarks,
 } from './text-appearance';
 
-marked.setOptions({ async: false, gfm: true, breaks: false });
+marked.setOptions({ async: false, gfm: true, breaks: true });
+
+/**
+ * Notion's Markdown API returns "enhanced markdown": standard Markdown plus
+ * HTML-like tags for blocks plain Markdown cannot express (callouts, toggles,
+ * mentions, equations). Sanitising those tags away silently flattened the
+ * Notion layout, so they are mapped onto safe, styled elements here.
+ */
+type TagTransform = (attribs: Record<string, string>) => {
+  tagName: string;
+  attribs: Record<string, string>;
+};
+
+function mentionElement(
+  _tagName: string,
+  attribs: Record<string, string>,
+): {
+  tagName: string;
+  attribs: Record<string, string>;
+} {
+  return attribs.url
+    ? { tagName: 'a', attribs: { href: attribs.url, class: 'mention' } }
+    : { tagName: 'span', attribs: { class: 'mention' } };
+}
+
+const notionTagTransforms: Record<string, TagTransform> = {
+  callout: (_tagName, attribs) => ({
+    tagName: 'div',
+    attribs: { class: 'callout', 'data-icon': attribs.icon || '' },
+  }),
+  'mention-page': mentionElement,
+  'mention-user': mentionElement,
+  'mention-date': () => ({ tagName: 'span', attribs: { class: 'mention' } }),
+  'mention-database': mentionElement,
+  equation: () => ({ tagName: 'span', attribs: { class: 'equation' } }),
+};
 
 type RichNode = {
   type?: string;
@@ -157,9 +192,12 @@ export function renderMarkdown(markdown: string): string {
       'ul',
       'ol',
       'li',
+      'h1',
       'h2',
       'h3',
       'h4',
+      'h5',
+      'h6',
       'pre',
       'code',
       'a',
@@ -171,11 +209,22 @@ export function renderMarkdown(markdown: string): string {
       'th',
       'td',
       'img',
+      'div',
+      'details',
+      'summary',
+      'figure',
+      'figcaption',
+      'span',
     ],
     allowedAttributes: {
-      a: ['href', 'title', 'rel'],
+      a: ['href', 'title', 'rel', 'class'],
       img: ['src', 'alt', 'title', 'width', 'height', 'loading'],
       code: ['class'],
+      div: ['class', 'data-icon'],
+      details: ['open'],
+      span: ['class'],
+      // Needed so the callout icon survives until the transform runs.
+      callout: ['icon'],
     },
     allowedSchemes: ['http', 'https', 'mailto'],
     transformTags: {
@@ -190,6 +239,7 @@ export function renderMarkdown(markdown: string): string {
         tagName: 'img',
         attribs: { ...attribs, loading: 'lazy' },
       }),
+      ...notionTagTransforms,
     },
   });
 }
