@@ -14,7 +14,11 @@ marked.setOptions({ async: false, gfm: true, breaks: true });
  * mentions, equations). Sanitising those tags away silently flattened the
  * Notion layout, so they are mapped onto safe, styled elements here.
  */
-type TagTransform = (attribs: Record<string, string>) => {
+// sanitize-html calls transform callbacks as (tagName, attribs).
+type TagTransform = (
+  tagName: string,
+  attribs: Record<string, string>,
+) => {
   tagName: string;
   attribs: Record<string, string>;
 };
