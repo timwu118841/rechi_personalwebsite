@@ -47,6 +47,31 @@ const notionTagTransforms: Record<string, TagTransform> = {
   equation: () => ({ tagName: 'span', attribs: { class: 'equation' } }),
 };
 
+/**
+ * Notion's enhanced markdown uses two constructs that plain CommonMark cannot
+ * parse:
+ *
+ * - `<empty-block/>` marks an empty paragraph. Marked treats a document that
+ *   starts with a block-level HTML tag as one raw HTML block, and Notion
+ *   separates blocks with single newlines (no blank line to close the block),
+ *   so the whole article came out as unparsed markdown text.
+ * - `<span color="…">…</span>` wraps coloured text. Markdown inside raw inline
+ *   HTML is not parsed, so `**bold**` inside the span stayed literal.
+ *
+ * Both are normalised before parsing, which also repairs already stored
+ * articles without a re-sync.
+ */
+const NOTION_COLOR_SPAN = /<span\s+color="([a-z0-9_]+)"\s*>([\s\S]*?)<\/span>/gi;
+
+function prepareNotionMarkdown(markdown: string): string {
+  return markdown
+    .replace(/<empty-block\s*\/?>(?:\s*<\/empty-block>)?/gi, '\n\n')
+    .replace(NOTION_COLOR_SPAN, (_match, color: string, inner: string) => {
+      const rendered = marked.parseInline(inner) as string;
+      return `<span data-notion-color="${color}">${rendered}</span>`;
+    });
+}
+
 type RichNode = {
   type?: string;
   text?: string;
@@ -184,7 +209,7 @@ export function renderRichText(document: unknown): string {
 }
 
 export function renderMarkdown(markdown: string): string {
-  const rendered = marked.parse(markdown) as string;
+  const rendered = marked.parse(prepareNotionMarkdown(markdown)) as string;
   return sanitizeHtml(rendered, {
     allowedTags: [
       'p',
@@ -226,7 +251,7 @@ export function renderMarkdown(markdown: string): string {
       code: ['class'],
       div: ['class', 'data-icon'],
       details: ['open'],
-      span: ['class'],
+      span: ['class', 'data-notion-color'],
       // Needed so the callout icon survives until the transform runs.
       callout: ['icon'],
     },
